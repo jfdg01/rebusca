@@ -318,7 +318,7 @@ $('#scrape').onclick = async () => {
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 
 // ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
-const COLORS = ['#2E6B5A', '#B4552D', '#3B5B92', '#7A4A78', '#A8791A', '#4F7A3A', '#4A5A66', '#A23B4E'];
+const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];
 const chip = $('#perfilChip'), gate = $('#gate');
 const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
 let knownPerfiles = [];            // [{name, color}]
@@ -326,12 +326,21 @@ let pendingColor = COLORS[0];
 let editing = null;                // perfil que se está editando, o null al crear
 const initial = n => (n.trim()[0] || '?').toUpperCase();
 function hue(n) { let h = 0; for (const c of n) h = (h + c.charCodeAt(0) * 37) % 360; return h; }
-const colorOf = p => p.color || `hsl(${hue(p.name)} 42% 40%)`;   // fallback: perfiles viejos sin color
+const colorOf = p => p.color || `hsl(${hue(p.name)} 85% 72%)`;   // fallback: perfiles viejos sin color
+const ink = c => {   // texto legible según luminancia del fondo (sirve para pasteles nuevos y colores viejos oscuros)
+  let L;
+  if (c[0] === '#') { const n = parseInt(c.slice(1), 16); L = (0.299*(n>>16&255) + 0.587*(n>>8&255) + 0.114*(n&255)) / 255; }
+  else { L = (parseFloat(c.match(/[\d.]+%/g)?.[1]) || 50) / 100; }   // hsl(): 2º % = lightness
+  return L > 0.55 ? '#1A1E1B' : '#F4F6F2';
+};
+console.assert(ink('#FFD43B') === '#1A1E1B' && ink('#A23B4E') === '#F4F6F2'
+  && ink('hsl(200 85% 72%)') === '#1A1E1B', 'ink(): contraste roto');
 
 // pinta el chip: avatar+nombre con perfil, o estado vacío (punteado) si no hay
 function renderChip() {
   chip.classList.toggle('empty', !perfil);
   chip.style.background = perfil ? perfilColor : '';
+  chip.style.color = perfil ? ink(perfilColor) : '';
   chip.textContent = perfil || 'Sin perfil';
 }
 
@@ -356,7 +365,7 @@ function showPicker() {            // fila de tarjetas + tile de añadir (si < 4
   for (const p of knownPerfiles) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'tile';
-    b.innerHTML = `<span class="edit" title="editar">✎</span><span class="av" style="background:${colorOf(p)}">${initial(p.name)}</span><span class="name"></span>`;
+    b.innerHTML = `<span class="edit" title="editar">✎</span><span class="av" style="background:${colorOf(p)};color:${ink(colorOf(p))}">${initial(p.name)}</span><span class="name"></span>`;
     b.querySelector('.name').textContent = p.name;   // textContent -> a prueba de nombres con < o &
     b.querySelector('.edit').onclick = e => { e.stopPropagation(); showCreator(p); };
     b.onclick = () => setPerfil(p.name, colorOf(p), false);

@@ -198,7 +198,7 @@
 
   /* perfil: chip en cabecera con avatar del color de la persona */
   .chip { display: inline-flex; align-items: center; padding: .3rem .85rem;
-    border: 1px solid transparent; border-radius: 999px; cursor: pointer; color: #fff;
+    border: 1px solid transparent; border-radius: 999px; cursor: pointer; color: #1A1E1B;
     font: 700 12px var(--mono); letter-spacing: .02em; }
   .chip:hover { filter: brightness(1.08); }
   .chip.empty:hover { filter: none; border-color: var(--pine); }
@@ -222,7 +222,7 @@
   .tile .edit:hover { border-color: #ECEEE8; transform: scale(1.1); }
   .av { width: clamp(84px, 22vw, 116px); aspect-ratio: 1; border-radius: 12px;
     display: grid; place-items: center; font: 700 clamp(2rem, 7vw, 3rem) var(--mono);
-    color: #fff; text-transform: uppercase; border: 3px solid transparent; transition: border-color .15s, transform .15s; }
+    color: #1A1E1B; text-transform: uppercase; border: 3px solid transparent; transition: border-color .15s, transform .15s; }
   .tile .name { font: 600 clamp(.9rem, 2.6vw, 1.05rem) var(--mono); color: #A9AFA7; transition: color .15s; }
   .tile:hover .av, .tile:focus-visible .av { border-color: #ECEEE8; transform: translateY(-3px); }
   .tile:hover .name, .tile:focus-visible .name { color: #ECEEE8; }
