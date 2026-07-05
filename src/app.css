@@ -47,8 +47,8 @@
     border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
     font: 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft);
   }
-  .chip.empty { border-style: dashed; color: var(--ink-soft); }
-  .chip.empty .ini { background: none; border: 1.5px dashed var(--line); color: var(--ink-soft); }
+  .chip.empty { background: var(--surface); border-style: dashed; color: var(--ink-soft);
+    font-weight: 400; text-transform: none; letter-spacing: normal; }
   .menu > summary::-webkit-details-marker { display: none; }
   .menu > summary::before { content: "▸"; color: var(--pine); }
   .menu[open] > summary::before { content: "▾"; }
@@ -197,12 +197,11 @@
   }
 
   /* perfil: chip en cabecera con avatar del color de la persona */
-  .chip { display: inline-flex; align-items: center; gap: .4rem; padding: .26rem .7rem .26rem .3rem;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
-    font: 12px var(--mono); color: var(--ink); }
-  .chip:hover { border-color: var(--pine); }
-  .ini { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: none;
-    border-radius: 7px; font: 700 11px var(--mono); text-transform: uppercase; color: #fff; }
+  .chip { display: inline-flex; align-items: center; padding: .3rem .85rem;
+    border: 1px solid transparent; border-radius: 999px; cursor: pointer; color: #fff;
+    font: 700 12px var(--mono); letter-spacing: .02em; }
+  .chip:hover { filter: brightness(1.08); }
+  .chip.empty:hover { filter: none; border-color: var(--pine); }
 
   /* gate estilo "¿quién está viendo?": tarjetas grandes sobre fondo oscuro */
   .gate { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;

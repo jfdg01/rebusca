@@ -330,8 +330,8 @@ const colorOf = p => p.color || `hsl(${hue(p.name)} 42% 40%)`;   // fallback: pe
 // pinta el chip: avatar+nombre con perfil, o estado vacío (punteado) si no hay
 function renderChip() {
   chip.classList.toggle('empty', !perfil);
-  if (perfil) chip.innerHTML = `<span class="ini" style="background:${perfilColor}">${initial(perfil)}</span>` + perfil;
-  else chip.innerHTML = '<span class="ini">?</span>Sin perfil';
+  chip.style.background = perfil ? perfilColor : '';
+  chip.textContent = perfil || 'Sin perfil';
 }
 
 function setPerfil(name, color, isNew) {
