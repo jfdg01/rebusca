@@ -124,9 +124,12 @@ function paintSortHeaders() {
 function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
+let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
 function filteredRows() {
+  const q = (view === 'trash' || view === 'fav') ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
   let rows = data.filter(r => {
     const k = key(r);
+    if (q && !norm(r[iTitulo] || '').includes(q)) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
     return !fav.has(k) && !trash.has(k);   // mazo: solo lo aún sin clasificar
@@ -171,16 +174,19 @@ function render() {
   tbody.append(frag);
   const listView = view === 'trash' || view === 'fav';
   $('table').hidden = !(listView && headers.length);   // la tabla es la vista de lista editable (interesantes/papelera)
-  // pantalla dedicada: en modo lista se oculta la búsqueda y sale una barra con título + volver
-  $('.brand').hidden = $('.panel').hidden = $('#stat').hidden = listView;
+  // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
+  $('.brand').hidden = listView;
+  document.querySelectorAll('header .panel').forEach(p => p.hidden = listView);   // varios paneles ahora (perfil, buscar, query activa)
   $('#listHead').hidden = !listView;
+  if (!listView && listQ) { listQ = ''; $('#listFilter').value = ''; }   // el filtro no sobrevive al salir de la lista
   if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : 'Papelera';
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
   if (!listView && hasRows) $('#swipeFab').textContent = `A REBUSCAR · ${rows.length}`;
   $('#empty').hidden = !!hasRows;
   if (headers.length && !rows.length)
-    $('#empty').textContent = view === 'trash' ? 'La papelera está vacía.'
+    $('#empty').textContent = listView && listQ ? 'Nada coincide con el filtro.'
+      : view === 'trash' ? 'La papelera está vacía.'
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
 }
@@ -606,6 +612,7 @@ function fling(dir) {
 }
 
 dragify(swipeView);   // toda la vista es zona de arrastre (no solo la tarjeta)
+$('#listFilter').oninput = e => { listQ = e.target.value; render(); };
 $('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;

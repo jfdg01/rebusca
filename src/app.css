@@ -148,11 +148,13 @@
   .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
   .stat .link[hidden] { display: none; }
 
-  /* barra de la pantalla de lista (Destacados / Papelera): volver + título */
-  .list-head { display: flex; align-items: center; gap: .6rem; padding: .1rem 0 .7rem; }
+  /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
+  .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
+  .list-head-bar { display: flex; align-items: center; gap: .6rem; }
   .list-head button { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; font: 400 1.3rem/1 var(--mono); }
   .list-head h2 { margin: 0; font: 800 1.2rem var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+  .list-head #listFilter { width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
 
   /* ── tabla ─────────────────────────────────────────────── */
   table { border-collapse: collapse; width: 100%; }
