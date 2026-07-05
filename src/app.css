@@ -375,8 +375,8 @@
   .swipe-card .li-title { flex: 0 0 auto; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
-  /* la descripción absorbe el espacio restante y scrollea dentro de la tarjeta (en la lista se recorta a 4 líneas) */
-  .swipe-card .li-desc { flex: 1 1 auto; min-height: 3rem; overflow-y: auto;
+  /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
+  .swipe-card .li-desc { flex: 0 1 auto; min-height: 3rem; max-height: 40vh; overflow-y: auto;
     display: block; -webkit-line-clamp: unset; }
 
   /* sello LIKE/NOPE: vive en el escenario, DETRÁS de la tarjeta; se revela al deslizar y se queda */
@@ -387,16 +387,8 @@
   .sc-badge.like > span { color: #C8901A; transform: rotate(-9deg); }
   .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
 
-  .swipe-actions { display: flex; gap: .8rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
-  .sw-btn { flex: 1 1 auto; padding: .9rem .5rem; font: 700 15px var(--mono);
-    border-radius: 12px; border: 2px solid; background: var(--surface);
-    box-shadow: 0 1px 2px rgba(27,33,30,.09); }
-  .sw-btn.nope { color: #b03024; border-color: #b03024; }
-  .sw-btn.nope:hover { background: #b03024; color: #fff; }
-  .sw-btn.like { color: #C8901A; border-color: #C8901A; }
-  .sw-btn.like:hover { background: #C8901A; color: #fff; }
-  .sw-btn.ver { flex: 0 0 auto; color: var(--pine); border-color: var(--pine); }
-  .sw-btn.ver:hover { background: var(--pine); color: #fff; }
+  .swipe-actions { display: flex; justify-content: center; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
+  .swipe-actions button { padding: .7rem 1.6rem; font-size: 1rem; }
 
   /* ── gestión de búsquedas ──────────────────────────────── */
   /* botón-icono cuadrado junto al combobox (alto = input) */

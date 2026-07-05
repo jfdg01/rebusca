@@ -694,8 +694,6 @@ $('#listFilter').oninput = e => { listQ = e.target.value; render(); };
 $('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
-$('#swNope').onclick = () => card && fling(-1);
-$('#swLike').onclick = () => card && fling(1);
 $('#swVer').onclick = () => {
   if (di >= deck.length) return;
   const r = deck[di], url = col(r, 'url');
