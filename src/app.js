@@ -19,7 +19,7 @@ function parseCSV(text) {
 // ── estado persistente: localStorage (offline) + servidor (compartido) ──
 const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
-const seen = load('wp_seen'), trash = load('wp_discarded'), fav = load('wp_fav');
+const trash = load('wp_discarded'), fav = load('wp_fav');   // 2 cubos exclusivos; "sin ver" = ni fav ni trash
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
 let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
@@ -28,23 +28,23 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seen: [...seen], trash: [...trash], fav: [...fav], color: perfilColor }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], color: perfilColor }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
   return fetch('/estado' + qsPerfil()).then(r => r.json()).then(e => {
-    for (const [set, arr] of [[seen, e.seen], [trash, e.trash], [fav, e.fav]]) {
+    for (const [set, arr] of [[trash, e.trash], [fav, e.fav]]) {
       set.clear(); (arr || []).forEach(x => set.add(x));
     }
-    localStorage.setItem('wp_seen', JSON.stringify([...seen]));      // espejo offline
-    localStorage.setItem('wp_discarded', JSON.stringify([...trash]));
+    for (const k of fav) if (trash.has(k)) fav.delete(k);   // cubos exclusivos: limpia solapes heredados (gana papelera)
+    localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
     localStorage.setItem('wp_fav', JSON.stringify([...fav]));
     if (data.length) render();
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
 
 const HIDE = new Set(['id', 'cp', 'url']);   // no se muestran como columna (url va en el boton Ver)
-let headers = [], data = [], sortKeys = [], showTrash = false;  // sortKeys: [{col,dir}] por prioridad
+let headers = [], data = [], sortKeys = [], view = '';  // view: '' mazo | 'trash' papelera | 'fav' interesantes
 let iId = -1, iUrl = -1, iTitulo = -1, iPrecio = -1;
 const isNum = v => v !== '' && !isNaN(v);
 // identidad inmutable: id de Wallapop. Fallback titulo|precio solo para drag de CSV sin id.
@@ -58,6 +58,43 @@ function heat(d) {
   const t = Math.max(0, Math.min(1, d / 30));
   const h = 14 + (202 - 14) * t;
   return { fg: `hsl(${h} 44% 36%)`, bg: `hsl(${h} 46% 92%)` };
+}
+
+// "hace 16 días y 19 horas" a partir de los días (float) del CSV
+function humanAge(dias) {
+  const total = Math.max(0, Math.round(dias * 24));   // horas totales
+  const d = Math.floor(total / 24), h = total % 24;
+  if (!d && !h) return 'recién puesto';
+  const parts = [];
+  if (d) parts.push(d + (d === 1 ? ' día' : ' días'));
+  if (h) parts.push(h + (h === 1 ? ' hora' : ' horas'));
+  return 'hace ' + parts.join(' y ');
+}
+console.assert(humanAge(16.8) === 'hace 16 días y 19 horas' && humanAge(1) === 'hace 1 día'
+  && humanAge(0.05) === 'hace 1 hora' && humanAge(0) === 'recién puesto', 'humanAge() roto');
+
+// item de lista compuesto (Destacados/Papelera): precio + ubicación + antigüedad + flags + descripción
+function listBody(r) {
+  const td = document.createElement('td'); td.className = 'li';
+  const add = (cls, txt) => { const e = document.createElement('div'); e.className = cls; e.textContent = txt; td.append(e); return e; };
+  const precio = col(r, 'precio'), km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
+
+  add('li-title', col(r, 'titulo'));
+
+  const head = document.createElement('div'); head.className = 'li-head';
+  const price = document.createElement('span'); price.className = 'li-price';
+  price.textContent = precio !== '' ? `${precio} €` : '—'; head.append(price);
+  let where = km !== '' ? `a ${km} km` : '';
+  if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
+  if (where) { const w = document.createElement('span'); w.className = 'li-where'; w.textContent = where; head.append(w); }
+  td.append(head);
+
+  if (isNum(dias)) add('li-age', humanAge(+dias)).style.color = heat(+dias).fg;
+  add('li-flags', `${col(r, 'reservado') === 'True' ? 'Reservado' : 'Sin reserva'} · ${col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío'}`);
+
+  const desc = col(r, 'descripcion');
+  if (desc) add('li-desc', desc);
+  return td;
 }
 
 // orden multinivel: clic añade columna como siguiente prioridad; reclic invierte
@@ -78,7 +115,12 @@ function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 function filteredRows() {
-  let rows = data.filter(r => showTrash ? trash.has(key(r)) : !trash.has(key(r)));
+  let rows = data.filter(r => {
+    const k = key(r);
+    if (view === 'trash') return trash.has(k);
+    if (view === 'fav') return fav.has(k);
+    return !fav.has(k) && !trash.has(k);   // mazo: solo lo aún sin clasificar
+  });
   if (sortKeys.length) {
     rows.sort((a, b) => {
       for (const { col, dir } of sortKeys) {
@@ -101,70 +143,55 @@ function render() {
   for (const r of rows) {
     const k = key(r);
     const tr = document.createElement('tr');
-    if (seen.has(k)) tr.className = 'seen';
-    if (fav.has(k)) tr.className = (tr.className + ' fav').trim();
-    if (showTrash) tr.className = (tr.className + ' trashed').trim();
-
-    const g = document.createElement('td'); g.className = 'gutter';
-    g.innerHTML = '<span class="dot"></span>'; tr.append(g);
 
     // celda de acciones: Ver y Quitar grandes, uno al lado del otro
     const act = document.createElement('td'); act.className = 'act';
     const url = iUrl >= 0 ? r[iUrl] : '';
     const ver = document.createElement('a'); ver.className = 'btn ver'; ver.textContent = 'Ver';
-    if (url) { ver.href = url; ver.target = '_blank'; ver.onclick = () => { seen.add(k); save('wp_seen', seen); tr.classList.add('seen'); paintStat(); }; }
+    if (url) { ver.href = url; ver.target = '_blank'; }
     else { ver.setAttribute('aria-disabled', 'true'); }
-    const star = document.createElement('button'); star.className = 'btn star' + (fav.has(k) ? ' on' : '');
-    star.textContent = fav.has(k) ? '★' : '☆'; star.title = 'Marcar como interesante';
-    star.onclick = () => {
-      if (fav.has(k)) fav.delete(k); else fav.add(k);
-      save('wp_fav', fav); const on = fav.has(k);
-      star.classList.toggle('on', on); star.textContent = on ? '★' : '☆'; tr.classList.toggle('fav', on); paintStat();
-    };
     const quit = document.createElement('button'); quit.className = 'btn quitar';
-    quit.textContent = showTrash ? 'Restaurar' : 'Quitar';
-    quit.onclick = () => (showTrash ? restore(k) : discard(k, r[iTitulo]));
-    act.append(ver, star, quit); tr.append(act);
+    quit.textContent = view === 'trash' ? 'Restaurar' : 'Quitar';
+    quit.onclick = () => (view === 'trash' ? restore(k) : discard(k, r[iTitulo]));
+    act.append(ver, quit); tr.append(act);
 
-    r.forEach((c, i) => {
-      const h = headers[i];
-      if (HIDE.has(h)) return;
-      const td = document.createElement('td');
-      td.dataset.label = h;   // etiqueta de campo para el modo tarjeta (móvil)
-      if (h === 'dias' && isNum(c)) {
-        td.className = 'heat'; const { fg, bg } = heat(+c); td.style.color = fg; td.style.background = bg; td.textContent = c;
-      } else if (h === 'descripcion') { td.className = 'desc'; td.textContent = c; }
-      else if (h === 'titulo') { td.className = 'titulo'; td.textContent = c; }
-      else { td.textContent = c; if (isNum(c)) td.className = 'num'; }
-      tr.append(td);
-    });
+    tr.append(listBody(r));
     frag.append(tr);
   }
   tbody.append(frag);
+  const listView = view === 'trash' || view === 'fav';
+  $('table').hidden = !(listView && headers.length);   // la tabla es la vista de lista editable (interesantes/papelera)
+  // pantalla dedicada: en modo lista se oculta la búsqueda y sale una barra con título + volver
+  $('.brand').hidden = $('.panel').hidden = $('#stat').hidden = listView;
+  $('#listHead').hidden = !listView;
+  if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : 'Papelera';
   const hasRows = headers.length && rows.length;
-  $('#swipeFab').hidden = !hasRows;
-  if (hasRows) $('#swipeFab').textContent = `Empezar a swipe · ${rows.length}`;
+  $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
+  if (!listView && hasRows) $('#swipeFab').textContent = `A REBUSCAR · ${rows.length}`;
   $('#empty').hidden = !!hasRows;
   if (headers.length && !rows.length)
-    $('#empty').textContent = showTrash ? 'La papelera está vacía.' : 'Nada que revisar.';
+    $('#empty').textContent = view === 'trash' ? 'La papelera está vacía.'
+      : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
 }
 
 function paintStat() {
   if (!headers.length) { $('#stat').innerHTML = ''; return; }
-  const total = data.length, disc = data.filter(r => trash.has(key(r))).length;
-  const vistos = data.filter(r => seen.has(key(r))).length;
   const favs = data.filter(r => fav.has(key(r))).length;
+  const disc = data.filter(r => trash.has(key(r))).length;
+  const sinVer = data.length - favs - disc;   // "vistos" = favs + disc, implícito
   $('#stat').innerHTML =
-    `<span><b>${total - disc}</b> a la vista</span>` +
-    `<span><b>${vistos}</b> vistos</span>` +
-    `<span><b>★ ${favs}</b> interesantes</span>` +
+    `<span><b>${sinVer}</b> sin ver</span>` +
+    `<span><b>${favs}</b> interesantes ` +
+    (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
+    `</span>` +
     `<span><b>${disc}</b> descartados ` +
-    (disc || showTrash ? `· <span class="link" id="toggleTrash">${showTrash ? 'volver' : 'ver papelera'}</span>` : '') +
+    (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver papelera'}</span>` : '') +
     `</span>` +
     (sortKeys.length ? `<span>orden: <b>${sortKeys.map(s => headers[s.col]).join(' › ')}</b> · <span class="link" id="clearSort">limpiar</span></span>` : '');
-  const t = $('#toggleTrash');
-  if (t) t.onclick = () => { showTrash = !showTrash; $('#empty').textContent = ''; render(); };
+  const toggle = v => () => { view = view === v ? '' : v; $('#empty').textContent = ''; render(); };
+  const t = $('#toggleTrash'); if (t) t.onclick = toggle('trash');
+  const f = $('#toggleFav'); if (f) f.onclick = toggle('fav');
   const cs = $('#clearSort');
   if (cs) cs.onclick = clearSort;
 }
@@ -172,10 +199,13 @@ function paintStat() {
 // ── descartar / restaurar con deshacer claro ──
 let snackTimer;
 function discard(k, titulo) {
-  trash.add(k); save('wp_discarded', trash); render();
-  snack(`Descartado: ${(titulo || '').slice(0, 40)}`, () => { trash.delete(k); save('wp_discarded', trash); render(); });
+  const wasFav = fav.has(k);                 // al descartar sale de interesantes (cubos exclusivos)
+  fav.delete(k); trash.add(k); save('wp_fav', fav); save('wp_discarded', trash); render();
+  snack(`Descartado: ${(titulo || '').slice(0, 40)}`, () => {
+    trash.delete(k); if (wasFav) fav.add(k); save('wp_fav', fav); save('wp_discarded', trash); render();
+  });
 }
-function restore(k) {
+function restore(k) {                          // restaurar = volver a "sin ver"
   trash.delete(k); save('wp_discarded', trash); render();
   snack('Restaurado', () => { trash.add(k); save('wp_discarded', trash); render(); });
 }
@@ -191,14 +221,13 @@ function hideSnack() { const s = $('#snack'); s.classList.remove('show'); setTim
 // ── carga de un CSV (texto) ──
 function loadCSV(text, name) {
   const rows = parseCSV(text);
-  headers = rows[0]; data = rows.slice(1); sortKeys = []; showTrash = false;
+  headers = rows[0]; data = rows.slice(1); sortKeys = []; view = '';
   iId = headers.indexOf('id'); iUrl = headers.indexOf('url'); iTitulo = headers.indexOf('titulo');
   iPrecio = headers.indexOf('precio');
   if (iTitulo < 0) iTitulo = 0;
 
   thead.innerHTML = '';
   const tr = document.createElement('tr');
-  tr.append(Object.assign(document.createElement('th'), { className: 'gutter' }));
   tr.append(Object.assign(document.createElement('th'), { className: 'act', textContent: '' }));
   headers.forEach((h, i) => {
     if (HIDE.has(h)) return;
@@ -308,9 +337,9 @@ function setPerfil(name, color, isNew) {
   renderChip();
   closeGate();
   if (isNew) {                     // persiste ya el perfil vacío con su color
-    for (const s of [seen, trash, fav]) s.clear();
+    for (const s of [trash, fav]) s.clear();
     fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seen: [], trash: [], fav: [], color }) }).catch(() => {});
+      body: JSON.stringify({ trash: [], fav: [], color }) }).catch(() => {});
     if (data.length) render();
   } else { hydrateEstado(); restoreLastCsv(); }
 }
@@ -479,14 +508,16 @@ function dragify(el) {
 
 function fling(dir) {
   const r = deck[di], k = key(r);
-  if (dir > 0) { fav.add(k); save('wp_fav', fav); likeStamp.style.opacity = 1; }
-  else { trash.add(k); save('wp_discarded', trash); nopeStamp.style.opacity = 1; }   // sello a tope mientras la tarjeta se va
+  if (dir > 0) { fav.add(k); trash.delete(k); likeStamp.style.opacity = 1; }
+  else { trash.add(k); fav.delete(k); nopeStamp.style.opacity = 1; }   // clasifica en un cubo exclusivo; sello a tope
+  save('wp_fav', fav); save('wp_discarded', trash);
   card.style.transition = 'transform .25s ease, opacity .25s ease';
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`; card.style.opacity = 0;
   card = null;   // bloquea doble-decisión mientras vuela
   setTimeout(() => { di++; nextCard(); }, 200);
 }
 
+$('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
 $('#swNope').onclick = () => card && fling(-1);
@@ -495,7 +526,6 @@ $('#swVer').onclick = () => {
   if (di >= deck.length) return;
   const r = deck[di], url = col(r, 'url');
   if (!url) return;
-  seen.add(key(r)); save('wp_seen', seen);
   window.open(url, '_blank');
 };
 document.addEventListener('keydown', e => {

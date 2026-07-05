@@ -16,36 +16,42 @@
         />
         <span class="eyebrow">rebuscador<br />de chollos</span>
     </div>
-    <div class="menu-row">
-        <details class="menu">
-            <summary>Configuración</summary>
-            <div class="tools">
-                <select id="pick">
-                    <option value="">— elige un CSV —</option>
-                </select>
-            </div>
-        </details>
-        <button id="perfilChip" class="chip empty" title="cambiar de perfil">
-            Sin perfil
-        </button>
-    </div>
-    <div class="search">
-        <input
-            type="search"
-            id="kw"
-            placeholder="ej. 3090…"
-            autocomplete="off"
-        />
-        <select id="since" title="frescura del anuncio">
-            <option value="">cualquiera</option>
-            <option value="hora">última hora</option>
-            <option value="dia">último día</option>
-            <option value="semana" selected>última semana</option>
-            <option value="mes">último mes</option>
-        </select>
-        <button id="scrape" class="primary">Buscar</button>
+    <div class="panel">
+        <div class="menu-row">
+            <details class="menu">
+                <summary>Configuración</summary>
+                <div class="tools">
+                    <select id="pick">
+                        <option value="">— elige un CSV —</option>
+                    </select>
+                </div>
+            </details>
+            <button id="perfilChip" class="chip empty" title="cambiar de perfil">
+                Sin perfil
+            </button>
+        </div>
+        <div class="search">
+            <input
+                type="search"
+                id="kw"
+                placeholder="ej. 3090…"
+                autocomplete="off"
+            />
+            <select id="since" title="frescura del anuncio">
+                <option value="">cualquiera</option>
+                <option value="hora">última hora</option>
+                <option value="dia">último día</option>
+                <option value="semana" selected>última semana</option>
+                <option value="mes">último mes</option>
+            </select>
+            <button id="scrape" class="primary">Buscar</button>
+        </div>
     </div>
     <div class="stat" id="stat"></div>
+    <div class="list-head" id="listHead" hidden>
+        <button id="listBack" title="volver">←</button>
+        <h2 id="listTitle"></h2>
+    </div>
 </header>
 
 <table hidden>
@@ -92,8 +98,6 @@
         <button class="gate-exit" id="gateX" hidden>Salir</button>
     </div>
 </div>
-
-<button id="swipeFab" hidden title="modo swipe">⇆</button>
 
 <div class="swipe" id="swipeView" hidden>
     <button class="swipe-x" id="swipeX" title="cerrar">✕</button>

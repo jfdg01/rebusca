@@ -73,6 +73,11 @@ Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
 
 1. **Esperar feedback del usuario** antes de commitear o dar por terminado un cambio de diseño.
 2. **Siempre sacar screenshot** para verificar. Setup del usuario: viewport 320×632px, zoom 100%, DPR 2.
+3. **Solo validación real:** el screenshot debe ser de la app de verdad corriendo (levanta el
+   server en otro puerto y condúcelo hasta el estado real que se cambia). **Prohibido** un
+   "harness fiel" o HTML aparte que reconstruya el markup: no ve la interacción con el resto
+   del CSS (p. ej. el padding del `body`, la cabecera sticky, las tarjetas a sangre completa)
+   y da falsos verdes.
 
 ## Estilo
 
