@@ -485,24 +485,40 @@ function buildCard(r) {
 }
 const escapeHtml = s => s.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
 
+// commit por distancia O por velocidad: un flick corto y rápido cuenta igual que un arrastre largo
+function decide(dx, v) {
+  if (dx > 60 || v > 0.5) return 1;
+  if (dx < -60 || v < -0.5) return -1;
+  return 0;
+}
 function dragify(el) {
-  let sx = 0, dx = 0, on = false;
+  let sx = 0, sy = 0, dx = 0, dy = 0, on = false, axis = 0, t0 = 0;
   el.onpointerdown = e => {
     if (e.target.closest('a,button')) return;
-    on = true; dx = 0; sx = e.clientX; el.setPointerCapture(e.pointerId); el.classList.add('grab');
+    on = true; dx = dy = axis = 0; sx = e.clientX; sy = e.clientY; t0 = e.timeStamp;
+    el.setPointerCapture(e.pointerId);
   };
   el.onpointermove = e => {
     if (!on) return;
-    dx = e.clientX - sx;
+    dx = e.clientX - sx; dy = e.clientY - sy;
+    if (!axis) {                                   // eje aún sin decidir: espera intención clara (8px)
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (axis === 'x') el.classList.add('grab');
+    }
+    if (axis !== 'x') return;                       // vertical: deja scrollear la descripción
+    e.preventDefault();
     el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
     const t = Math.min(1, Math.abs(dx) / 120);
     likeStamp.style.opacity = dx > 0 ? t : 0; nopeStamp.style.opacity = dx < 0 ? t : 0;
   };
-  el.onpointerup = el.onpointercancel = () => {
+  el.onpointerup = el.onpointercancel = e => {
     if (!on) return; on = false; el.classList.remove('grab');
-    if (dx > 110) return fling(1);
-    if (dx < -110) return fling(-1);
-    el.style.transform = ''; likeStamp.style.opacity = nopeStamp.style.opacity = 0;   // no llegó al umbral: vuelve al centro
+    if (axis === 'x') {
+      const d = decide(dx, dx / Math.max(1, e.timeStamp - t0));   // v en px/ms sobre el gesto
+      if (d) return fling(d);
+    }
+    el.style.transform = ''; likeStamp.style.opacity = nopeStamp.style.opacity = 0;   // no cuajó: vuelve al centro
   };
 }
 
