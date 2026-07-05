@@ -131,6 +131,21 @@
 
   .empty { color: var(--ink-soft); font: 14px var(--sans); padding: 3rem 0; text-align: center; }
 
+  /* ── overlay de carga: spinner + % sobre la zona de resultados ── */
+  .loading { display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    padding: 3rem 0; text-align: center; }
+  .loading .spin { width: 84px; height: 84px; transform: rotate(-90deg); }
+  .loading .track { fill: none; stroke: var(--pine-soft); stroke-width: 4; }
+  .loading .arc { fill: none; stroke: var(--pine); stroke-width: 4; stroke-linecap: round;
+    stroke-dasharray: 119.4; stroke-dashoffset: 119.4;   /* 2πr, r=19 */
+    transition: stroke-dashoffset .4s ease; }
+  .loading.indeterminate .spin { animation: spin 1s linear infinite; }
+  .loading.indeterminate .arc { stroke-dasharray: 30 119.4; stroke-dashoffset: 0; transition: none; }
+  @keyframes spin { to { transform: rotate(270deg); } }
+  .loading-pct { font: 700 1.4rem var(--mono); color: var(--pine); margin-top: -58px; }
+  .loading-sub { font: 14px var(--sans); color: var(--ink); margin-top: 34px; }
+  .loading-note { font: 12px var(--sans); color: var(--ink-soft); }
+
   /* snackbar de deshacer */
   .snack {
     position: fixed; left: 50%; bottom: 1.3rem; transform: translate(-50%, 140%);
@@ -265,20 +280,24 @@
     background: none; border: 1px solid #4A514C; color: #A9AFA7; }
   .swipe-x:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
   .swipe-count { color: #A9AFA7; font: 700 13px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
-  .swipe-stage { position: relative; flex: 1 1 auto; width: min(440px, 100%); display: grid; place-items: center; }
+  .swipe-stage { position: relative; flex: 1 1 auto; min-height: 0; width: min(440px, 100%); display: grid; place-items: center; }
   .swipe-done { color: #ECEEE8; text-align: center; font: 700 1.4rem var(--mono); }
 
-  .swipe-card { position: relative; z-index: 1; width: 100%; background: var(--surface);
+  .swipe-card { position: relative; z-index: 1; width: 100%; max-height: 100%; min-height: 0; background: var(--surface);
     border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    display: flex; flex-direction: column;
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
-  .sc-price { font: 800 2.2rem/1 var(--mono); color: var(--pine); }
-  .sc-title { font: 700 1.35rem/1.25 var(--sans); margin: .6rem 0; overflow-wrap: anywhere; }
-  .sc-meta { font: 13px var(--mono); color: var(--ink-soft); display: flex; flex-wrap: wrap;
+  .sc-price { flex: 0 0 auto; font: 800 2.2rem/1 var(--mono); color: var(--pine); }
+  /* título largo: máx 5 líneas con elipsis, no empuja los botones fuera de pantalla */
+  .sc-title { flex: 0 0 auto; font: 700 1.35rem/1.25 var(--sans); margin: .6rem 0; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
+  .sc-meta { flex: 0 0 auto; font: 13px var(--mono); color: var(--ink-soft); display: flex; flex-wrap: wrap;
     gap: .5rem; align-items: center; margin-bottom: .9rem; }
   .sc-dias { padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
+  /* la descripción absorbe el espacio restante y scrollea dentro de la tarjeta */
   .sc-desc { font: 14px/1.5 var(--sans); color: var(--ink-soft);
-    max-height: 42vh; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+    flex: 1 1 auto; min-height: 3rem; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
 
   /* sello LIKE/NOPE: vive en el escenario, DETRÁS de la tarjeta; se revela al deslizar y se queda */
   .sc-badge { position: absolute; inset: 0; opacity: 0; pointer-events: none;

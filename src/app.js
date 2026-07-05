@@ -239,16 +239,38 @@ refreshCsvs();
 // mismo slug que el server (servidor.py slug/csv_name) para sondear el progreso antes de saber el nombre
 const csvNameOf = (kw, since) => kw.toLowerCase().split(/\s+/).filter(Boolean).join('-') +
   (since ? '--' + since : '') + '.csv';
+const C = 2 * Math.PI * 19;   // circunferencia del anillo (r=19), igual que el CSS
+// pinta el overlay: p = "n/total" | "n" | null (sin datos aun -> spinner indeterminado)
+function setLoading(on, p) {
+  const box = $('#loading');
+  document.querySelector('table').style.display = on ? 'none' : '';
+  if (!on) { box.hidden = true; return; }   // render() recoloca #empty/tabla al cargar el CSV
+  $('#empty').hidden = true; box.hidden = false;
+  const arc = box.querySelector('.arc');
+  const [n, t] = (p || '').split('/');
+  if (t) {
+    box.classList.remove('indeterminate');
+    const pct = Math.min(1, +n / +t);
+    arc.style.strokeDashoffset = C * (1 - pct);
+    $('#loadingPct').textContent = Math.round(pct * 100) + '%';
+    $('#loadingSub').textContent = `${n} de ${t} anuncios`;
+  } else {
+    box.classList.add('indeterminate');
+    $('#loadingPct').textContent = n || '';
+    $('#loadingSub').textContent = 'Buscando anuncios nuevos…';
+  }
+}
 $('#scrape').onclick = async () => {
   const kw = $('#kw').value.trim();
   if (!kw) return;
   const since = $('#since').value || '';
   const btn = $('#scrape'), txt = btn.textContent;
   btn.disabled = true; btn.textContent = 'Buscando…';
+  setLoading(true, null);
   const poll = setInterval(async () => {           // el server responde /progress en paralelo al scrape
     try {
       const p = (await (await fetch('/progress?csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
-      if (p) { const [n, t] = p.split('/'); btn.textContent = t ? `${n} de ${t}` : `${n}…`; }
+      if (p) setLoading(true, p);
     } catch {}
   }, 800);
   try {
@@ -259,7 +281,7 @@ $('#scrape').onclick = async () => {
     await refreshCsvs();
     pick.value = r.csv; pick.onchange();
   } catch (e) { snack('No se pudo buscar: ' + e.message, null); }
-  finally { clearInterval(poll); btn.disabled = false; btn.textContent = txt; }
+  finally { clearInterval(poll); setLoading(false); btn.disabled = false; btn.textContent = txt; }
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 
