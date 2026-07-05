@@ -273,10 +273,17 @@ const csvNameOf = (kw, since) => kw.toLowerCase().split(/\s+/).filter(Boolean).j
 // pinta el overlay: n = contador de encontrados (o null al arrancar, sin dato aun)
 function setLoading(on, n) {
   const box = $('#loading');
-  $('#stat').hidden = !on;   // los stats son de la query vieja: ocúltalos mientras se busca
+  $('#stat').hidden = on;    // los stats son de la query vieja: ocúltalos mientras se busca
   if (!on) { box.hidden = true; return; }   // render() recoloca #empty/botón al cargar el CSV
   $('#empty').hidden = true; $('#swipeFab').hidden = true; box.hidden = false;
   $('#loadingCount').textContent = n ? `${n} encontrados` : 'Buscando…';
+}
+let _timer;
+function startTimer() {   // cronómetro de la búsqueda: puede tardar mucho si hay miles de resultados
+  const t0 = Date.now();
+  const paint = () => { const s = Math.round((Date.now() - t0) / 1000);
+    $('#loadingTime').textContent = s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
+  paint(); clearInterval(_timer); _timer = setInterval(paint, 1000);
 }
 $('#scrape').onclick = async () => {
   const kw = $('#kw').value.trim();
@@ -284,7 +291,14 @@ $('#scrape').onclick = async () => {
   const since = $('#since').value || '';
   const btn = $('#scrape'), txt = btn.textContent;
   btn.disabled = true; btn.textContent = 'Buscando…';
-  setLoading(true, null);
+  const stop = $('#stopScrape'); stop.hidden = false; stop.textContent = 'parar búsqueda';
+  stop.classList.add('link'); stop.onclick = doStop;   // restaura el estilo por si una parada previa se lo quitó
+  function doStop() {   // corta el scraper; el /scrape en curso vuelve con el CSV parcial ya escrito
+    stop.onclick = null; stop.classList.remove('link'); stop.textContent = 'parando…';
+    fetch('/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csv: csvNameOf(kw, since) }) }).catch(() => {});
+  }
+  setLoading(true, null); startTimer();
   const poll = setInterval(async () => {           // el server responde /progress en paralelo al scrape
     try {
       const p = (await (await fetch('/progress?csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
@@ -299,7 +313,7 @@ $('#scrape').onclick = async () => {
     await refreshCsvs();
     pick.value = r.csv; pick.onchange();
   } catch (e) { snack('No se pudo buscar: ' + e.message, null); }
-  finally { clearInterval(poll); setLoading(false); btn.disabled = false; btn.textContent = txt; }
+  finally { clearInterval(poll); clearInterval(_timer); setLoading(false); btn.disabled = false; btn.textContent = txt; }
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 

@@ -39,7 +39,8 @@ Convención: la lógica no trivial deja un `demo()` con `assert`, invocable por 
 
 Frontend (`app.js`) → `POST /scrape {keywords, since}` → el server ejecuta `wallapop.py`
 como subproceso y escribe `csv/<slug>[--<since>].csv` → responde con el nombre del CSV
-(con cache por `mtime`: no re-scrapea si el CSV tiene < 30 min, `TTL` en `servidor.py`).
+(sin cache: cada búsqueda re-scrapea; `POST /stop {csv}` mata el scraper y el CSV parcial
+—flusheado por página— se carga tal cual).
 El frontend luego pide `GET /<csv>` y lo pinta (el server enruta los `.csv` a `csv/`).
 
 - **Estado por persona:** `estados/<perfil>.json` guarda `{seen, trash, fav, color}`.
