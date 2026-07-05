@@ -1,4 +1,5 @@
 *.csv
+csv/
 estado.json
 estados/
 __pycache__/

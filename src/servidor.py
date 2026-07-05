@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Servidor de Rebusca. Solo stdlib. Sirve ver.html, lista CSVs, persiste el
+"""Servidor de Rebusca. Solo stdlib. Sirve index.html, lista CSVs, persiste el
 estado (visto/descartado/favorito) y dispara el scraper con cache por mtime.
 
 Pensado para correr tras Tailscale (sin auth, solo tus dispositivos lo ven).
 
-    python3 servidor.py            # http://0.0.0.0:8000
-    python3 servidor.py demo       # self-check sin red
+    python3 src/servidor.py            # http://0.0.0.0:8000
+    python3 src/servidor.py demo       # self-check sin red
 """
 import json, os, re, subprocess, sys, time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-HERE = Path(__file__).resolve().parent
-ESTADOS = HERE / "estados"     # un JSON por persona: estados/<nombre>.json
+HERE = Path(__file__).resolve().parent   # src/
+ROOT = HERE.parent                        # raíz del repo
+CSV_DIR = ROOT / "csv"         # los CSVs generados viven fuera del código
+ESTADOS = ROOT / "estados"     # un JSON por persona: estados/<nombre>.json
 TTL = 30 * 60          # cache: no re-scrapea si el CSV tiene < 30 min
 PORT = int(os.environ.get("PORT", 8000))
 
@@ -62,6 +64,12 @@ class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=str(HERE), **k)
 
+    def translate_path(self, path):
+        # el código se sirve desde src/; los .csv desde csv/ (sibling). super() ya
+        # colapsa '..' y ancla en HERE; .name deja solo el fichero -> sin traversal.
+        p = super().translate_path(path)
+        return str(CSV_DIR / Path(p).name) if p.endswith(".csv") else p
+
     def end_headers(self):
         # no-cache = el navegador revalida siempre (If-Modified-Since -> 304 si no cambió).
         # Sin esto, Cloudflare mandaba max-age=14400 y el móvil veía la versión vieja horas.
@@ -85,7 +93,7 @@ class H(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path in ("/", "/index.html"):
-            html = (HERE / "ver.html").read_text()
+            html = (HERE / "index.html").read_text()
             mt = {f: int((HERE / f).stat().st_mtime) for f in ("app.css", "app.js")}
             body = stamp_versions(html, mt).encode()
             self.send_response(200)
@@ -95,7 +103,7 @@ class H(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
         if u.path == "/csvs":
-            return self._json(sorted(p.name for p in HERE.glob("*.csv")))
+            return self._json(sorted(p.name for p in CSV_DIR.glob("*.csv")))
         if u.path == "/perfiles":
             return self._json(perfiles())
         if u.path == "/estado":
@@ -127,7 +135,8 @@ class H(SimpleHTTPRequestHandler):
             return self._json({"error": "faltan keywords"}, 400)
         if since and since not in ("hora", "dia", "semana", "mes"):
             return self._json({"error": "since inválido"}, 400)
-        out = HERE / csv_name(kw, since)
+        CSV_DIR.mkdir(parents=True, exist_ok=True)
+        out = CSV_DIR / csv_name(kw, since)
         if fresh(out):
             return self._json({"csv": out.name, "cached": True})
         cmd = [sys.executable, str(HERE / "wallapop.py"), kw]

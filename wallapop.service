@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 # ajusta WorkingDirectory si clonas en otra ruta o usuario
 WorkingDirectory=/home/ubuntu/wallapop-scraper
-ExecStart=/usr/bin/python3 servidor.py
+ExecStart=/usr/bin/python3 src/servidor.py
 Environment=PORT=8000
 Restart=on-failure
 RestartSec=3
