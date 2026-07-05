@@ -134,6 +134,33 @@
     td.desc, td.titulo { max-width: 12rem; }
     thead th { top: 132px; }
   }
+
+  /* perfil: chip en cabecera + inicial de color por persona */
+  .chip { display: inline-flex; align-items: center; gap: .4rem; padding: .26rem .7rem .26rem .3rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+    font: 12px var(--mono); color: var(--ink); }
+  .chip:hover { border-color: var(--pine); }
+  .ini { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: none;
+    border-radius: 50%; font: 700 11px var(--mono); text-transform: uppercase; }
+
+  /* gate: elegir quién eres, sin diálogos de sistema */
+  .gate { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
+    background: rgba(27,33,30,.55); padding: 1.2rem; }
+  .gate.show { display: grid; }
+  .gate-card { position: relative; background: var(--paper); border: 2px solid var(--ink);
+    border-radius: 12px; padding: 1.4rem; width: min(440px, 100%); box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+  .gate h2 { font: 800 1.1rem/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .35rem; }
+  .gate p { font: 12.5px/1.4 var(--sans); color: var(--ink-soft); margin: 0 0 1.1rem; }
+  .people { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.1rem; }
+  .person { display: inline-flex; align-items: center; gap: .5rem; padding: .45rem .8rem .45rem .45rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+    font: 700 13px var(--mono); color: var(--ink); }
+  .person:hover, .person:focus-visible { border-color: var(--pine); background: var(--pine-soft); }
+  .gate-new { display: flex; gap: .4rem; }
+  .gate-new input { flex: 1; min-width: 0; padding: .55rem .7rem; font: 15px var(--sans);
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+  .gate-x { position: absolute; top: .6rem; right: .7rem; background: none; border: none;
+    color: var(--ink-soft); cursor: pointer; font: 15px var(--mono); padding: .2rem; line-height: 1; }
 </style>
 
 <header>
@@ -142,7 +169,7 @@
     <span class="eyebrow">inspector de hallazgos · wallapop</span>
   </div>
   <div class="tools">
-    <label class="flt">quién <select id="perfil" title="cada persona tiene sus propios chollos"></select></label>
+    <button id="perfilChip" class="chip" hidden title="cambiar de perfil"></button>
     <span class="flt">
       <input type="search" id="kw" placeholder="buscar en wallapop…">
       <select id="since" title="frescura del anuncio">
@@ -173,6 +200,19 @@
 
 <table><thead></thead><tbody></tbody></table>
 <div class="empty" id="empty">Elige un CSV o arrastra aquí la carpeta para empezar a rebuscar.</div>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <button class="gate-x" id="gateX" hidden title="cerrar">✕</button>
+    <h2 id="gateTitle">¿Quién eres?</h2>
+    <p>Elige tu perfil o crea uno. Cada persona guarda sus propios chollos (vistos, descartados y favoritos).</p>
+    <div class="people" id="people"></div>
+    <form class="gate-new" id="gateNew">
+      <input id="newName" placeholder="tu nombre…" autocomplete="off" maxlength="40">
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+  </div>
+</div>
 
 <div class="snack" id="snack" hidden>
   <span id="snackmsg"></span>
@@ -498,32 +538,50 @@ $('#scrape').onclick = async () => {
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 
 // ── perfiles: cada persona (sin contraseña) tiene su visto/descartado/favoritos ──
-const perfilSel = $('#perfil');
-function fillPerfiles(list) {
-  const names = [...new Set([...list, perfil].filter(Boolean))].sort();
-  perfilSel.innerHTML = '';
-  for (const n of names) perfilSel.add(new Option(n, n));
-  perfilSel.add(new Option('+ nuevo…', '__new'));
-  perfilSel.value = perfil || (names[0] || '');
-}
+const chip = $('#perfilChip'), gate = $('#gate'), people = $('#people');
+let knownPerfiles = [];
+const initial = n => (n.trim()[0] || '?').toUpperCase();
+function hue(n) { let h = 0; for (const c of n) h = (h + c.charCodeAt(0) * 37) % 360; return h; }
+const iniHtml = n => `<span class="ini" style="background:hsl(${hue(n)} 30% 86%);color:hsl(${hue(n)} 42% 30%)">${initial(n)}</span>`;
+
 function setPerfil(name) {
   perfil = name;
   localStorage.setItem('wp_perfil', name);
-  perfilSel.value = name;
+  if (!knownPerfiles.includes(name)) knownPerfiles.push(name);
+  chip.hidden = false;
+  chip.innerHTML = iniHtml(name) + name;
+  closeGate();
   hydrateEstado();
 }
-function nuevoPerfil() {
-  const n = (prompt('¿Quién eres? Tu nombre para guardar tus chollos:') || '').trim();
-  if (!n) { perfilSel.value = perfil; return; }   // cancelado: nos quedamos como estábamos
-  perfilSel.add(new Option(n, n), perfilSel.options[perfilSel.length - 1]);  // antes de "+ nuevo…"
-  setPerfil(n);
+function openGate(mode) {   // 'first' (obligatorio elegir) | 'switch' (se puede cerrar)
+  $('#gateTitle').textContent = mode === 'switch' ? 'Cambiar de perfil' : '¿Quién eres?';
+  $('#gateX').hidden = mode !== 'switch';
+  people.hidden = !knownPerfiles.length;
+  people.innerHTML = '';
+  for (const n of knownPerfiles) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'person'; b.innerHTML = iniHtml(n) + n;
+    b.onclick = () => setPerfil(n);
+    people.appendChild(b);
+  }
+  gate.classList.add('show');
+  if (mode !== 'switch') setTimeout(() => $('#newName').focus(), 50);
 }
-perfilSel.onchange = () => perfilSel.value === '__new' ? nuevoPerfil() : setPerfil(perfilSel.value);
+function closeGate() { gate.classList.remove('show'); }
+
+$('#gateNew').onsubmit = e => {
+  e.preventDefault();
+  const n = $('#newName').value.trim();
+  if (n) { $('#newName').value = ''; setPerfil(n); }
+};
+$('#gateX').onclick = closeGate;
+chip.onclick = () => openGate('switch');
+gate.onclick = e => { if (e.target === gate && !$('#gateX').hidden) closeGate(); };   // backdrop solo cierra en 'switch'
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gateX').hidden) closeGate(); });
 
 fetch('/perfiles').then(r => r.json()).then(list => {
-  if (!perfil && list.length) perfil = list[0];   // por defecto, el primero que exista
-  fillPerfiles(list);
-  if (perfil) { localStorage.setItem('wp_perfil', perfil); hydrateEstado(); }
-  else nuevoPerfil();                              // primera vez de todas: pide nombre
-}).catch(() => { fillPerfiles([]); if (data.length) render(); });   // offline: localStorage
+  knownPerfiles = list;
+  if (perfil) setPerfil(perfil);   // dispositivo que ya sabe quién es -> directo, sin diálogo
+  else openGate('first');          // primera vez aquí -> elige, sin auto-asignar a nadie
+}).catch(() => { perfil ? setPerfil(perfil) : openGate('first'); });   // offline
 </script>
