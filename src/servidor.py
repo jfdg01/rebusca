@@ -172,6 +172,8 @@ class H(SimpleHTTPRequestHandler):
             cmd += ["--since", since]
         cmd += ["-o", str(out)]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if r.stderr:                      # throttle/backoff/403 del scraper -> journald (antes se perdian)
+            print(r.stderr, file=sys.stderr, end="", flush=True)
         if r.returncode != 0:
             return self._json({"error": r.stderr[-500:] or "scraper falló"}, 500)
         return self._json({"csv": out.name, "cached": False})
