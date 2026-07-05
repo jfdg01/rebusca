@@ -28,7 +28,7 @@
     position: sticky; top: 0; z-index: 20; background: var(--paper);
     border-bottom: 2px solid var(--ink); padding: .9rem 0 .7rem; margin-bottom: .25rem;
   }
-  .brand { display: flex; align-items: baseline; gap: .6rem; }
+  .brand { display: flex; flex-direction: column; gap: .2rem; }
   .brand h1 {
     font: 800 1.5rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
   }
