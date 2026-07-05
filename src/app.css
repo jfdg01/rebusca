@@ -90,9 +90,12 @@
 
   /* resumen: contadores en su propia zona con caja separadora */
   .stat {
-    font: 12.5px/1.3 var(--mono); color: var(--ink-soft); margin-top: .7rem;
+    font: 12.5px/1.3 var(--mono); color: var(--ink-soft);
     display: flex; flex-direction: column; gap: .5rem;
-    padding: .75rem .9rem; border: 1px solid var(--line); border-radius: 12px;
+    /* sangre completa: laterales anulan el padding del body, como las tarjetas de la lista */
+    margin: .7rem calc(-1 * clamp(.75rem, 2vw, 1.5rem)) 0;
+    padding: .75rem calc(clamp(.75rem, 2vw, 1.5rem) + .9rem);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
     background: var(--surface-2);
   }
   .stat:empty { display: none; }
