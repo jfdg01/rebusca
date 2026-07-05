@@ -49,12 +49,23 @@ El frontend luego pide `GET /<csv>` y lo pinta (el server enruta los `.csv` a `c
 
 ## Flujo de trabajo (obligatorio)
 
-- **Toda novedad va en su propia rama.** Nunca se trabaja directamente sobre `main`.
-- **Cada rama parte de un `main` limpio y actualizado:** `git checkout main && git pull`
-  antes de `git checkout -b feat/<lo-que-sea>`.
-- **Al terminar algo, se mergea a `main`** (fast-forward), se pushea, y se borra la rama.
-  `main` es siempre desplegable y es lo que corre el VPS.
-- Desplegar tras mergear: `./deploy.sh`.
+Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
+
+1. **Arrancar de `main` limpio.** Si `git status` no está limpio, **PARAR y avisar
+   al usuario** — no se toca nada. Si está limpio: `git checkout main && git pull`.
+2. **Rama propia:** `git checkout -b feat/<lo-que-sea>`. Nunca se trabaja sobre `main`.
+3. **Cambios + commits iterativos** en la rama (los que hagan falta, o ninguno si no aplica).
+4. **Cerrar sobre `main`:**
+   - 1 commit → merge fast-forward.
+   - varios commits → squash a uno solo.
+   Luego push y borrar la rama. Empieza un ciclo nuevo desde el paso 1.
+
+`main` es siempre desplegable y es lo que corre el VPS. Desplegar tras cerrar: `./deploy.sh`.
+
+## Cambios de diseño (obligatorio)
+
+1. **Esperar feedback del usuario** antes de commitear o dar por terminado un cambio de diseño.
+2. **Siempre sacar screenshot** para verificar. Setup del usuario: viewport 320×632px, zoom 100%, DPR 2.
 
 ## Estilo
 
