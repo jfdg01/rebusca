@@ -43,14 +43,17 @@
 <div class="empty" id="empty">Elige un CSV o arrastra aquí la carpeta para empezar a rebuscar.</div>
 
 <div class="gate" id="gate">
-  <div class="gate-card">
+  <div class="gate-inner">
     <button class="gate-x" id="gateX" hidden title="cerrar">✕</button>
     <h2 id="gateTitle">¿Quién eres?</h2>
-    <p>Elige tu perfil o crea uno. Cada persona guarda sus propios chollos (vistos, descartados y favoritos).</p>
-    <div class="people" id="people"></div>
-    <form class="gate-new" id="gateNew">
+    <div class="tiles" id="tiles"></div>
+    <form class="creator" id="creator" hidden>
       <input id="newName" placeholder="tu nombre…" autocomplete="off" maxlength="40">
-      <button class="primary" type="submit">Entrar</button>
+      <div class="swatches" id="swatches"></div>
+      <div class="creator-btns">
+        <button type="button" class="ghost" id="cancelCreate" hidden>Volver</button>
+        <button class="primary" type="submit">Entrar</button>
+      </div>
     </form>
   </div>
 </div>

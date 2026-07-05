@@ -11,6 +11,7 @@
     --pine-soft: #DDE8E2;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
   body {
     font: 14px/1.45 var(--sans); color: var(--ink); background: var(--paper);
     margin: 0; padding: 0 clamp(.75rem, 2vw, 1.5rem) 5rem;
@@ -131,29 +132,49 @@
     thead th { top: 132px; }
   }
 
-  /* perfil: chip en cabecera + inicial de color por persona */
+  /* perfil: chip en cabecera con avatar del color de la persona */
   .chip { display: inline-flex; align-items: center; gap: .4rem; padding: .26rem .7rem .26rem .3rem;
     background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
     font: 12px var(--mono); color: var(--ink); }
   .chip:hover { border-color: var(--pine); }
   .ini { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: none;
-    border-radius: 50%; font: 700 11px var(--mono); text-transform: uppercase; }
+    border-radius: 7px; font: 700 11px var(--mono); text-transform: uppercase; color: #fff; }
 
-  /* gate: elegir quién eres, sin diálogos de sistema */
+  /* gate estilo "¿quién está viendo?": tarjetas grandes sobre fondo oscuro */
   .gate { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
-    background: rgba(27,33,30,.55); padding: 1.2rem; }
+    background: rgba(20,25,22,.94); padding: 1.5rem; }
   .gate.show { display: grid; }
-  .gate-card { position: relative; background: var(--paper); border: 2px solid var(--ink);
-    border-radius: 12px; padding: 1.4rem; width: min(440px, 100%); box-shadow: 0 12px 40px rgba(0,0,0,.3); }
-  .gate h2 { font: 800 1.1rem/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .35rem; }
-  .gate p { font: 12.5px/1.4 var(--sans); color: var(--ink-soft); margin: 0 0 1.1rem; }
-  .people { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.1rem; }
-  .person { display: inline-flex; align-items: center; gap: .5rem; padding: .45rem .8rem .45rem .45rem;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
-    font: 700 13px var(--mono); color: var(--ink); }
-  .person:hover, .person:focus-visible { border-color: var(--pine); background: var(--pine-soft); }
-  .gate-new { display: flex; gap: .4rem; }
-  .gate-new input { flex: 1; min-width: 0; padding: .55rem .7rem; font: 15px var(--sans);
-    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
-  .gate-x { position: absolute; top: .6rem; right: .7rem; background: none; border: none;
-    color: var(--ink-soft); cursor: pointer; font: 15px var(--mono); padding: .2rem; line-height: 1; }
+  .gate-inner { position: relative; width: min(720px, 100%); text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 1.8rem; }
+  .gate h2 { font: 700 clamp(1.3rem, 4vw, 2rem)/1 var(--mono); text-transform: uppercase;
+    letter-spacing: .08em; color: #ECEEE8; margin: 0; }
+
+  /* fila de perfiles (máx 4) + tile de añadir */
+  .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(1rem, 4vw, 2.2rem); }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: .7rem;
+    background: none; border: none; cursor: pointer; padding: 0; }
+  .av { width: clamp(84px, 22vw, 116px); aspect-ratio: 1; border-radius: 12px;
+    display: grid; place-items: center; font: 700 clamp(2rem, 7vw, 3rem) var(--mono);
+    color: #fff; text-transform: uppercase; border: 3px solid transparent; transition: border-color .15s, transform .15s; }
+  .tile .name { font: 600 clamp(.9rem, 2.6vw, 1.05rem) var(--mono); color: #A9AFA7; transition: color .15s; }
+  .tile:hover .av, .tile:focus-visible .av { border-color: #ECEEE8; transform: translateY(-3px); }
+  .tile:hover .name, .tile:focus-visible .name { color: #ECEEE8; }
+  .tile.add .av { background: none; border: 2px dashed #5A625D; color: #7E857D; font-weight: 400; }
+  .tile.add:hover .av { border-color: #ECEEE8; color: #ECEEE8; }
+
+  /* crear perfil: nombre + color */
+  .creator { display: flex; flex-direction: column; align-items: center; gap: 1.2rem; width: min(360px, 100%); }
+  .creator input { width: 100%; padding: .7rem .8rem; text-align: center; font: 17px var(--sans);
+    border: 1px solid #4A514C; border-radius: 8px; background: #2A302C; color: #ECEEE8; }
+  .creator input::placeholder { color: #7E857D; }
+  .swatches { display: flex; flex-wrap: wrap; justify-content: center; gap: .7rem; }
+  .swatch { width: 2.1rem; height: 2.1rem; border-radius: 8px; border: 3px solid transparent;
+    cursor: pointer; padding: 0; transition: transform .12s; }
+  .swatch:hover { transform: scale(1.12); }
+  .swatch.sel { border-color: #ECEEE8; }
+  .creator-btns { display: flex; gap: .6rem; }
+  .creator .ghost { background: none; border: 1px solid #4A514C; color: #A9AFA7; }
+  .creator .ghost:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
+  .gate-x { position: absolute; top: -.4rem; right: 0; background: none; border: none;
+    color: #A9AFA7; cursor: pointer; font: 18px var(--mono); padding: .3rem; line-height: 1; }
+  .gate-x:hover { color: #ECEEE8; }

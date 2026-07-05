@@ -24,6 +24,19 @@ def perfil_path(name):
     return ESTADOS / f"{slug}.json"
 
 
+def perfiles():
+    # cada perfil = {name, color}; color lo guarda el cliente en el propio JSON
+    out = []
+    if ESTADOS.exists():
+        for f in sorted(ESTADOS.glob("*.json")):
+            try:
+                color = json.loads(f.read_text()).get("color")
+            except Exception:
+                color = None
+            out.append({"name": f.stem, "color": color})
+    return out
+
+
 def slug(kw):
     return "-".join(kw.lower().split()) or "wallapop"
 
@@ -62,7 +75,7 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/csvs":
             return self._json(sorted(p.name for p in HERE.glob("*.csv")))
         if u.path == "/perfiles":
-            return self._json(sorted(p.stem for p in ESTADOS.glob("*.json")) if ESTADOS.exists() else [])
+            return self._json(perfiles())
         if u.path == "/estado":
             perfil = (parse_qs(u.query).get("perfil") or ["casa"])[0]
             f = perfil_path(perfil)

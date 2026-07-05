@@ -23,13 +23,14 @@ const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
 const seen = load('wp_seen'), trash = load('wp_discarded'), fav = load('wp_fav');
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
+let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
 let _push;   // POST del estado del perfil actual, con debounce
 function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seen: [...seen], trash: [...trash], fav: [...fav] }) }).catch(() => {}), 400);
+    body: JSON.stringify({ seen: [...seen], trash: [...trash], fav: [...fav], color: perfilColor }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -315,50 +316,88 @@ $('#scrape').onclick = async () => {
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 
-// ── perfiles: cada persona (sin contraseña) tiene su visto/descartado/favoritos ──
-const chip = $('#perfilChip'), gate = $('#gate'), people = $('#people');
-let knownPerfiles = [];
+// ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
+const COLORS = ['#2E6B5A', '#B4552D', '#3B5B92', '#7A4A78', '#A8791A', '#4F7A3A', '#4A5A66', '#A23B4E'];
+const chip = $('#perfilChip'), gate = $('#gate');
+const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
+let knownPerfiles = [];            // [{name, color}]
+let pendingColor = COLORS[0];
 const initial = n => (n.trim()[0] || '?').toUpperCase();
 function hue(n) { let h = 0; for (const c of n) h = (h + c.charCodeAt(0) * 37) % 360; return h; }
-const iniHtml = n => `<span class="ini" style="background:hsl(${hue(n)} 30% 86%);color:hsl(${hue(n)} 42% 30%)">${initial(n)}</span>`;
+const colorOf = p => p.color || `hsl(${hue(p.name)} 42% 40%)`;   // fallback: perfiles viejos sin color
 
-function setPerfil(name) {
-  perfil = name;
+function setPerfil(name, color, isNew) {
+  perfil = name; perfilColor = color;
   localStorage.setItem('wp_perfil', name);
-  if (!knownPerfiles.includes(name)) knownPerfiles.push(name);
+  const found = knownPerfiles.find(p => p.name === name);
+  if (found) found.color = color; else knownPerfiles.push({ name, color });
   chip.hidden = false;
-  chip.innerHTML = iniHtml(name) + name;
+  chip.innerHTML = `<span class="ini" style="background:${color}">${initial(name)}</span>` + name;
   closeGate();
-  hydrateEstado();
+  if (isNew) {                     // persiste ya el perfil vacío con su color
+    for (const s of [seen, trash, fav]) s.clear();
+    fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seen: [], trash: [], fav: [], color }) }).catch(() => {});
+    if (data.length) render();
+  } else hydrateEstado();
 }
-function openGate(mode) {   // 'first' (obligatorio elegir) | 'switch' (se puede cerrar)
-  $('#gateTitle').textContent = mode === 'switch' ? 'Cambiar de perfil' : '¿Quién eres?';
-  $('#gateX').hidden = mode !== 'switch';
-  people.hidden = !knownPerfiles.length;
-  people.innerHTML = '';
-  for (const n of knownPerfiles) {
+
+function showPicker() {            // fila de tarjetas + tile de añadir (si < 4)
+  creator.hidden = true; tiles.hidden = false;
+  tiles.innerHTML = '';
+  for (const p of knownPerfiles) {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'person'; b.innerHTML = iniHtml(n) + n;
-    b.onclick = () => setPerfil(n);
-    people.appendChild(b);
+    b.type = 'button'; b.className = 'tile';
+    b.innerHTML = `<span class="av" style="background:${colorOf(p)}">${initial(p.name)}</span><span class="name"></span>`;
+    b.querySelector('.name').textContent = p.name;   // textContent -> a prueba de nombres con < o &
+    b.onclick = () => setPerfil(p.name, colorOf(p), false);
+    tiles.appendChild(b);
   }
+  if (knownPerfiles.length < 4) {
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'tile add';
+    add.innerHTML = `<span class="av">+</span><span class="name">Añadir</span>`;
+    add.onclick = showCreator;
+    tiles.appendChild(add);
+  }
+}
+function showCreator() {           // crear: nombre + color
+  tiles.hidden = true; creator.hidden = false;
+  $('#cancelCreate').hidden = !knownPerfiles.length;   // "Volver" solo si hay perfiles a los que volver
+  $('#newName').value = '';
+  pendingColor = COLORS[knownPerfiles.length % COLORS.length];
+  swatches.innerHTML = '';
+  for (const c of COLORS) {
+    const s = document.createElement('button');
+    s.type = 'button'; s.className = 'swatch' + (c === pendingColor ? ' sel' : '');
+    s.style.background = c; s.title = 'color';
+    s.onclick = () => { pendingColor = c; swatches.querySelectorAll('.swatch').forEach(x => x.classList.toggle('sel', x === s)); };
+    swatches.appendChild(s);
+  }
+  setTimeout(() => $('#newName').focus(), 50);
+}
+function openGate(mode) {          // 'first' (obligatorio) | 'switch' (se puede cerrar)
+  $('#gateTitle').textContent = mode === 'switch' ? 'Cambiar de perfil' : '¿Quién está buscando?';
+  $('#gateX').hidden = mode !== 'switch';
   gate.classList.add('show');
-  if (mode !== 'switch') setTimeout(() => $('#newName').focus(), 50);
+  knownPerfiles.length ? showPicker() : showCreator();   // sin perfiles -> directo a crear
 }
 function closeGate() { gate.classList.remove('show'); }
 
-$('#gateNew').onsubmit = e => {
+$('#creator').onsubmit = e => {
   e.preventDefault();
   const n = $('#newName').value.trim();
-  if (n) { $('#newName').value = ''; setPerfil(n); }
+  if (n) setPerfil(n, pendingColor, true);
 };
+$('#cancelCreate').onclick = showPicker;
 $('#gateX').onclick = closeGate;
 chip.onclick = () => openGate('switch');
-gate.onclick = e => { if (e.target === gate && !$('#gateX').hidden) closeGate(); };   // backdrop solo cierra en 'switch'
+gate.onclick = e => { if (e.target === gate && !$('#gateX').hidden) closeGate(); };   // backdrop cierra solo en 'switch'
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gateX').hidden) closeGate(); });
 
 fetch('/perfiles').then(r => r.json()).then(list => {
   knownPerfiles = list;
-  if (perfil) setPerfil(perfil);   // dispositivo que ya sabe quién es -> directo, sin diálogo
-  else openGate('first');          // primera vez aquí -> elige, sin auto-asignar a nadie
-}).catch(() => { perfil ? setPerfil(perfil) : openGate('first'); });   // offline
+  const me = perfil && list.find(p => p.name === perfil);
+  if (me) setPerfil(me.name, colorOf(me), false);   // dispositivo que ya sabe quién es -> directo
+  else openGate('first');                            // primera vez -> elige/crea, sin auto-asignar
+}).catch(() => { perfil ? setPerfil(perfil, `hsl(${hue(perfil)} 42% 40%)`, false) : openGate('first'); });
