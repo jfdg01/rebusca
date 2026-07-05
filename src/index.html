@@ -16,6 +16,15 @@
         />
         <span class="eyebrow">rebuscador<br />de chollos</span>
     </div>
+    <div class="panel picker perfil-band">
+        <span class="hola">Bienvenido, <b id="perfilName">invitado</b></span>
+        <details class="opts" id="perfilOpts">
+            <summary title="opciones" data-icon="settings"></summary>
+            <div class="menu">
+                <button id="perfilChip" class="chip">Cambiar de perfil</button>
+            </div>
+        </details>
+    </div>
     <div class="panel">
         <div class="search">
             <input
@@ -43,14 +52,11 @@
                     title="tus búsquedas — escribe para filtrar" />
                 <div id="qlist" class="qlist" hidden></div>
             </div>
-            <button id="perfilChip" class="chip empty" title="cambiar de perfil">
-                Sin perfil
-            </button>
         </div>
         <div class="stat" id="stat"></div>
     </div>
     <div class="list-head" id="listHead" hidden>
-        <button id="listBack" title="volver">←</button>
+        <button id="listBack" title="volver" data-icon="arrow-left"></button>
         <h2 id="listTitle"></h2>
     </div>
 </header>
@@ -102,16 +108,16 @@
 </div>
 
 <div class="swipe" id="swipeView" hidden>
-    <button class="swipe-x" id="swipeX" title="cerrar">✕</button>
+    <button class="swipe-x" id="swipeX" title="cerrar" data-icon="x"></button>
     <div class="swipe-count" id="swipeCount"></div>
     <div class="swipe-stage" id="swipeStage">
-        <div class="sc-badge like" id="swLikeStamp"><span>★ Interesa</span></div>
+        <div class="sc-badge like" id="swLikeStamp"><span><i data-icon="star"></i> Interesa</span></div>
         <div class="sc-badge nope" id="swNopeStamp"><span>Descartar</span></div>
     </div>
     <div class="swipe-actions">
-        <button class="sw-btn nope" id="swNope">✕ Descartar</button>
+        <button class="sw-btn nope" id="swNope"><i data-icon="x"></i> Descartar</button>
         <button class="sw-btn ver" id="swVer">Ver</button>
-        <button class="sw-btn like" id="swLike">★ Interesa</button>
+        <button class="sw-btn like" id="swLike"><i data-icon="star"></i> Interesa</button>
     </div>
 </div>
 

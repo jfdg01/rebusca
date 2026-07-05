@@ -52,6 +52,16 @@ const key = r => (iId >= 0 && r[iId]) || (r[iTitulo] + '|' + r[iPrecio]);
 
 const $ = s => document.querySelector(s);
 const thead = $('thead'), tbody = $('tbody');
+// ── iconos: SVG inline de Lucide (MIT), heredan color con currentColor ──
+const ICON = {
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  'arrow-left': '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  star: '<path d="M11.5 2.3 8.9 8.6 2.2 9.2c-.9.1-1.2 1.2-.5 1.8l5 4.4-1.5 6.5c-.2.9.7 1.6 1.5 1.1l5.8-3.5 5.8 3.5c.8.5 1.7-.2 1.5-1.1l-1.5-6.5 5-4.4c.7-.6.4-1.7-.5-1.8l-6.7-.6L13 2.3c-.3-.8-1.4-.8-1.7 0Z"/>',
+};
+const ic = n => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
+document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = ic(e.dataset.icon));
 
 // firma: hue caliente (hoy) → frío (viejo) segun dias
 function heat(d) {
@@ -365,6 +375,7 @@ $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').
 // ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
 const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];
 const chip = $('#perfilChip'), gate = $('#gate');
+const nameEl = $('#perfilName'), opts = $('#perfilOpts');
 const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
 let knownPerfiles = [];            // [{name, color}]
 let pendingColor = COLORS[0];
@@ -383,10 +394,8 @@ console.assert(ink('#FFD43B') === '#1A1E1B' && ink('#A23B4E') === '#F4F6F2'
 
 // pinta el chip: avatar+nombre con perfil, o estado vacío (punteado) si no hay
 function renderChip() {
-  chip.classList.toggle('empty', !perfil);
-  chip.style.background = perfil ? perfilColor : '';
-  chip.style.color = perfil ? ink(perfilColor) : '';
-  chip.textContent = perfil || 'Sin perfil';
+  nameEl.textContent = perfil || 'invitado';
+  chip.textContent = perfil ? 'Cambiar de perfil' : 'Elegir perfil';
 }
 
 function setPerfil(name, color, isNew) {
@@ -410,7 +419,7 @@ function showPicker() {            // fila de tarjetas + tile de añadir (si < 4
   for (const p of knownPerfiles) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'tile';
-    b.innerHTML = `<span class="edit" title="editar">✎</span><span class="av" style="background:${colorOf(p)};color:${ink(colorOf(p))}">${initial(p.name)}</span><span class="name"></span>`;
+    b.innerHTML = `<span class="edit" title="editar">${ic('pencil')}</span><span class="av" style="background:${colorOf(p)};color:${ink(colorOf(p))}">${initial(p.name)}</span><span class="name"></span>`;
     b.querySelector('.name').textContent = p.name;   // textContent -> a prueba de nombres con < o &
     b.querySelector('.edit').onclick = e => { e.stopPropagation(); showCreator(p); };
     b.onclick = () => setPerfil(p.name, colorOf(p), false);
@@ -487,7 +496,7 @@ function reloadPicker() {   // vuelve a leer la lista y repinta las tarjetas
 $('#deletePerfil').onclick = () => editing && deletePerfil(editing);
 $('#cancelCreate').onclick = showPicker;
 $('#gateX').onclick = closeGate;
-chip.onclick = () => openGate('switch');
+chip.onclick = () => { opts.open = false; openGate('switch'); };
 gate.onclick = e => { if (e.target === gate && !$('#gateX').hidden) closeGate(); };   // backdrop cierra solo en 'switch'
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gateX').hidden) closeGate(); });
 
