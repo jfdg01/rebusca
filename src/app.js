@@ -83,10 +83,9 @@ function humanAge(dias) {
 console.assert(humanAge(16.8) === 'hace 16 días y 19 horas' && humanAge(1) === 'hace 1 día'
   && humanAge(0.05) === 'hace 1 hora' && humanAge(0) === 'recién puesto', 'humanAge() roto');
 
-// item de lista compuesto (Destacados/Papelera): precio + ubicación + antigüedad + flags + descripción
-function listBody(r) {
-  const td = document.createElement('td'); td.className = 'li';
-  const add = (cls, txt) => { const e = document.createElement('div'); e.className = cls; e.textContent = txt; td.append(e); return e; };
+// tarjeta compuesta (Destacados/Papelera + swipe): precio + ubicación + antigüedad + flags + descripción
+function fillCard(el, r) {
+  const add = (cls, txt) => { const e = document.createElement('div'); e.className = cls; e.textContent = txt; el.append(e); return e; };
   const precio = col(r, 'precio'), km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
 
   add('li-title', col(r, 'titulo'));
@@ -97,15 +96,15 @@ function listBody(r) {
   let where = km !== '' ? `a ${km} km` : '';
   if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
   if (where) { const w = document.createElement('span'); w.className = 'li-where'; w.textContent = where; head.append(w); }
-  td.append(head);
+  el.append(head);
 
   if (isNum(dias)) add('li-age', humanAge(+dias)).style.color = heat(+dias).fg;
   add('li-flags', `${col(r, 'reservado') === 'True' ? 'Reservado' : 'Sin reserva'} · ${col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío'}`);
 
   const desc = col(r, 'descripcion');
   if (desc) add('li-desc', desc);
-  return td;
 }
+function listBody(r) { const td = document.createElement('td'); td.className = 'li'; fillCard(td, r); return td; }
 
 // orden multinivel: clic añade columna como siguiente prioridad; reclic invierte
 function toggleSort(col) {
@@ -549,23 +548,9 @@ function nextCard() {
 
 function buildCard(r) {
   const c = document.createElement('div'); c.className = 'swipe-card';
-  const dias = col(r, 'dias'), hs = isNum(dias) ? heat(+dias) : null;
-  const meta = [];
-  if (col(r, 'ciudad')) meta.push(escapeHtml(col(r, 'ciudad')));
-  if (col(r, 'km') !== '') meta.push(col(r, 'km') + ' km');
-  if (hs) meta.push(`<span class="sc-dias" style="color:${hs.fg};background:${hs.bg}">${dias} días</span>`);
-  if (col(r, 'envio') === 'True') meta.push('📦 envío');
-  if (col(r, 'reservado') === 'True') meta.push('reservado');
-  c.innerHTML =
-    `<div class="sc-price">${col(r, 'precio')} €</div>` +
-    '<div class="sc-title"></div>' +
-    `<div class="sc-meta">${meta.join(' · ')}</div>` +
-    '<div class="sc-desc"></div>';
-  c.querySelector('.sc-title').textContent = col(r, 'titulo');     // textContent: a prueba de < & en el texto
-  c.querySelector('.sc-desc').textContent = col(r, 'descripcion');
+  fillCard(c, r);   // mismo cuerpo que los items de papelera/favoritos
   return c;
 }
-const escapeHtml = s => s.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
 
 // commit por distancia O por velocidad: un flick corto y rápido cuenta igual que un arrastre largo
 function decide(dx, v) {

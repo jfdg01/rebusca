@@ -354,32 +354,30 @@
     color: #fff; font: 700 1.05rem var(--mono); letter-spacing: .02em; }
   #swipeFab:hover { background: #10A896; border-color: #10A896; }
 
-  .swipe { position: fixed; inset: 0; z-index: 45; background: rgba(20,25,22,.96);
+  .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
     touch-action: pan-y; }   /* arrastre horizontal desde cualquier hueco de la vista, no solo la tarjeta */
+  /* cerrar: hereda el botón claro global, solo redondo arriba-izq */
   .swipe-x { position: absolute; top: 1rem; left: 1rem; width: 2.6rem; height: 2.6rem;
-    border-radius: 50%; padding: 0; font-size: 1.05rem;
-    background: none; border: 1px solid #4A514C; color: #A9AFA7; }
-  .swipe-x:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
-  .swipe-count { color: #A9AFA7; font: 700 13px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
+    border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .swipe-count { color: var(--ink-soft); font: 700 13px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
   .swipe-stage { position: relative; flex: 1 1 auto; min-height: 0; width: min(440px, 100%); display: grid; place-items: center; }
-  .swipe-done { color: #ECEEE8; text-align: center; font: 700 1.4rem var(--mono); }
+  .swipe-done { color: var(--ink); text-align: center; font: 700 1.4rem var(--mono); }
 
-  .swipe-card { position: relative; z-index: 1; width: 100%; max-height: 100%; min-height: 0; background: var(--surface);
-    border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  .swipe-card { position: relative; z-index: 1; width: 100%; max-height: 100%; min-height: 0;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 8px 30px rgba(27,33,30,.18);
     display: flex; flex-direction: column;
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
-  .sc-price { flex: 0 0 auto; font: 800 2.2rem/1 var(--mono); color: var(--pine); }
-  /* título largo: máx 5 líneas con elipsis, no empuja los botones fuera de pantalla */
-  .sc-title { flex: 0 0 auto; font: 700 1.35rem/1.25 var(--sans); margin: .6rem 0; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
-  .sc-meta { flex: 0 0 auto; font: 13px var(--mono); color: var(--ink-soft); display: flex; flex-wrap: wrap;
-    gap: .5rem; align-items: center; margin-bottom: .9rem; }
-  .sc-dias { padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
-  /* la descripción absorbe el espacio restante y scrollea dentro de la tarjeta */
-  .sc-desc { font: 14px/1.5 var(--sans); color: var(--ink-soft);
-    flex: 1 1 auto; min-height: 3rem; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+  /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
+  /* título largo: máx 4 líneas, no empuja los botones fuera de pantalla */
+  .swipe-card .li-title { flex: 0 0 auto; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
+  /* la descripción absorbe el espacio restante y scrollea dentro de la tarjeta (en la lista se recorta a 4 líneas) */
+  .swipe-card .li-desc { flex: 1 1 auto; min-height: 3rem; overflow-y: auto;
+    display: block; -webkit-line-clamp: unset; }
 
   /* sello LIKE/NOPE: vive en el escenario, DETRÁS de la tarjeta; se revela al deslizar y se queda */
   .sc-badge { position: absolute; inset: 0; opacity: 0; pointer-events: none;
@@ -391,7 +389,8 @@
 
   .swipe-actions { display: flex; gap: .8rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
   .sw-btn { flex: 1 1 auto; padding: .9rem .5rem; font: 700 15px var(--mono);
-    border-radius: 10px; border: 2px solid; background: var(--surface); }
+    border-radius: 12px; border: 2px solid; background: var(--surface);
+    box-shadow: 0 1px 2px rgba(27,33,30,.09); }
   .sw-btn.nope { color: #b03024; border-color: #b03024; }
   .sw-btn.nope:hover { background: #b03024; color: #fff; }
   .sw-btn.like { color: #C8901A; border-color: #C8901A; }
