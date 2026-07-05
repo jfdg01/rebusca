@@ -72,9 +72,16 @@ def _warn(msg):
     print("  ! " + msg, file=sys.stderr)
 
 
-def search(keywords, lat, lon):
-    """Generador: suelta cada PÁGINA de items segun llega, para escribir a disco ya."""
+def search(keywords, lat, lon, order_by=None, time_filter=None):
+    """Generador: suelta cada PÁGINA de items segun llega, para escribir a disco ya.
+
+    order_by='newest' -> mas reciente primero. time_filter='today'|'lastWeek'|'lastMonth'
+    -> el servidor filtra por antiguedad (no hay que paginar todo el catalogo)."""
     params = {"keywords": keywords, "latitude": lat, "longitude": lon, "source": "search_box"}
+    if order_by:
+        params["order_by"] = order_by       # 'newest' verificado contra v3/search (200, desc por created_at)
+    if time_filter:
+        params["time_filter"] = time_filter  # 'today'/'lastWeek'/'lastMonth' (solo camelCase)
     while True:
         try:
             d = get(params)
@@ -89,7 +96,7 @@ def search(keywords, lat, lon):
         time.sleep(0.5 + random.random())   # jitter: menos patron detectable. Sube si te capan
 
 
-FIELDS = ["titulo", "precio", "ciudad", "cp", "km",
+FIELDS = ["titulo", "precio", "ciudad", "cp", "km", "dias",
           "reservado", "envio", "url", "descripcion"]  # descripcion al final
 
 
@@ -97,6 +104,8 @@ def row(it, origin):
     loc = it.get("location") or {}
     lat, lon = loc.get("latitude"), loc.get("longitude")
     dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if lat and lon else ""
+    ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
+    dias = round((time.time() * 1000 - ca) / 86400000, 1) if ca else ""
     return {
         "titulo": it["title"],
         "precio": it["price"]["amount"],
@@ -104,6 +113,7 @@ def row(it, origin):
         "ciudad": loc.get("city", ""),
         "cp": loc.get("postal_code", ""),
         "km": dist,
+        "dias": dias,
         "reservado": it.get("reserved", {}).get("flag", False),
         "envio": it.get("shipping", {}).get("user_allows_shipping", False),
         "url": "https://es.wallapop.com/item/" + it.get("web_slug", ""),
@@ -116,6 +126,8 @@ def main():
     p.add_argument("--lat", type=float, default=37.7796)   # Jaén
     p.add_argument("--lon", type=float, default=-3.7849)
     p.add_argument("--max-km", type=float, default=None, help="filtra por distancia")
+    p.add_argument("--since", choices=["hora", "dia", "semana", "mes"], default=None,
+                   help="solo anuncios publicados en la ultima hora/dia/semana/mes")
     p.add_argument("-n", "--limit", type=int, default=None, help="corta a N items")
     p.add_argument("--proxies", help="fichero con un proxy por linea (http://user:pass@host:port)")
     p.add_argument("-o", "--out", default=None, help="por defecto: <query>.csv")
@@ -129,6 +141,10 @@ def main():
             PROXIES.extend(l.strip() for l in f if l.strip() and not l.startswith("#"))
         print(f"{len(PROXIES)} proxies cargados")
 
+    max_dias = {"hora": 1 / 24, "dia": 1, "semana": 7, "mes": 30}.get(a.since)
+    # el server filtra por antiguedad; 'hora' no existe alli -> pide 'today' y afinamos en cliente
+    time_filter = {"hora": "today", "dia": "today", "semana": "lastWeek", "mes": "lastMonth"}.get(a.since)
+    order_by = "newest" if a.since else None   # sin --since dejamos el orden por defecto (luego ordena por km)
     origin = (a.lat, a.lon)
     n = 0
     # Escritura incremental: cada pagina se vuelca y flushea. Si crashea a mitad,
@@ -137,10 +153,12 @@ def main():
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         try:
-            for page in search(a.keywords, a.lat, a.lon):
+            for page in search(a.keywords, a.lat, a.lon, order_by, time_filter):
                 for it in page:
                     r = row(it, origin)
                     if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
+                        continue
+                    if max_dias is not None and (r["dias"] == "" or r["dias"] > max_dias):
                         continue
                     w.writerow(r)
                     n += 1
