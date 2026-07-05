@@ -126,6 +126,10 @@ class H(SimpleHTTPRequestHandler):
             return self._json(sorted(p.name for p in CSV_DIR.glob("*.csv")))
         if u.path == "/perfiles":
             return self._json(perfiles())
+        if u.path == "/progress":
+            name = Path((parse_qs(u.query).get("csv") or [""])[0]).name   # .name: anti-traversal
+            f = CSV_DIR / (name + ".progress")
+            return self._json({"progress": f.read_text() if f.exists() else ""})
         if u.path == "/estado":
             perfil = (parse_qs(u.query).get("perfil") or ["casa"])[0]
             f = perfil_path(perfil)

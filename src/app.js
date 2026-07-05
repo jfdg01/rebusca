@@ -236,20 +236,30 @@ function refreshCsvs() {
 refreshCsvs();
 
 // dispara el scraper y carga el resultado (el servidor cachea: no re-scrapea si es fresco)
+// mismo slug que el server (servidor.py slug/csv_name) para sondear el progreso antes de saber el nombre
+const csvNameOf = (kw, since) => kw.toLowerCase().split(/\s+/).filter(Boolean).join('-') +
+  (since ? '--' + since : '') + '.csv';
 $('#scrape').onclick = async () => {
   const kw = $('#kw').value.trim();
   if (!kw) return;
+  const since = $('#since').value || '';
   const btn = $('#scrape'), txt = btn.textContent;
   btn.disabled = true; btn.textContent = 'Buscando…';
+  const poll = setInterval(async () => {           // el server responde /progress en paralelo al scrape
+    try {
+      const p = (await (await fetch('/progress?csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
+      if (p) { const [n, t] = p.split('/'); btn.textContent = t ? `${n} de ${t}` : `${n}…`; }
+    } catch {}
+  }, 800);
   try {
     const res = await fetch('/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: kw, since: $('#since').value || null }) });
+      body: JSON.stringify({ keywords: kw, since: since || null }) });
     const r = await res.json();
     if (r.error) throw new Error(r.error);
     await refreshCsvs();
     pick.value = r.csv; pick.onchange();
   } catch (e) { snack('No se pudo buscar: ' + e.message, null); }
-  finally { btn.disabled = false; btn.textContent = txt; }
+  finally { clearInterval(poll); btn.disabled = false; btn.textContent = txt; }
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
 

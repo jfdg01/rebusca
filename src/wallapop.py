@@ -5,8 +5,9 @@ Uso:
     python3 wallapop.py "deshumidificador" --lat 37.7796 --lon -3.7849 -o jaen.csv
     python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a wallapop.csv
 """
-import argparse, csv, json, random, sys, time, urllib.parse, urllib.request, urllib.error
+import argparse, base64, csv, json, random, sys, time, urllib.parse, urllib.request, urllib.error
 from math import radians, sin, cos, asin, sqrt
+from pathlib import Path
 
 API = "https://api.wallapop.com/api/v3/search"
 HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json"}
@@ -72,6 +73,21 @@ def _warn(msg):
     print("  ! " + msg, file=sys.stderr)
 
 
+def _page_total(meta):
+    """Total estimado de resultados desde el cursor next_page (JWT, no lo verificamos).
+    offset ya servido + remaining_documents. None si el cursor no lo trae."""
+    tok = (meta or {}).get("next_page")
+    if not tok:
+        return None
+    try:
+        p = tok.split(".")[1]
+        p += "=" * (-len(p) % 4)                          # padding base64url
+        npp = json.loads(base64.urlsafe_b64decode(p))["params"]["nextPageParams"]
+        return npp["offset"] + npp["pointers"]["ORGANIC"]["remaining_documents"]
+    except Exception:                                     # estructura distinta -> sin total, no pasa nada
+        return None
+
+
 def search(keywords, lat, lon, order_by=None, time_filter=None):
     """Generador: suelta cada PÁGINA de items segun llega, para escribir a disco ya.
 
@@ -88,7 +104,7 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
         except Blocked as e:
             _warn(f"parada por bloqueo: {e}")
             return                    # lo ya escrito a disco esta a salvo
-        yield d["data"]["section"]["payload"]["items"]
+        yield d["data"]["section"]["payload"]["items"], _page_total(d.get("meta"))
         nxt = d.get("meta", {}).get("next_page")
         if not nxt:
             return
@@ -147,14 +163,17 @@ def main():
     time_filter = {"hora": "today", "dia": "today", "semana": "lastWeek", "mes": "lastMonth"}.get(a.since)
     order_by = "newest" if a.since else None   # sin --since dejamos el orden por defecto (luego ordena por km)
     origin = (a.lat, a.lon)
-    n = 0
+    n, total = 0, None
+    prog = Path(str(a.out) + ".progress")   # sidecar "n/total": el server lo lee en vivo
     # Escritura incremental: cada pagina se vuelca y flushea. Si crashea a mitad,
     # el CSV conserva todo lo escrito hasta ese punto.
     with open(a.out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         try:
-            for page in search(a.keywords, a.lat, a.lon, order_by, time_filter):
+            for page, page_total in search(a.keywords, a.lat, a.lon, order_by, time_filter):
+                if page_total:
+                    total = min(page_total, a.limit) if a.limit else page_total
                 for it in page:
                     r = row(it, origin)
                     if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
@@ -166,8 +185,10 @@ def main():
                     if a.limit and n >= a.limit:
                         raise StopIteration
                 f.flush()             # a disco al cerrar cada pagina
+                prog.write_text(f"{n}/{total}" if total else str(n))
         except (StopIteration, KeyboardInterrupt):
             pass                      # corte limpio: lo escrito queda intacto
+    prog.unlink(missing_ok=True)      # busqueda acabada: fuera el sidecar
     print(f"{n} resultados -> {a.out}")
     if a.max_km is None:             # ordenar por cercania solo si no filtramos ya
         _sort_by_km(a.out)
@@ -189,6 +210,11 @@ def demo():
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
     it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}}
     assert row(it, (0, 0))["id"] == "abc123", "id no capturado"
+    tok = base64.urlsafe_b64encode(json.dumps(
+        {"params": {"nextPageParams": {"offset": 40, "pointers": {"ORGANIC": {"remaining_documents": 232}}}}}
+    ).encode()).decode()
+    assert _page_total({"next_page": "h." + tok + ".s"}) == 272, "total mal decodificado"
+    assert _page_total({}) is None and _page_total({"next_page": "basura"}) is None, "cursor sin total"
     print("ok")
 
 
