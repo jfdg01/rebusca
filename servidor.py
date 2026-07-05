@@ -37,6 +37,15 @@ def perfiles():
     return out
 
 
+def stamp_versions(html, mtimes):
+    # Añade ?v=<mtime> a href/src de app.css/app.js. El HTML no se cachea (no-cache),
+    # pero Cloudflare sí cachea el JS/CSS 4h ignorando el origen; al cambiar la URL en
+    # cada deploy, el móvil ve la versión nueva al recargar sin tocar config de Cloudflare.
+    for f, v in mtimes.items():
+        html = html.replace(f'"{f}"', f'"{f}?v={v}"')
+    return html
+
+
 def slug(kw):
     return "-".join(kw.lower().split()) or "wallapop"
 
@@ -52,6 +61,12 @@ def fresh(path):
 class H(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=str(HERE), **k)
+
+    def end_headers(self):
+        # no-cache = el navegador revalida siempre (If-Modified-Since -> 304 si no cambió).
+        # Sin esto, Cloudflare mandaba max-age=14400 y el móvil veía la versión vieja horas.
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
 
     def _json(self, obj, code=200):
         b = json.dumps(obj).encode()
@@ -70,8 +85,15 @@ class H(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path in ("/", "/index.html"):
-            self.path = "/ver.html"
-            return super().do_GET()
+            html = (HERE / "ver.html").read_text()
+            mt = {f: int((HERE / f).stat().st_mtime) for f in ("app.css", "app.js")}
+            body = stamp_versions(html, mt).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if u.path == "/csvs":
             return self._json(sorted(p.name for p in HERE.glob("*.csv")))
         if u.path == "/perfiles":
@@ -131,6 +153,8 @@ def demo():
     assert perfil_path("").name == "casa.json"                        # default
     assert perfil_path("Mamá").name == "Mamá.json"                    # conserva acentos
     assert perfil_path("../../etc/passwd").parent == ESTADOS          # siempre dentro de estados/
+    assert stamp_versions('<link href="app.css"><script src="app.js">', {"app.css": 5, "app.js": 9}) \
+        == '<link href="app.css?v=5"><script src="app.js?v=9">'       # cache-busting por mtime
     print("ok")
 
 
