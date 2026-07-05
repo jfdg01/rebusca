@@ -16,8 +16,6 @@ function parseCSV(text) {
   if (rows[rows.length-1].length === 1 && rows[rows.length-1][0] === '') rows.pop();
   return rows;
 }
-const csvCell = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-
 // ── estado persistente: localStorage (offline) + servidor (compartido) ──
 const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
@@ -46,9 +44,8 @@ function hydrateEstado() {
 }
 
 const HIDE = new Set(['cp', 'url']);   // no se muestran como columna (url va en el boton Ver)
-const HIDE_CSV = new Set(['cp']);       // no se exportan (la url SÍ, es lo util)
-let headers = [], data = [], sortKeys = [], showTrash = false, sourceName = '';  // sortKeys: [{col,dir}] por prioridad
-let iUrl = -1, iTitulo = -1, iPrecio = -1, iKm = -1, iEnvio = -1, iReserved = -1;
+let headers = [], data = [], sortKeys = [], showTrash = false;  // sortKeys: [{col,dir}] por prioridad
+let iUrl = -1, iTitulo = -1, iPrecio = -1;
 const isNum = v => v !== '' && !isNaN(v);
 const key = r => (iUrl >= 0 && r[iUrl]) || (r[iTitulo] + '|' + r[iPrecio]);
 
@@ -76,21 +73,11 @@ function paintSortHeaders() {
       th.dataset.dir = (sortKeys.length > 1 ? (idx + 1) + ' ' : '') + (s.dir > 0 ? '▲' : '▼'); }
   });
 }
-function presetSort() {   // tu orden por defecto: tiempo → precio → distancia
-  sortKeys = ['dias', 'precio', 'km'].map(h => headers.indexOf(h)).filter(i => i >= 0).map(col => ({ col, dir: 1 }));
-  paintSortHeaders(); render();
-}
 function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
-// filas visibles con los filtros/orden actuales (compartido por tabla y modo swipe)
+// filas visibles con el orden actual (compartido por tabla y modo swipe)
 function filteredRows() {
-  const q = $('#q').value.toLowerCase();
-  const pMin = +$('#pmin').value || 0, pMax = +$('#pmax').value || Infinity;
-  const kmMax = $('#fkm').value === '' ? Infinity : +$('#fkm').value;
   let rows = data.filter(r => showTrash ? trash.has(key(r)) : !trash.has(key(r)));
-  if (q) rows = rows.filter(r => r.some(c => c.toLowerCase().includes(q)));
-  if (pMin || pMax !== Infinity) rows = rows.filter(r => { const p = +r[iPrecio]; return p >= pMin && p <= pMax; });
-  if (kmMax !== Infinity && iKm >= 0) rows = rows.filter(r => r[iKm] !== '' && +r[iKm] <= kmMax);
   if (sortKeys.length) {
     rows.sort((a, b) => {
       for (const { col, dir } of sortKeys) {
@@ -189,15 +176,6 @@ function restore(k) {
   trash.delete(k); save('wp_discarded', trash); render();
   snack('Restaurado', () => { trash.add(k); save('wp_discarded', trash); render(); });
 }
-// quitar en lote todo lo que cumpla pred; el snackbar deshace exactamente ese lote
-function bulkDiscard(pred, label) {
-  const added = [];
-  for (const r of data) { const k = key(r); if (!trash.has(k) && pred(r)) { trash.add(k); added.push(k); } }
-  save('wp_discarded', trash); render();
-  if (!added.length) { snack('No había ninguno que quitar', null); return; }
-  snack(`Quitados ${added.length} (${label})`, () => { added.forEach(k => trash.delete(k)); save('wp_discarded', trash); render(); });
-}
-
 function snack(msg, undo) {
   $('#snackmsg').textContent = msg; const s = $('#snack'); s.hidden = false;
   $('#undo').hidden = !undo;
@@ -210,10 +188,9 @@ function hideSnack() { const s = $('#snack'); s.classList.remove('show'); setTim
 // ── carga de un CSV (texto) ──
 function loadCSV(text, name) {
   const rows = parseCSV(text);
-  headers = rows[0]; data = rows.slice(1); sortKeys = []; showTrash = false; sourceName = name || '';
+  headers = rows[0]; data = rows.slice(1); sortKeys = []; showTrash = false;
   iUrl = headers.indexOf('url'); iTitulo = headers.indexOf('titulo');
-  iPrecio = headers.indexOf('precio'); iKm = headers.indexOf('km');
-  iEnvio = headers.indexOf('envio'); iReserved = headers.indexOf('reservado');
+  iPrecio = headers.indexOf('precio');
   if (iTitulo < 0) iTitulo = 0;
 
   thead.innerHTML = '';
@@ -231,41 +208,7 @@ function loadCSV(text, name) {
   render();
 }
 
-// ── descargar la lista de interesantes (★) ──
-$('#download').onclick = () => {
-  if (!headers.length) return;
-  const kept = data.filter(r => fav.has(key(r)));
-  if (!kept.length) return alert('No has marcado ningún producto como interesante (★).');
-  const vis = headers.map((h, i) => i).filter(i => !HIDE_CSV.has(headers[i]));
-  const cols = vis.map(i => headers[i]);
-  const lines = [cols.map(csvCell).join(',')];
-  for (const r of kept) lines.push(vis.map(i => r[i]).map(csvCell).join(','));
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = (sourceName.replace(/\.csv$/i, '') || 'wallapop') + '-interesantes.csv';
-  a.click(); URL.revokeObjectURL(a.href);
-};
-
 // ── fuentes: desplegable de CSVs del servidor (scrapeados o en cache) ──
-$('#q').oninput = render;
-$('#pmin').oninput = render; $('#pmax').oninput = render; $('#fkm').oninput = render;
-$('#preset').onclick = presetSort;
-$('#actions').onchange = e => {
-  const v = e.target.value; e.target.selectedIndex = 0;
-  if (!headers.length) return;
-  if (v === 'price') {
-    const s = prompt('Quitar todos los productos de precio MAYOR que (€):');
-    const x = parseFloat(s); if (s !== null && !isNaN(x)) bulkDiscard(r => +r[iPrecio] > x, `> ${x}€`);
-  } else if (v === 'envio') {
-    if (iEnvio < 0) return alert('Este CSV no tiene columna de envío.');
-    bulkDiscard(r => r[iEnvio] !== 'True', 'sin envío');
-  } else if (v === 'reserved') {
-    if (iReserved < 0) return alert('Este CSV no tiene columna de reservado.');
-    bulkDiscard(r => r[iReserved] === 'True', 'reservados');
-  }
-};
-
 const pick = $('#pick');
 const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
 pick.onchange = () => {
