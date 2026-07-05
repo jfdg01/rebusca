@@ -161,8 +161,11 @@ def main():
                     r = row(it, origin)
                     if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
                         continue
-                    if max_dias is not None and (r["dias"] == "" or r["dias"] > max_dias):
-                        continue
+                    if max_dias is not None:
+                        if r["dias"] == "":
+                            continue                  # sin fecha: no sabemos si entra
+                        if r["dias"] > max_dias:      # newest-first (--since => order_by=newest):
+                            raise StopIteration       # este y los siguientes son mas viejos -> paramos
                     w.writerow(r)
                     n += 1
                     if a.limit and n >= a.limit:
