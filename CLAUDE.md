@@ -49,6 +49,9 @@ El frontend luego pide `GET /<csv>` y lo pinta (el server enruta los `.csv` a `c
 
 ## Flujo de trabajo (obligatorio)
 
+> **NUNCA trabajar sobre `main`. SIEMPRE crear rama ANTES de cualquier cambio.**
+> Ni una sola edición, ni un solo comando que toque ficheros, antes de `git checkout -b`.
+
 Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
 
 1. **Arrancar de `main` limpio.** Si `git status` no está limpio, **PARAR y avisar
