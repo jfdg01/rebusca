@@ -48,6 +48,11 @@
   .menu[open] > summary::before { content: "▾"; }
   .menu > summary:hover { border-color: var(--pine); }
   .tools { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; }
+  /* barra de búsqueda: interfaz principal para disparar el scraper */
+  .search { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .7rem; }
+  .search #kw { flex: 1 1 100%; max-width: none; }
+  .search #since { flex: 1 1 auto; }
+  .search button { flex: 0 0 auto; }
   select, input[type=search], button, input[type=file] { font: 13px var(--sans); }
   select, input[type=search], input[type=number] {
     padding: .38rem .55rem; border: 1px solid var(--line); border-radius: 6px;

@@ -20,21 +20,6 @@
         <details class="menu">
             <summary>Configuración</summary>
             <div class="tools">
-                <span class="flt">
-                    <input
-                        type="search"
-                        id="kw"
-                        placeholder="buscar en wallapop…"
-                    />
-                    <select id="since" title="frescura del anuncio">
-                        <option value="">cualquiera</option>
-                        <option value="hora">última hora</option>
-                        <option value="dia">último día</option>
-                        <option value="semana">última semana</option>
-                        <option value="mes">último mes</option>
-                    </select>
-                    <button id="scrape">Buscar</button>
-                </span>
                 <select id="pick">
                     <option value="">— elige un CSV —</option>
                 </select>
@@ -43,6 +28,22 @@
         <button id="perfilChip" class="chip empty" title="cambiar de perfil">
             Sin perfil
         </button>
+    </div>
+    <div class="search">
+        <input
+            type="search"
+            id="kw"
+            placeholder="ej. 3090…"
+            autocomplete="off"
+        />
+        <select id="since" title="frescura del anuncio">
+            <option value="">cualquiera</option>
+            <option value="hora">última hora</option>
+            <option value="dia">último día</option>
+            <option value="semana" selected>última semana</option>
+            <option value="mes">último mes</option>
+        </select>
+        <button id="scrape" class="primary">Buscar</button>
     </div>
     <div class="stat" id="stat"></div>
 </header>
