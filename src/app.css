@@ -16,12 +16,6 @@
     font: 14px/1.45 var(--sans); color: var(--ink); background: var(--paper);
     margin: 0; padding: 0 clamp(.75rem, 2vw, 1.5rem) 5rem;
   }
-  body.drag::after {
-    content: "suelta la carpeta"; position: fixed; inset: 0; z-index: 50;
-    display: grid; place-items: center; font: 700 1.2rem var(--mono);
-    letter-spacing: .12em; text-transform: uppercase; color: var(--pine);
-    background: rgba(233,235,229,.85); outline: 3px dashed var(--pine); outline-offset: -14px;
-  }
 
   /* ── cabecera / mesa de mandos ─────────────────────────── */
   header {

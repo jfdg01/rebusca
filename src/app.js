@@ -247,11 +247,7 @@ $('#download').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href);
 };
 
-// ── fuentes: fichero suelto, desplegable, drag de carpeta, indice http ──
-$('#file').onchange = e => {
-  const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader(); r.onload = () => loadCSV(r.result, f.name); r.readAsText(f);
-};
+// ── fuentes: desplegable de CSVs del servidor (scrapeados o en cache) ──
 $('#q').oninput = render;
 $('#pmin').oninput = render; $('#pmax').oninput = render; $('#fkm').oninput = render;
 $('#preset').onclick = presetSort;
@@ -270,30 +266,20 @@ $('#actions').onchange = e => {
   }
 };
 
-const dropped = {};
 const pick = $('#pick');
+const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
 pick.onchange = () => {
   if (!pick.value) return;
-  const f = dropped[pick.value];
-  if (f) { const r = new FileReader(); r.onload = () => loadCSV(r.result, f.name); r.readAsText(f); }
-  else fetch(pick.value).then(r => r.text()).then(t => loadCSV(t, pick.value));
+  fetch(pick.value).then(r => r.text()).then(t => loadCSV(t, pick.value));
+  if (perfil) localStorage.setItem(lastCsvKey(), pick.value);
 };
-
-document.body.ondragover = e => { e.preventDefault(); document.body.classList.add('drag'); };
-document.body.ondragleave = e => { if (e.relatedTarget === null) document.body.classList.remove('drag'); };
-document.body.ondrop = e => {
-  e.preventDefault(); document.body.classList.remove('drag');
-  for (const item of e.dataTransfer.items) {
-    const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
-    if (entry) walkEntry(entry);
-  }
-};
-function walkEntry(entry) {
-  if (entry.isFile && entry.name.toLowerCase().endsWith('.csv')) {
-    entry.file(f => { if (!dropped[f.name]) { dropped[f.name] = f; pick.add(new Option(f.name, f.name)); } });
-  } else if (entry.isDirectory) {
-    entry.createReader().readEntries(list => list.forEach(walkEntry));
-  }
+// al elegir perfil, recarga su último CSV del servidor (los sueltos por drag no persisten)
+function restoreLastCsv() {
+  const last = perfil && localStorage.getItem(lastCsvKey());
+  if (!last) return;
+  refreshCsvs().then(() => {
+    if ([...pick.options].some(o => o.value === last)) { pick.value = last; pick.onchange(); }
+  });
 }
 
 // CSVs que hay en el servidor
@@ -362,7 +348,7 @@ function setPerfil(name, color, isNew) {
     fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seen: [], trash: [], fav: [], color }) }).catch(() => {});
     if (data.length) render();
-  } else hydrateEstado();
+  } else { hydrateEstado(); restoreLastCsv(); }
 }
 
 function showPicker() {            // fila de tarjetas + tile de añadir (si < 4)
