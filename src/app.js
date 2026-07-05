@@ -240,28 +240,45 @@ function loadCSV(text, name) {
   render();
 }
 
-// ── fuentes: desplegable de CSVs del servidor (scrapeados o en cache) ──
-const pick = $('#pick');
+// ── fuentes: buscador filtrable de queries (input + datalist) ──
+const pick = $('#pick'), queries = $('#queries');
+const csvByLabel = {};   // etiqueta visible ("ps4 (última hora)") -> nombre de CSV
 const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
-pick.onchange = () => {
-  if (!pick.value) return;
-  fetch(pick.value).then(r => r.text()).then(t => loadCSV(t, pick.value));
-  if (perfil) localStorage.setItem(lastCsvKey(), pick.value);
-};
+function loadQuery(csv) {   // carga el CSV y lo recuerda como el último de la persona
+  fetch(csv).then(r => r.text()).then(t => loadCSV(t, csv));
+  if (perfil) localStorage.setItem(lastCsvKey(), csv);
+}
+function selectQuery(csv) { pick.value = queryLabel(csv); loadQuery(csv); }   // pinta la etiqueta + carga
+pick.onchange = () => { const csv = csvByLabel[pick.value.trim()]; if (csv) loadQuery(csv); };
 // al elegir perfil, recarga su último CSV del servidor (los sueltos por drag no persisten)
 function restoreLastCsv() {
   const last = perfil && localStorage.getItem(lastCsvKey());
   if (!last) return;
-  refreshCsvs().then(() => {
-    if ([...pick.options].some(o => o.value === last)) { pick.value = last; pick.onchange(); }
-  });
+  refreshCsvs().then(() => { if (Object.values(csvByLabel).includes(last)) selectQuery(last); });
 }
 
-// CSVs que hay en el servidor
+// nombre de CSV → etiqueta legible de la query: "ps4--semana.csv" → "ps4 (última semana)"
+const SINCE_LABEL = { hora: 'última hora', dia: 'último día', semana: 'última semana', mes: 'último mes' };
+function queryLabel(csv) {
+  const base = csv.replace(/\.csv$/, '');
+  const i = base.lastIndexOf('--');
+  const since = i >= 0 && base.slice(i + 2);
+  const kw = (SINCE_LABEL[since] ? base.slice(0, i) : base).replace(/-/g, ' ');
+  return SINCE_LABEL[since] ? `${kw} (${SINCE_LABEL[since]})` : kw;
+}
+console.assert(queryLabel('ps4--semana.csv') === 'ps4 (última semana)'
+  && queryLabel('tv-led.csv') === 'tv led'
+  && queryLabel('deshumidificador--dia.csv') === 'deshumidificador (último día)', 'queryLabel() roto');
+
+// CSVs que hay en el servidor → opciones del datalist (value = etiqueta legible, filtrable al escribir)
 function refreshCsvs() {
   return fetch('/csvs').then(r => r.json()).then(list => {
-    const have = new Set([...pick.options].map(o => o.value));
-    for (const c of list) if (!have.has(c)) pick.add(new Option(c, c));
+    for (const c of list) {
+      const label = queryLabel(c);
+      if (csvByLabel[label]) continue;
+      csvByLabel[label] = c;
+      queries.appendChild(new Option(label, label));
+    }
   }).catch(() => {});   // sin servidor (file://): solo drag-drop
 }
 refreshCsvs();
@@ -311,7 +328,7 @@ $('#scrape').onclick = async () => {
     const r = await res.json();
     if (r.error) throw new Error(r.error);
     await refreshCsvs();
-    pick.value = r.csv; pick.onchange();
+    selectQuery(r.csv);
   } catch (e) { snack('No se pudo buscar: ' + e.message, null); }
   finally { clearInterval(poll); clearInterval(_timer); setLoading(false); btn.disabled = false; btn.textContent = txt; }
 };

@@ -18,14 +18,10 @@
     </div>
     <div class="panel">
         <div class="menu-row">
-            <details class="menu">
-                <summary>Configuración</summary>
-                <div class="tools">
-                    <select id="pick">
-                        <option value="">— elige un CSV —</option>
-                    </select>
-                </div>
-            </details>
+            <input id="pick" class="query" list="queries" type="search"
+                autocomplete="off" placeholder="elige una búsqueda…"
+                title="tus búsquedas — escribe para filtrar" />
+            <datalist id="queries"></datalist>
             <button id="perfilChip" class="chip empty" title="cambiar de perfil">
                 Sin perfil
             </button>

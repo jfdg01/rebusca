@@ -44,21 +44,13 @@
     color: var(--ink-soft); white-space: nowrap; text-align: right;   /* solo parte por el <br> */
   }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
-  .menu-row .menu { flex: 1 1 auto; min-width: 0; }
+  /* selector de query activa: pill visible que muestra la búsqueda en curso y deja cambiar */
+  .menu-row .query { flex: 1 1 auto; min-width: 0; min-height: 2.15rem;
+    font-weight: 600; color: var(--ink); }
+  .menu-row .query:hover { border-color: var(--pine); }
   .menu-row .chip { flex: 0 0 auto; min-height: 2.15rem; }
-  .menu > summary {
-    min-height: 2.15rem; padding: .3rem .7rem; cursor: pointer; list-style: none;
-    display: flex; align-items: center; gap: .5rem; user-select: none;
-    border: 1px solid var(--line); border-radius: 6px; background: var(--field);
-    font: 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft);
-  }
   .chip.empty { background: var(--field); border-style: dashed; color: var(--ink-soft);
     font-weight: 400; text-transform: none; letter-spacing: normal; }
-  .menu > summary::-webkit-details-marker { display: none; }
-  .menu > summary::before { content: "▸"; color: var(--pine-ink); }
-  .menu[open] > summary::before { content: "▾"; }
-  .menu > summary:hover { border-color: var(--pine); }
-  .tools { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; }
   /* barra de búsqueda: interfaz principal para disparar el scraper */
   .search { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .7rem; }
   .search #kw { flex: 1 1 100%; max-width: none; }
