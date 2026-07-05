@@ -205,7 +205,7 @@
 
   /* gate estilo "¿quién está viendo?": tarjetas grandes sobre fondo oscuro */
   .gate { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
-    background: rgba(20,25,22,.94); padding: 1.5rem; }
+    background: rgba(20,25,22,.94); padding: 1.5rem; overflow-y: auto; }
   .gate.show { display: grid; }
   .gate-inner { position: relative; width: min(720px, 100%); text-align: center;
     display: flex; flex-direction: column; align-items: center; gap: 1.8rem; }
