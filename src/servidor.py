@@ -67,6 +67,46 @@ def stamp_versions(html, mtimes):
     return html
 
 
+def searches(base=None):
+    # cada búsqueda = un CSV; devuelve nº de filas (sin cabecera) y mtime para la vista de gestión
+    base = base or CSV_DIR
+    out = []
+    if base.exists():
+        for f in sorted(base.glob("*.csv")):
+            try:
+                with f.open() as fh:
+                    rows = max(0, sum(1 for _ in fh) - 1)   # -1 = cabecera
+            except Exception:
+                rows = 0
+            out.append({"csv": f.name, "rows": rows, "mtime": int(f.stat().st_mtime)})
+    return out
+
+
+def csv_op(name, data, base=None):
+    # CRUD del fichero de búsqueda: borrar, o renombrar (con su sidecar .progress).
+    base = base or CSV_DIR
+    src = base / Path(name or "").name   # .name: anti-traversal
+    if not name or not src.name.endswith(".csv") or not src.exists():
+        return {"error": "búsqueda no encontrada"}
+    if data.get("borrar"):
+        src.unlink(missing_ok=True)
+        (base / (src.name + ".progress")).unlink(missing_ok=True)
+        return {"ok": True}
+    nuevo = Path(data.get("nuevo") or "").name
+    if not nuevo.endswith(".csv"):
+        return {"error": "nombre inválido"}
+    dst = base / nuevo
+    if dst == src:
+        return {"ok": True, "csv": dst.name}
+    if dst.exists():
+        return {"error": "ya existe una búsqueda con ese nombre"}
+    src.rename(dst)
+    prog = base / (src.name + ".progress")
+    if prog.exists():
+        prog.replace(base / (dst.name + ".progress"))
+    return {"ok": True, "csv": dst.name}
+
+
 def slug(kw):
     return "-".join(kw.lower().split()) or "wallapop"
 
@@ -123,6 +163,8 @@ class H(SimpleHTTPRequestHandler):
             return
         if u.path == "/csvs":
             return self._json(sorted(p.name for p in CSV_DIR.glob("*.csv")))
+        if u.path == "/searches":
+            return self._json(searches())
         if u.path == "/perfiles":
             return self._json(perfiles())
         if u.path == "/progress":
@@ -148,6 +190,10 @@ class H(SimpleHTTPRequestHandler):
             if u.path == "/perfil":
                 perfil = (parse_qs(u.query).get("perfil") or [""])[0]
                 res = perfil_update(perfil, data)
+                return self._json(res, 400 if res.get("error") else 200)
+            if u.path == "/csv":
+                name = (parse_qs(u.query).get("csv") or [""])[0]
+                res = csv_op(name, data)
                 return self._json(res, 400 if res.get("error") else 200)
             if u.path == "/scrape":
                 return self._scrape(data)
@@ -215,6 +261,16 @@ def demo():
     assert (d / "javier.json").exists()                               # sigue intacto
     perfil_update("javier", {"borrar": True}, d)                      # borrar
     assert not (d / "javier.json").exists()
+    # CRUD de búsquedas (CSV)
+    (d / "ps4.csv").write_text("a,b\n1,2\n3,4\n")
+    assert searches(d) == [{"csv": "ps4.csv", "rows": 2, "mtime": int((d / "ps4.csv").stat().st_mtime)}]
+    assert csv_op("../../etc/passwd", {"borrar": True}, d).get("error")   # traversal + no existe
+    assert csv_op("ps4.csv", {"nuevo": "ps5.csv"}, d).get("csv") == "ps5.csv"
+    assert not (d / "ps4.csv").exists() and (d / "ps5.csv").exists()      # renombrado
+    (d / "otra.csv").write_text("x\n")
+    assert csv_op("ps5.csv", {"nuevo": "otra.csv"}, d).get("error")       # colisión no pisa
+    assert csv_op("ps5.csv", {"borrar": True}, d) == {"ok": True}         # borrar
+    assert not (d / "ps5.csv").exists()
     print("ok")
 
 

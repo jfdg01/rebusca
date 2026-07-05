@@ -59,6 +59,9 @@ const ICON = {
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   star: '<path d="M11.5 2.3 8.9 8.6 2.2 9.2c-.9.1-1.2 1.2-.5 1.8l5 4.4-1.5 6.5c-.2.9.7 1.6 1.5 1.1l5.8-3.5 5.8 3.5c.8.5 1.7-.2 1.5-1.1l-1.5-6.5 5-4.4c.7-.6.4-1.7-.5-1.8l-6.7-.6L13 2.3c-.3-.8-1.4-.8-1.7 0Z"/>',
+  list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 };
 const ic = n => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = ic(e.dataset.icon));
@@ -383,6 +386,89 @@ $('#scrape').onclick = async () => {
   finally { clearInterval(poll); clearInterval(_timer); setLoading(false); btn.disabled = false; btn.textContent = txt; }
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
+
+// ── gestor de búsquedas: vista CRUD sobre los CSV del servidor ──
+const searchesView = $('#searchesView'), searchesList = $('#searchesList');
+let allSearches = [], searchesQ = '';   // fuente + filtro de texto del gestor
+function openManager() {
+  searchesView.hidden = false; document.body.style.overflow = 'hidden';
+  searchesQ = ''; $('#searchesFilter').value = '';
+  renderSearches();
+}
+function closeManager() { searchesView.hidden = true; document.body.style.overflow = ''; }
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;   // "última semana" → "Última semana"
+function renderSearches() {   // relee del servidor y repinta con el filtro actual
+  searchesList.innerHTML = '<div class="qempty">cargando…</div>';
+  fetch('/searches').then(r => r.json()).then(list => {
+    allSearches = list; paintSearches();
+  }).catch(() => { searchesList.innerHTML = '<div class="qempty">no se pudo cargar</div>'; });
+}
+function paintSearches() {
+  const q = norm(searchesQ);
+  const hits = allSearches.filter(s => norm(queryParts(s.csv).kw).includes(q));
+  searchesList.innerHTML = '';
+  if (!allSearches.length) { searchesList.innerHTML = '<div class="qempty">no hay búsquedas guardadas</div>'; return; }
+  if (!hits.length) { searchesList.innerHTML = '<div class="qempty">nada coincide con el filtro</div>'; return; }
+  const nowDays = Date.now() / 86400000;   // para "hace X" a partir del mtime
+  for (const s of hits) {
+    const { kw, since } = queryParts(s.csv);
+    const card = document.createElement('div'); card.className = 'search-card';
+    const age = humanAge(Math.max(0, nowDays - s.mtime / 86400));
+    card.innerHTML =
+      `<div class="sc-top"><span class="sc-kw"></span>` +
+      (since ? `<span class="sc-since">${cap(SINCE_LABEL[since])}</span>` : '') + `</div>` +
+      `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? '' : 's'} · ${age}</div>` +
+      `<div class="sc-btns">` +
+      `<button class="ghost sc-run">${ic('search')} Repetir</button>` +
+      `<button class="ghost sc-ren">${ic('pencil')} Renombrar</button>` +
+      `<button class="ghost danger sc-del">${ic('trash')} Borrar</button></div>`;
+    card.querySelector('.sc-kw').textContent = kw;   // textContent: a prueba de < & en el término
+    card.querySelector('.sc-run').onclick = () => relaunch(kw, since);
+    card.querySelector('.sc-ren').onclick = () => renameSearch(s.csv, kw, since);
+    card.querySelector('.sc-del').onclick = () => deleteSearch(s.csv, kw);
+    searchesList.appendChild(card);
+  }
+}
+function relaunch(kw, since) {   // re-scrapea reusando el flujo del buscador
+  $('#kw').value = kw; $('#since').value = since || '';
+  closeManager(); $('#scrape').click();
+}
+function renameSearch(csv, kw, since) {
+  const nuevo = prompt('Nuevo nombre de la búsqueda:', kw);
+  if (nuevo === null) return;
+  const name = nuevo.trim();
+  if (!name || name === kw) return;
+  fetch('/csv?csv=' + encodeURIComponent(csv), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nuevo: csvNameOf(name, since) }) })
+    .then(r => r.json()).then(res => {
+      if (res.error) return snack(res.error, null);
+      afterCsvChange(csv, res.csv); renderSearches();
+    }).catch(() => snack('No se pudo renombrar', null));
+}
+function deleteSearch(csv, kw) {
+  if (!confirm(`¿Borrar la búsqueda "${kw}"? Se pierde el CSV (el estado por perfil se conserva).`)) return;
+  fetch('/csv?csv=' + encodeURIComponent(csv), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ borrar: true }) })
+    .then(r => r.json()).then(res => {
+      if (res.error) return snack(res.error, null);
+      afterCsvChange(csv, null); renderSearches();
+    }).catch(() => snack('No se pudo borrar', null));
+}
+// sincroniza el combobox y el dataset abierto tras borrar/renombrar
+function afterCsvChange(oldCsv, newCsv) {
+  allQueries = []; refreshCsvs();   // el combobox se reconstruye entero (dedup no quita los que ya no están)
+  if (curCsv === oldCsv) {
+    if (newCsv) { selectQuery(newCsv); if (perfil) localStorage.setItem(lastCsvKey(), newCsv); }
+    else { curCsv = null; pick.value = ''; pickSince.hidden = true; qbox.classList.remove('has-since');
+      if (perfil) localStorage.removeItem(lastCsvKey()); }
+  }
+}
+$('#manageSearches').onclick = openManager;
+$('#searchesX').onclick = closeManager;
+$('#searchesFilter').oninput = e => { searchesQ = e.target.value; paintSearches(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !searchesView.hidden) closeManager(); });
 
 // ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
 const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];

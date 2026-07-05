@@ -53,6 +53,8 @@
                 <span id="pickSince" class="pick-since" hidden></span>
                 <div id="qlist" class="qlist" hidden></div>
             </div>
+            <button id="manageSearches" class="icon-btn" title="gestionar búsquedas"
+                data-icon="list"></button>
         </div>
         <div class="stat" id="stat"></div>
     </div>
@@ -71,7 +73,7 @@
     <tbody></tbody>
 </table>
 <div class="empty" id="empty">
-    Busca algo arriba o elige un CSV para empezar a rebuscar.
+    Busca algo primero
 </div>
 
 <div class="loading" id="loading" hidden>
@@ -110,6 +112,16 @@
         </form>
         <button class="gate-exit" id="gateX" hidden>Salir</button>
     </div>
+</div>
+
+<div class="searches" id="searchesView" hidden>
+    <div class="searches-bar">
+        <button class="swipe-x" id="searchesX" title="volver" data-icon="arrow-left"></button>
+        <h2>Búsquedas</h2>
+    </div>
+    <input id="searchesFilter" type="search" autocomplete="off"
+        placeholder="filtrar búsquedas…" title="filtra por término" />
+    <div class="searches-list" id="searchesList"></div>
 </div>
 
 <div class="swipe" id="swipeView" hidden>
