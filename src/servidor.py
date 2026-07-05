@@ -20,10 +20,30 @@ TTL = 30 * 60          # cache: no re-scrapea si el CSV tiene < 30 min
 PORT = int(os.environ.get("PORT", 8000))
 
 
-def perfil_path(name):
+def perfil_path(name, base=None):
     # \w (unicode) conserva acentos y descarta /, ., espacios -> a prueba de path traversal
     slug = re.sub(r"[^\w-]", "", name or "", flags=re.UNICODE)[:40] or "casa"
-    return ESTADOS / f"{slug}.json"
+    return (base or ESTADOS) / f"{slug}.json"
+
+
+def perfil_update(old, data, base=None):
+    # CRUD del perfil: borrar, o renombrar/recolorear conservando su estado.
+    base = base or ESTADOS
+    src = perfil_path(old, base)
+    if data.get("borrar"):
+        src.unlink(missing_ok=True)
+        return {"ok": True}
+    state = json.loads(src.read_text()) if src.exists() else {"seen": [], "trash": [], "fav": []}
+    if data.get("color"):
+        state["color"] = data["color"]
+    dst = perfil_path(data.get("nuevo") or old, base)
+    if dst != src and dst.exists():
+        return {"error": "ya existe un perfil con ese nombre"}
+    base.mkdir(exist_ok=True)
+    dst.write_text(json.dumps(state))
+    if dst != src:
+        src.unlink(missing_ok=True)   # renombrado: mueve el estado al nombre nuevo
+    return {"ok": True, "name": dst.stem}
 
 
 def perfiles():
@@ -122,6 +142,10 @@ class H(SimpleHTTPRequestHandler):
                 ESTADOS.mkdir(exist_ok=True)
                 perfil_path(perfil).write_text(json.dumps(data))
                 return self._json({"ok": True})
+            if u.path == "/perfil":
+                perfil = (parse_qs(u.query).get("perfil") or [""])[0]
+                res = perfil_update(perfil, data)
+                return self._json(res, 400 if res.get("error") else 200)
             if u.path == "/scrape":
                 return self._scrape(data)
         except Exception as e:                    # ponytail: 1 handler; el cliente muestra el mensaje
@@ -164,6 +188,17 @@ def demo():
     assert perfil_path("../../etc/passwd").parent == ESTADOS          # siempre dentro de estados/
     assert stamp_versions('<link href="app.css"><script src="app.js">', {"app.css": 5, "app.js": 9}) \
         == '<link href="app.css?v=5"><script src="app.js?v=9">'       # cache-busting por mtime
+    import tempfile
+    d = Path(tempfile.mkdtemp())
+    perfil_update("javi", {"color": "#123456"}, d)                    # crear
+    assert (d / "javi.json").exists()
+    perfil_update("javi", {"nuevo": "javier", "color": "#123456"}, d)  # renombrar
+    assert not (d / "javi.json").exists() and (d / "javier.json").exists()
+    perfil_update("test", {"color": "#000000"}, d)
+    assert perfil_update("javier", {"nuevo": "test"}, d).get("error")  # colisión no pisa
+    assert (d / "javier.json").exists()                               # sigue intacto
+    perfil_update("javier", {"borrar": True}, d)                      # borrar
+    assert not (d / "javier.json").exists()
     print("ok")
 
 

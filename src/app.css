@@ -214,8 +214,12 @@
 
   /* fila de perfiles (máx 4) + tile de añadir */
   .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(1rem, 4vw, 2.2rem); }
-  .tile { display: flex; flex-direction: column; align-items: center; gap: .7rem;
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: .7rem;
     background: none; border: none; cursor: pointer; padding: 0; }
+  .tile .edit { position: absolute; top: -10px; right: -10px; z-index: 1;
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: #2A302C; border: 1px solid #4A514C; color: #ECEEE8; font-size: 14px; }
+  .tile .edit:hover { border-color: #ECEEE8; transform: scale(1.1); }
   .av { width: clamp(84px, 22vw, 116px); aspect-ratio: 1; border-radius: 12px;
     display: grid; place-items: center; font: 700 clamp(2rem, 7vw, 3rem) var(--mono);
     color: #fff; text-transform: uppercase; border: 3px solid transparent; transition: border-color .15s, transform .15s; }
@@ -238,6 +242,11 @@
   .creator-btns { display: flex; gap: .6rem; }
   .creator .ghost { background: none; border: 1px solid #4A514C; color: #A9AFA7; }
   .creator .ghost:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
-  .gate-x { position: absolute; top: -.4rem; right: 0; background: none; border: none;
-    color: #A9AFA7; cursor: pointer; font: 18px var(--mono); padding: .3rem; line-height: 1; }
-  .gate-x:hover { color: #ECEEE8; }
+  .creator .danger { border-color: #7A3B3B; color: #D99; }
+  .creator .danger:hover { border-color: #D99; color: #ECEEE8; background: none; }
+
+  /* botón de salida evidente: cierra el selector sin cambiar de perfil */
+  .gate-exit { background: none; border: 1px solid #4A514C; color: #A9AFA7; cursor: pointer;
+    font: 700 14px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    padding: .6rem 1.6rem; border-radius: 8px; }
+  .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; }

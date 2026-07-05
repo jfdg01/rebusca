@@ -323,6 +323,7 @@ const chip = $('#perfilChip'), gate = $('#gate');
 const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
 let knownPerfiles = [];            // [{name, color}]
 let pendingColor = COLORS[0];
+let editing = null;                // perfil que se está editando, o null al crear
 const initial = n => (n.trim()[0] || '?').toUpperCase();
 function hue(n) { let h = 0; for (const c of n) h = (h + c.charCodeAt(0) * 37) % 360; return h; }
 const colorOf = p => p.color || `hsl(${hue(p.name)} 42% 40%)`;   // fallback: perfiles viejos sin color
@@ -355,8 +356,9 @@ function showPicker() {            // fila de tarjetas + tile de añadir (si < 4
   for (const p of knownPerfiles) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'tile';
-    b.innerHTML = `<span class="av" style="background:${colorOf(p)}">${initial(p.name)}</span><span class="name"></span>`;
+    b.innerHTML = `<span class="edit" title="editar">✎</span><span class="av" style="background:${colorOf(p)}">${initial(p.name)}</span><span class="name"></span>`;
     b.querySelector('.name').textContent = p.name;   // textContent -> a prueba de nombres con < o &
+    b.querySelector('.edit').onclick = e => { e.stopPropagation(); showCreator(p); };
     b.onclick = () => setPerfil(p.name, colorOf(p), false);
     tiles.appendChild(b);
   }
@@ -364,15 +366,18 @@ function showPicker() {            // fila de tarjetas + tile de añadir (si < 4
     const add = document.createElement('button');
     add.type = 'button'; add.className = 'tile add';
     add.innerHTML = `<span class="av">+</span><span class="name">Añadir</span>`;
-    add.onclick = showCreator;
+    add.onclick = () => showCreator();
     tiles.appendChild(add);
   }
 }
-function showCreator() {           // crear: nombre + color
+function showCreator(edit) {        // crear (edit=null) o editar un perfil: nombre + color
+  editing = edit || null;
   tiles.hidden = true; creator.hidden = false;
   $('#cancelCreate').hidden = !knownPerfiles.length;   // "Volver" solo si hay perfiles a los que volver
-  $('#newName').value = '';
-  pendingColor = COLORS[knownPerfiles.length % COLORS.length];
+  $('#deletePerfil').hidden = !editing;
+  $('#saveBtn').textContent = editing ? 'Guardar' : 'Entrar';
+  $('#newName').value = editing ? editing.name : '';
+  pendingColor = editing ? colorOf(editing) : COLORS[knownPerfiles.length % COLORS.length];
   swatches.innerHTML = '';
   for (const c of COLORS) {
     const s = document.createElement('button');
@@ -394,8 +399,38 @@ function closeGate() { gate.classList.remove('show'); }
 $('#creator').onsubmit = e => {
   e.preventDefault();
   const n = $('#newName').value.trim();
-  if (n) setPerfil(n, pendingColor, true);
+  if (!n) return;
+  editing ? saveEdit(editing, n, pendingColor) : setPerfil(n, pendingColor, true);
 };
+
+// renombrar/recolorear en el servidor y refrescar el selector
+function saveEdit(orig, name, color) {
+  const wasActive = perfil === orig.name;
+  fetch('/perfil?perfil=' + encodeURIComponent(orig.name), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nuevo: name, color }) })
+    .then(r => r.json()).then(res => {
+      if (res.error) return snack(res.error, null);
+      if (wasActive) { perfil = res.name; perfilColor = color; localStorage.setItem('wp_perfil', perfil); renderChip(); }
+      reloadPicker();
+    }).catch(() => snack('No se pudo guardar el perfil', null));
+}
+function deletePerfil(orig) {
+  if (!confirm(`¿Borrar el perfil "${orig.name}"? Se perderá su estado.`)) return;
+  const wasActive = perfil === orig.name;
+  fetch('/perfil?perfil=' + encodeURIComponent(orig.name), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ borrar: true }) })
+    .then(r => r.json()).then(res => {
+      if (res.error) return snack(res.error, null);
+      if (wasActive) { perfil = ''; perfilColor = ''; localStorage.removeItem('wp_perfil'); renderChip(); }
+      reloadPicker();
+    }).catch(() => snack('No se pudo borrar el perfil', null));
+}
+function reloadPicker() {   // vuelve a leer la lista y repinta las tarjetas
+  return fetch('/perfiles').then(r => r.json()).then(list => { knownPerfiles = list; showPicker(); }).catch(showPicker);
+}
+$('#deletePerfil').onclick = () => editing && deletePerfil(editing);
 $('#cancelCreate').onclick = showPicker;
 $('#gateX').onclick = closeGate;
 chip.onclick = () => openGate('switch');

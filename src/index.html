@@ -89,7 +89,6 @@
 
 <div class="gate" id="gate">
     <div class="gate-inner">
-        <button class="gate-x" id="gateX" hidden title="cerrar">✕</button>
         <h2 id="gateTitle">¿Quién eres?</h2>
         <div class="tiles" id="tiles"></div>
         <form class="creator" id="creator" hidden>
@@ -101,12 +100,16 @@
             />
             <div class="swatches" id="swatches"></div>
             <div class="creator-btns">
+                <button type="button" class="ghost danger" id="deletePerfil" hidden>
+                    Borrar
+                </button>
                 <button type="button" class="ghost" id="cancelCreate" hidden>
                     Volver
                 </button>
-                <button class="primary" type="submit">Entrar</button>
+                <button class="primary" type="submit" id="saveBtn">Entrar</button>
             </div>
         </form>
+        <button class="gate-exit" id="gateX" hidden>Salir</button>
     </div>
 </div>
 
