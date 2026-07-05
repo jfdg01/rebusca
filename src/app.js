@@ -47,8 +47,8 @@ const HIDE = new Set(['id', 'cp', 'url']);   // no se muestran como columna (url
 let headers = [], data = [], sortKeys = [], showTrash = false;  // sortKeys: [{col,dir}] por prioridad
 let iId = -1, iUrl = -1, iTitulo = -1, iPrecio = -1;
 const isNum = v => v !== '' && !isNaN(v);
-// identidad inmutable: id de Wallapop. Fallback url (CSVs viejos), luego titulo|precio (drag sin id).
-const key = r => (iId >= 0 && r[iId]) || (iUrl >= 0 && r[iUrl]) || (r[iTitulo] + '|' + r[iPrecio]);
+// identidad inmutable: id de Wallapop. Fallback titulo|precio solo para drag de CSV sin id.
+const key = r => (iId >= 0 && r[iId]) || (r[iTitulo] + '|' + r[iPrecio]);
 
 const $ = s => document.querySelector(s);
 const thead = $('thead'), tbody = $('tbody');
