@@ -43,11 +43,12 @@ function hydrateEstado() {
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
 
-const HIDE = new Set(['cp', 'url']);   // no se muestran como columna (url va en el boton Ver)
+const HIDE = new Set(['id', 'cp', 'url']);   // no se muestran como columna (url va en el boton Ver)
 let headers = [], data = [], sortKeys = [], showTrash = false;  // sortKeys: [{col,dir}] por prioridad
-let iUrl = -1, iTitulo = -1, iPrecio = -1;
+let iId = -1, iUrl = -1, iTitulo = -1, iPrecio = -1;
 const isNum = v => v !== '' && !isNaN(v);
-const key = r => (iUrl >= 0 && r[iUrl]) || (r[iTitulo] + '|' + r[iPrecio]);
+// identidad inmutable: id de Wallapop. Fallback url (CSVs viejos), luego titulo|precio (drag sin id).
+const key = r => (iId >= 0 && r[iId]) || (iUrl >= 0 && r[iUrl]) || (r[iTitulo] + '|' + r[iPrecio]);
 
 const $ = s => document.querySelector(s);
 const thead = $('thead'), tbody = $('tbody');
@@ -189,7 +190,7 @@ function hideSnack() { const s = $('#snack'); s.classList.remove('show'); setTim
 function loadCSV(text, name) {
   const rows = parseCSV(text);
   headers = rows[0]; data = rows.slice(1); sortKeys = []; showTrash = false;
-  iUrl = headers.indexOf('url'); iTitulo = headers.indexOf('titulo');
+  iId = headers.indexOf('id'); iUrl = headers.indexOf('url'); iTitulo = headers.indexOf('titulo');
   iPrecio = headers.indexOf('precio');
   if (iTitulo < 0) iTitulo = 0;
 

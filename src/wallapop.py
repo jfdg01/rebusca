@@ -96,8 +96,8 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
         time.sleep(0.5 + random.random())   # jitter: menos patron detectable. Sube si te capan
 
 
-FIELDS = ["titulo", "precio", "ciudad", "cp", "km", "dias",
-          "reservado", "envio", "url", "descripcion"]  # descripcion al final
+FIELDS = ["id", "titulo", "precio", "ciudad", "cp", "km", "dias",
+          "reservado", "envio", "url", "descripcion"]  # id inmutable primero, descripcion al final
 
 
 def row(it, origin):
@@ -107,6 +107,7 @@ def row(it, origin):
     ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
     dias = round((time.time() * 1000 - ca) / 86400000, 1) if ca else ""
     return {
+        "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
         "titulo": it["title"],
         "precio": it["price"]["amount"],
         "descripcion": " ".join((it.get("description") or "").split()),  # 1 sola linea
@@ -184,8 +185,10 @@ def _sort_by_km(path):
 
 
 def demo():
-    # ponytail: check runnable sin red — la haversine es la unica logica no trivial
+    # ponytail: check runnable sin red — haversine e id inmutable como clave de estado
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
+    it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}}
+    assert row(it, (0, 0))["id"] == "abc123", "id no capturado"
     print("ok")
 
 
