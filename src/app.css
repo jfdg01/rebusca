@@ -36,12 +36,17 @@
     font: 600 .68rem/1.15 var(--mono); letter-spacing: .22em; text-transform: uppercase;
     color: var(--ink-soft);   /* dos líneas ≈ altura de REBUSCA, alineadas al centro */
   }
+  .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
+  .menu-row .menu { flex: 1 1 auto; min-width: 0; }
+  .menu-row .chip { flex: 0 0 auto; min-height: 2.15rem; }
   .menu > summary {
-    margin-top: .7rem; padding: .45rem .7rem; cursor: pointer; list-style: none;
+    min-height: 2.15rem; padding: .3rem .7rem; cursor: pointer; list-style: none;
     display: inline-flex; align-items: center; gap: .5rem; user-select: none;
     border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
     font: 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft);
   }
+  .chip.empty { border-style: dashed; color: var(--ink-soft); }
+  .chip.empty .ini { background: none; border: 1.5px dashed var(--line); color: var(--ink-soft); }
   .menu > summary::-webkit-details-marker { display: none; }
   .menu > summary::before { content: "▸"; color: var(--pine); }
   .menu[open] > summary::before { content: "▾"; }

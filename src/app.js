@@ -327,13 +327,19 @@ const initial = n => (n.trim()[0] || '?').toUpperCase();
 function hue(n) { let h = 0; for (const c of n) h = (h + c.charCodeAt(0) * 37) % 360; return h; }
 const colorOf = p => p.color || `hsl(${hue(p.name)} 42% 40%)`;   // fallback: perfiles viejos sin color
 
+// pinta el chip: avatar+nombre con perfil, o estado vacío (punteado) si no hay
+function renderChip() {
+  chip.classList.toggle('empty', !perfil);
+  if (perfil) chip.innerHTML = `<span class="ini" style="background:${perfilColor}">${initial(perfil)}</span>` + perfil;
+  else chip.innerHTML = '<span class="ini">?</span>Sin perfil';
+}
+
 function setPerfil(name, color, isNew) {
   perfil = name; perfilColor = color;
   localStorage.setItem('wp_perfil', name);
   const found = knownPerfiles.find(p => p.name === name);
   if (found) found.color = color; else knownPerfiles.push({ name, color });
-  chip.hidden = false;
-  chip.innerHTML = `<span class="ini" style="background:${color}">${initial(name)}</span>` + name;
+  renderChip();
   closeGate();
   if (isNew) {                     // persiste ya el perfil vacío con su color
     for (const s of [seen, trash, fav]) s.clear();
@@ -400,5 +406,5 @@ fetch('/perfiles').then(r => r.json()).then(list => {
   knownPerfiles = list;
   const me = perfil && list.find(p => p.name === perfil);
   if (me) setPerfil(me.name, colorOf(me), false);   // dispositivo que ya sabe quién es -> directo
-  else openGate('first');                            // primera vez -> elige/crea, sin auto-asignar
-}).catch(() => { perfil ? setPerfil(perfil, `hsl(${hue(perfil)} 42% 40%)`, false) : openGate('first'); });
+  else { perfil = ''; renderChip(); openGate('first'); }   // sin perfil -> chip vacío + elige/crea
+}).catch(() => { perfil ? setPerfil(perfil, `hsl(${hue(perfil)} 42% 40%)`, false) : (renderChip(), openGate('first')); });

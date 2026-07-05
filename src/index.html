@@ -10,10 +10,10 @@
     <h1>Rebusca</h1>
     <span class="eyebrow">inspector de<br>hallazgos · wallapop</span>
   </div>
-  <details class="menu">
-    <summary>Filtros y búsqueda</summary>
+  <div class="menu-row">
+    <details class="menu">
+    <summary>Configuración</summary>
     <div class="tools">
-    <button id="perfilChip" class="chip" hidden title="cambiar de perfil"></button>
     <span class="flt">
       <input type="search" id="kw" placeholder="buscar en wallapop…">
       <select id="since" title="frescura del anuncio">
@@ -39,7 +39,9 @@
     </select>
     <button id="download" class="primary">★ Descargar interesantes</button>
     </div>
-  </details>
+    </details>
+    <button id="perfilChip" class="chip empty" title="cambiar de perfil"><span class="ini">?</span>Sin perfil</button>
+  </div>
   <div class="stat" id="stat"></div>
 </header>
 
