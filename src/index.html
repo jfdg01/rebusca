@@ -1,73 +1,118 @@
 <!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Rebusca</title>
-<link rel="stylesheet" href="app.css">
-
+<link rel="stylesheet" href="app.css" />
 
 <header>
-  <div class="brand">
-    <h1>Rebusca</h1>
-    <img class="logo" src="wallapop-logo.webp" alt="Wallapop" width="40" height="40">
-    <span class="eyebrow">rastreador<br>de chollos</span>
-  </div>
-  <div class="menu-row">
-    <details class="menu">
-    <summary>Configuración</summary>
-    <div class="tools">
-    <span class="flt">
-      <input type="search" id="kw" placeholder="buscar en wallapop…">
-      <select id="since" title="frescura del anuncio">
-        <option value="">cualquiera</option>
-        <option value="hora">última hora</option>
-        <option value="dia">último día</option>
-        <option value="semana">última semana</option>
-        <option value="mes">último mes</option>
-      </select>
-      <button id="scrape">Buscar</button>
-    </span>
-    <select id="pick"><option value="">— elige un CSV —</option></select>
-    <input type="file" id="file" accept=".csv" title="o carga uno a mano">
-    <input type="search" id="q" placeholder="filtrar en todo…">
-    <span class="flt">€ <input type="number" id="pmin" placeholder="min" min="0"> – <input type="number" id="pmax" placeholder="max" min="0"></span>
-    <span class="flt">km ≤ <input type="number" id="fkm" placeholder="∞" min="0"></span>
-    <button id="preset" title="ordena por días, luego precio, luego km">Orden: tiempo·€·km</button>
-    <select id="actions" title="quitar en lote">
-      <option value="">Acciones…</option>
-      <option value="price">Quitar por encima de un precio…</option>
-      <option value="envio">Quitar los sin envío</option>
-      <option value="reserved">Quitar los reservados</option>
-    </select>
-    <button id="download" class="primary">★ Descargar interesantes</button>
+    <div class="brand">
+        <h1>Rebusca</h1>
+        <img
+            class="logo"
+            src="wallapop-logo.webp"
+            alt="Wallapop"
+            width="40"
+            height="40"
+        />
+        <span class="eyebrow">rebuscador<br />de chollos</span>
     </div>
-    </details>
-    <button id="perfilChip" class="chip empty" title="cambiar de perfil"><span class="ini">?</span>Sin perfil</button>
-  </div>
-  <div class="stat" id="stat"></div>
+    <div class="menu-row">
+        <details class="menu">
+            <summary>Configuración</summary>
+            <div class="tools">
+                <span class="flt">
+                    <input
+                        type="search"
+                        id="kw"
+                        placeholder="buscar en wallapop…"
+                    />
+                    <select id="since" title="frescura del anuncio">
+                        <option value="">cualquiera</option>
+                        <option value="hora">última hora</option>
+                        <option value="dia">último día</option>
+                        <option value="semana">última semana</option>
+                        <option value="mes">último mes</option>
+                    </select>
+                    <button id="scrape">Buscar</button>
+                </span>
+                <select id="pick">
+                    <option value="">— elige un CSV —</option>
+                </select>
+                <input
+                    type="file"
+                    id="file"
+                    accept=".csv"
+                    title="o carga uno a mano"
+                />
+                <input type="search" id="q" placeholder="filtrar en todo…" />
+                <span class="flt"
+                    >€
+                    <input type="number" id="pmin" placeholder="min" min="0" />
+                    – <input type="number" id="pmax" placeholder="max" min="0"
+                /></span>
+                <span class="flt"
+                    >km ≤ <input type="number" id="fkm" placeholder="∞" min="0"
+                /></span>
+                <button
+                    id="preset"
+                    title="ordena por días, luego precio, luego km"
+                >
+                    Orden: tiempo·€·km
+                </button>
+                <select id="actions" title="quitar en lote">
+                    <option value="">Acciones…</option>
+                    <option value="price">
+                        Quitar por encima de un precio…
+                    </option>
+                    <option value="envio">Quitar los sin envío</option>
+                    <option value="reserved">Quitar los reservados</option>
+                </select>
+                <button id="download" class="primary">
+                    ★ Descargar interesantes
+                </button>
+            </div>
+        </details>
+        <button id="perfilChip" class="chip empty" title="cambiar de perfil">
+            <span class="ini">?</span>Sin perfil
+        </button>
+    </div>
+    <div class="stat" id="stat"></div>
 </header>
 
-<table><thead></thead><tbody></tbody></table>
-<div class="empty" id="empty">Elige un CSV o arrastra aquí la carpeta para empezar a rebuscar.</div>
+<table>
+    <thead></thead>
+    <tbody></tbody>
+</table>
+<div class="empty" id="empty">
+    Elige un CSV o arrastra aquí la carpeta para empezar a rebuscar.
+</div>
 
 <div class="gate" id="gate">
-  <div class="gate-inner">
-    <button class="gate-x" id="gateX" hidden title="cerrar">✕</button>
-    <h2 id="gateTitle">¿Quién eres?</h2>
-    <div class="tiles" id="tiles"></div>
-    <form class="creator" id="creator" hidden>
-      <input id="newName" placeholder="tu nombre…" autocomplete="off" maxlength="40">
-      <div class="swatches" id="swatches"></div>
-      <div class="creator-btns">
-        <button type="button" class="ghost" id="cancelCreate" hidden>Volver</button>
-        <button class="primary" type="submit">Entrar</button>
-      </div>
-    </form>
-  </div>
+    <div class="gate-inner">
+        <button class="gate-x" id="gateX" hidden title="cerrar">✕</button>
+        <h2 id="gateTitle">¿Quién eres?</h2>
+        <div class="tiles" id="tiles"></div>
+        <form class="creator" id="creator" hidden>
+            <input
+                id="newName"
+                placeholder="tu nombre…"
+                autocomplete="off"
+                maxlength="40"
+            />
+            <div class="swatches" id="swatches"></div>
+            <div class="creator-btns">
+                <button type="button" class="ghost" id="cancelCreate" hidden>
+                    Volver
+                </button>
+                <button class="primary" type="submit">Entrar</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <div class="snack" id="snack" hidden>
-  <span id="snackmsg"></span>
-  <button id="undo">Deshacer</button>
+    <span id="snackmsg"></span>
+    <button id="undo">Deshacer</button>
 </div>
 
 <script src="app.js"></script>
