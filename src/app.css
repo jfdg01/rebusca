@@ -7,8 +7,9 @@
     --ink: #1B211E;
     --ink-soft: #5A625D;
     --line: #C9CDC2;
-    --pine: #2E6B5A;       /* unico acento de chrome: foco, enlaces, activo */
-    --pine-soft: #DDE8E2;
+    --pine: #13C1AC;       /* acento de marca = teal del logo de Wallapop */
+    --pine-ink: #0A736A;   /* teal oscuro: texto/enlaces legibles sobre el papel claro */
+    --pine-soft: #D3F1EC;  /* tinte teal para fondos suaves / track del spinner */
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
@@ -20,7 +21,7 @@
   /* ── cabecera / mesa de mandos ─────────────────────────── */
   header {
     position: sticky; top: 0; z-index: 20; background: var(--paper);
-    border-bottom: 2px solid var(--ink); padding: .9rem 0 .7rem; margin-bottom: .25rem;
+    padding: .9rem 0 .7rem; margin-bottom: .25rem;
   }
   /* grupo centrado: los 3 objetos juntos, el hueco se reparte a ambos lados */
   .brand { display: flex; justify-content: center; align-items: center; gap: .6rem; }
@@ -44,7 +45,7 @@
   .chip.empty { background: var(--surface); border-style: dashed; color: var(--ink-soft);
     font-weight: 400; text-transform: none; letter-spacing: normal; }
   .menu > summary::-webkit-details-marker { display: none; }
-  .menu > summary::before { content: "▸"; color: var(--pine); }
+  .menu > summary::before { content: "▸"; color: var(--pine-ink); }
   .menu[open] > summary::before { content: "▾"; }
   .menu > summary:hover { border-color: var(--pine); }
   .tools { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .7rem; }
@@ -66,8 +67,8 @@
     background: var(--surface); color: var(--ink); cursor: pointer;
   }
   button:hover { background: var(--surface-2); }
-  button.primary { background: var(--pine); border-color: var(--pine); color: #fff; }
-  button.primary:hover { background: #275a4b; }
+  button.primary { background: var(--pine); border-color: var(--pine); color: #fff; font-weight: 700; }
+  button.primary:hover { background: #10A896; border-color: #10A896; }
   :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 
   .stat {
@@ -75,7 +76,7 @@
     display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap;
   }
   .stat b { color: var(--ink); font-weight: 700; }
-  .stat .link { color: var(--pine); cursor: pointer; text-decoration: underline; }
+  .stat .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
   .stat .link[hidden] { display: none; }
 
   /* ── tabla ─────────────────────────────────────────────── */
@@ -131,19 +132,15 @@
 
   .empty { color: var(--ink-soft); font: 14px var(--sans); padding: 3rem 0; text-align: center; }
 
-  /* ── overlay de carga: spinner + % sobre la zona de resultados ── */
+  /* ── overlay de carga: spinner + contador de encontrados ── */
   .loading { display: flex; flex-direction: column; align-items: center; gap: .5rem;
     padding: 3rem 0; text-align: center; }
-  .loading .spin { width: 84px; height: 84px; transform: rotate(-90deg); }
+  .loading .spin { width: 72px; height: 72px; animation: spin 1s linear infinite; }
   .loading .track { fill: none; stroke: var(--pine-soft); stroke-width: 4; }
   .loading .arc { fill: none; stroke: var(--pine); stroke-width: 4; stroke-linecap: round;
-    stroke-dasharray: 119.4; stroke-dashoffset: 119.4;   /* 2πr, r=19 */
-    transition: stroke-dashoffset .4s ease; }
-  .loading.indeterminate .spin { animation: spin 1s linear infinite; }
-  .loading.indeterminate .arc { stroke-dasharray: 30 119.4; stroke-dashoffset: 0; transition: none; }
-  @keyframes spin { to { transform: rotate(270deg); } }
-  .loading-pct { font: 700 1.4rem var(--mono); color: var(--pine); margin-top: -58px; }
-  .loading-sub { font: 14px var(--sans); color: var(--ink); margin-top: 34px; }
+    stroke-dasharray: 30 119.4; }   /* arco corto girando (2πr=119.4, r=19) */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-count { font: 700 1.05rem var(--mono); color: var(--pine-ink); margin-top: .4rem; }
   .loading-note { font: 12px var(--sans); color: var(--ink-soft); }
 
   /* snackbar de deshacer */
@@ -266,12 +263,11 @@
     padding: .6rem 1.6rem; border-radius: 8px; }
   .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
 
-  /* ── modo swipe (tinder): botón flotante + baraja a pantalla completa ── */
-  #swipeFab { position: fixed; right: 1rem; bottom: 1.2rem; z-index: 30;
-    width: 3.4rem; height: 3.4rem; border-radius: 50%; padding: 0;
-    background: var(--pine); border-color: var(--pine); color: #fff;
-    font-size: 1.5rem; box-shadow: 0 4px 16px rgba(0,0,0,.28); }
-  #swipeFab:hover { background: #275a4b; }
+  /* ── modo swipe (tinder): el swipe es la interfaz principal (la tabla queda [hidden]) ── */
+  #swipeFab { display: block; width: 100%; margin: 2.5rem auto 0; max-width: 22rem;
+    padding: 1rem; border-radius: 12px; background: var(--pine); border-color: var(--pine);
+    color: #fff; font: 700 1.05rem var(--mono); letter-spacing: .02em; }
+  #swipeFab:hover { background: #10A896; border-color: #10A896; }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: rgba(20,25,22,.96);
     display: flex; flex-direction: column; align-items: center; padding: 1rem; }

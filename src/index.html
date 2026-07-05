@@ -48,7 +48,7 @@
     <div class="stat" id="stat"></div>
 </header>
 
-<table>
+<table hidden>
     <thead></thead>
     <tbody></tbody>
 </table>
@@ -61,10 +61,11 @@
         <circle class="track" cx="22" cy="22" r="19"></circle>
         <circle class="arc" cx="22" cy="22" r="19"></circle>
     </svg>
-    <div class="loading-pct" id="loadingPct">…</div>
-    <div class="loading-sub" id="loadingSub">Buscando anuncios nuevos…</div>
+    <div class="loading-count" id="loadingCount">Buscando…</div>
     <div class="loading-note">se reemplazará lo de abajo al terminar</div>
 </div>
+
+<button id="swipeFab" hidden>Empezar a swipe</button>
 
 <div class="gate" id="gate">
     <div class="gate-inner">

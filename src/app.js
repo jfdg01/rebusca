@@ -141,10 +141,12 @@ function render() {
     frag.append(tr);
   }
   tbody.append(frag);
-  $('#empty').hidden = !!headers.length;
-  $('#swipeFab').hidden = !(headers.length && data.length);
+  const hasRows = headers.length && rows.length;
+  $('#swipeFab').hidden = !hasRows;
+  if (hasRows) $('#swipeFab').textContent = `Empezar a swipe · ${rows.length}`;
+  $('#empty').hidden = !!hasRows;
   if (headers.length && !rows.length)
-    $('#empty').hidden = false, $('#empty').textContent = showTrash ? 'La papelera está vacía.' : 'Nada coincide con el filtro.';
+    $('#empty').textContent = showTrash ? 'La papelera está vacía.' : 'Nada que revisar.';
   paintStat();
 }
 
@@ -239,26 +241,12 @@ refreshCsvs();
 // mismo slug que el server (servidor.py slug/csv_name) para sondear el progreso antes de saber el nombre
 const csvNameOf = (kw, since) => kw.toLowerCase().split(/\s+/).filter(Boolean).join('-') +
   (since ? '--' + since : '') + '.csv';
-const C = 2 * Math.PI * 19;   // circunferencia del anillo (r=19), igual que el CSS
-// pinta el overlay: p = "n/total" | "n" | null (sin datos aun -> spinner indeterminado)
-function setLoading(on, p) {
+// pinta el overlay: n = contador de encontrados (o null al arrancar, sin dato aun)
+function setLoading(on, n) {
   const box = $('#loading');
-  document.querySelector('table').style.display = on ? 'none' : '';
-  if (!on) { box.hidden = true; return; }   // render() recoloca #empty/tabla al cargar el CSV
-  $('#empty').hidden = true; box.hidden = false;
-  const arc = box.querySelector('.arc');
-  const [n, t] = (p || '').split('/');
-  if (t) {
-    box.classList.remove('indeterminate');
-    const pct = Math.min(1, +n / +t);
-    arc.style.strokeDashoffset = C * (1 - pct);
-    $('#loadingPct').textContent = Math.round(pct * 100) + '%';
-    $('#loadingSub').textContent = `${n} de ${t} anuncios`;
-  } else {
-    box.classList.add('indeterminate');
-    $('#loadingPct').textContent = n || '';
-    $('#loadingSub').textContent = 'Buscando anuncios nuevos…';
-  }
+  if (!on) { box.hidden = true; return; }   // render() recoloca #empty/botón al cargar el CSV
+  $('#empty').hidden = true; $('#swipeFab').hidden = true; box.hidden = false;
+  $('#loadingCount').textContent = n ? `${n} encontrados` : 'Buscando…';
 }
 $('#scrape').onclick = async () => {
   const kw = $('#kw').value.trim();
@@ -270,7 +258,7 @@ $('#scrape').onclick = async () => {
   const poll = setInterval(async () => {           // el server responde /progress en paralelo al scrape
     try {
       const p = (await (await fetch('/progress?csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
-      if (p) setLoading(true, p);
+      if (p) setLoading(true, p);   // el sidecar ya es solo el contador
     } catch {}
   }, 800);
   try {
