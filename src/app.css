@@ -100,7 +100,7 @@
   }
   .stat:empty { display: none; }
   .stat > span { display: flex; align-items: baseline; gap: .45rem; }
-  .stat > span b:first-child { min-width: 2.1rem; }
+  .stat > span b:first-child { min-width: 2.1rem; text-align: right; }
   .stat b { color: var(--ink); font-weight: 700; font-size: 1.15em; }
   .stat .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
   .stat .link[hidden] { display: none; }
