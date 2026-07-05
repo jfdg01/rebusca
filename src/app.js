@@ -240,45 +240,73 @@ function loadCSV(text, name) {
   render();
 }
 
-// ── fuentes: buscador filtrable de queries (input + datalist) ──
-const pick = $('#pick'), queries = $('#queries');
-const csvByLabel = {};   // etiqueta visible ("ps4 (última hora)") -> nombre de CSV
+// ── buscador de queries: combobox propio (input + lista vertical filtrable) ──
+const pick = $('#pick'), qbox = $('.qbox'), qlist = $('#qlist');
+let allQueries = [];   // [{csv, label, kw, since}] — fuente del combobox
 const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
 function loadQuery(csv) {   // carga el CSV y lo recuerda como el último de la persona
   fetch(csv).then(r => r.text()).then(t => loadCSV(t, csv));
   if (perfil) localStorage.setItem(lastCsvKey(), csv);
 }
 function selectQuery(csv) { pick.value = queryLabel(csv); loadQuery(csv); }   // pinta la etiqueta + carga
-pick.onchange = () => { const csv = csvByLabel[pick.value.trim()]; if (csv) loadQuery(csv); };
+function chooseQuery(csv) { selectQuery(csv); closeQlist(); pick.blur(); }
+// pinta la lista filtrada por el texto tecleado (substring, sin acentos/mayúsculas)
+function renderQlist(term) {
+  const t = norm(term);
+  const hits = allQueries.filter(q => norm(q.label).includes(t));
+  qlist.innerHTML = '';
+  if (!hits.length) { qlist.innerHTML = '<div class="qempty">sin coincidencias</div>'; qlist.hidden = false; return; }
+  for (const q of hits) {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'qrow' + (q.csv === csvByLabel(pick.value) ? ' cur' : '');
+    row.innerHTML = `<span class="qrow-kw"></span><span class="qrow-since">${SINCE_SHORT[q.since]}</span>`;
+    row.querySelector('.qrow-kw').textContent = q.kw;   // textContent: a prueba de < & en el término
+    row.onclick = () => chooseQuery(q.csv);
+    qlist.appendChild(row);
+  }
+  qlist.hidden = false;
+}
+const norm = s => s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const csvByLabel = lbl => (allQueries.find(q => q.label === lbl.trim()) || {}).csv;
+function openQlist() { renderQlist(pick.value); }
+function closeQlist() { qlist.hidden = true; }
+pick.onfocus = () => { pick.select(); openQlist(); };   // al enfocar: abre y selecciona para reescribir directo
+pick.oninput = () => openQlist();
+document.addEventListener('pointerdown', e => { if (!qbox.contains(e.target)) closeQlist(); });
+pick.addEventListener('keydown', e => { if (e.key === 'Escape') { closeQlist(); pick.blur(); } });
 // al elegir perfil, recarga su último CSV del servidor (los sueltos por drag no persisten)
 function restoreLastCsv() {
   const last = perfil && localStorage.getItem(lastCsvKey());
   if (!last) return;
-  refreshCsvs().then(() => { if (Object.values(csvByLabel).includes(last)) selectQuery(last); });
+  refreshCsvs().then(() => { if (allQueries.some(q => q.csv === last)) selectQuery(last); });
 }
 
-// nombre de CSV → etiqueta legible de la query: "ps4--semana.csv" → "ps4 (última semana)"
+// nombre de CSV → partes de la query: "ps4--semana.csv" → {kw:"ps4", since:"semana"}
 const SINCE_LABEL = { hora: 'última hora', dia: 'último día', semana: 'última semana', mes: 'último mes' };
-function queryLabel(csv) {
+const SINCE_SHORT = { '': 'TODO', hora: 'HORA', dia: 'DÍA', semana: 'SEMANA', mes: 'MES' };   // chip compacto de la lista
+function queryParts(csv) {
   const base = csv.replace(/\.csv$/, '');
   const i = base.lastIndexOf('--');
-  const since = i >= 0 && base.slice(i + 2);
-  const kw = (SINCE_LABEL[since] ? base.slice(0, i) : base).replace(/-/g, ' ');
-  return SINCE_LABEL[since] ? `${kw} (${SINCE_LABEL[since]})` : kw;
+  const since = i >= 0 && SINCE_LABEL[base.slice(i + 2)] ? base.slice(i + 2) : '';
+  return { kw: (since ? base.slice(0, i) : base).replace(/-/g, ' '), since };
+}
+function queryLabel(csv) {   // etiqueta legible: "ps4 (última semana)"
+  const { kw, since } = queryParts(csv);
+  return since ? `${kw} (${SINCE_LABEL[since]})` : kw;
 }
 console.assert(queryLabel('ps4--semana.csv') === 'ps4 (última semana)'
   && queryLabel('tv-led.csv') === 'tv led'
   && queryLabel('deshumidificador--dia.csv') === 'deshumidificador (último día)', 'queryLabel() roto');
 
-// CSVs que hay en el servidor → opciones del datalist (value = etiqueta legible, filtrable al escribir)
+// CSVs que hay en el servidor → items del combobox (kw + ventana temporal, filtrable al escribir)
 function refreshCsvs() {
   return fetch('/csvs').then(r => r.json()).then(list => {
-    for (const c of list) {
-      const label = queryLabel(c);
-      if (csvByLabel[label]) continue;
-      csvByLabel[label] = c;
-      queries.appendChild(new Option(label, label));
+    const have = new Set(allQueries.map(q => q.csv));
+    for (const c of list) if (!have.has(c)) {
+      const { kw, since } = queryParts(c);
+      allQueries.push({ csv: c, label: queryLabel(c), kw, since });
     }
+    allQueries.sort((a, b) => a.label.localeCompare(b.label, 'es'));
   }).catch(() => {});   // sin servidor (file://): solo drag-drop
 }
 refreshCsvs();

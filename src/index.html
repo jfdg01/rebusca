@@ -18,10 +18,12 @@
     </div>
     <div class="panel">
         <div class="menu-row">
-            <input id="pick" class="query" list="queries" type="search"
-                autocomplete="off" placeholder="elige una búsqueda…"
-                title="tus búsquedas — escribe para filtrar" />
-            <datalist id="queries"></datalist>
+            <div class="qbox">
+                <input id="pick" class="query" type="search" autocomplete="off"
+                    placeholder="elige una búsqueda…"
+                    title="tus búsquedas — escribe para filtrar" />
+                <div id="qlist" class="qlist" hidden></div>
+            </div>
             <button id="perfilChip" class="chip empty" title="cambiar de perfil">
                 Sin perfil
             </button>

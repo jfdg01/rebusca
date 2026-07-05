@@ -44,10 +44,24 @@
     color: var(--ink-soft); white-space: nowrap; text-align: right;   /* solo parte por el <br> */
   }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
-  /* selector de query activa: pill visible que muestra la búsqueda en curso y deja cambiar */
-  .menu-row .query { flex: 1 1 auto; min-width: 0; min-height: 2.15rem;
-    font-weight: 600; color: var(--ink); }
-  .menu-row .query:hover { border-color: var(--pine); }
+  /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
+  .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
+  .qbox .query { width: 100%; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
+  .qbox .query:hover { border-color: var(--pine); }
+  /* lista desplegable: flota sobre el contenido, scroll propio, filas kw + ventana temporal */
+  .qlist { position: absolute; top: calc(100% + .3rem); left: 0; right: 0; z-index: 30;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(27,33,30,.18); max-height: 60vh; overflow-y: auto; padding: .3rem; }
+  .qrow { display: flex; align-items: baseline; justify-content: space-between; gap: .7rem;
+    width: 100%; text-align: left; background: none; border: none; border-radius: 7px;
+    padding: .6rem .7rem; cursor: pointer; box-shadow: none; }
+  .qrow:hover, .qrow:focus-visible { background: var(--surface-2); box-shadow: none; }
+  .qrow.cur { background: var(--pine-soft); }
+  .qrow-kw { font: 600 15px var(--sans); color: var(--ink); min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qrow-since { flex: 0 0 auto; font: 600 11px var(--mono); letter-spacing: .04em;
+    text-transform: uppercase; color: var(--pine-ink); white-space: nowrap; }
+  .qempty { padding: .8rem; text-align: center; font: 13px var(--sans); color: var(--ink-soft); }
   .menu-row .chip { flex: 0 0 auto; min-height: 2.15rem; }
   .chip.empty { background: var(--field); border-style: dashed; color: var(--ink-soft);
     font-weight: 400; text-transform: none; letter-spacing: normal; }
