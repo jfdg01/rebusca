@@ -257,14 +257,22 @@ function loadCSV(text, name) {
 }
 
 // ── buscador de queries: combobox propio (input + lista vertical filtrable) ──
-const pick = $('#pick'), qbox = $('.qbox'), qlist = $('#qlist');
+const pick = $('#pick'), qbox = $('.qbox'), qlist = $('#qlist'), pickSince = $('#pickSince');
 let allQueries = [];   // [{csv, label, kw, since}] — fuente del combobox
+let curCsv = null;     // csv de la query seleccionada (el input solo muestra el kw)
 const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
 function loadQuery(csv) {   // carga el CSV y lo recuerda como el último de la persona
   fetch(csv).then(r => r.text()).then(t => loadCSV(t, csv));
   if (perfil) localStorage.setItem(lastCsvKey(), csv);
 }
-function selectQuery(csv) { pick.value = queryLabel(csv); loadQuery(csv); }   // pinta la etiqueta + carga
+function selectQuery(csv) {   // input = solo el kw; el "desde" va como badge pino a la derecha
+  const { kw, since } = queryParts(csv);
+  pick.value = kw; curCsv = csv;
+  pickSince.textContent = since ? SINCE_LABEL[since] : '';
+  pickSince.hidden = !since;
+  qbox.classList.toggle('has-since', !!since);
+  loadQuery(csv);
+}
 function chooseQuery(csv) { selectQuery(csv); closeQlist(); pick.blur(); }
 // pinta la lista filtrada por el texto tecleado (substring, sin acentos/mayúsculas)
 function renderQlist(term) {
@@ -274,7 +282,7 @@ function renderQlist(term) {
   if (!hits.length) { qlist.innerHTML = '<div class="qempty">sin coincidencias</div>'; qlist.hidden = false; return; }
   for (const q of hits) {
     const row = document.createElement('button');
-    row.type = 'button'; row.className = 'qrow' + (q.csv === csvByLabel(pick.value) ? ' cur' : '');
+    row.type = 'button'; row.className = 'qrow' + (q.csv === curCsv ? ' cur' : '');
     row.innerHTML = `<span class="qrow-kw"></span><span class="qrow-since">${SINCE_SHORT[q.since]}</span>`;
     row.querySelector('.qrow-kw').textContent = q.kw;   // textContent: a prueba de < & en el término
     row.onclick = () => chooseQuery(q.csv);
@@ -283,11 +291,10 @@ function renderQlist(term) {
   qlist.hidden = false;
 }
 const norm = s => s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-const csvByLabel = lbl => (allQueries.find(q => q.label === lbl.trim()) || {}).csv;
 function openQlist() { renderQlist(pick.value); }
 function closeQlist() { qlist.hidden = true; }
 pick.onfocus = () => { pick.select(); openQlist(); };   // al enfocar: abre y selecciona para reescribir directo
-pick.oninput = () => openQlist();
+pick.oninput = () => { pickSince.hidden = true; qbox.classList.remove('has-since'); openQlist(); };   // al teclear para filtrar, oculta el badge
 document.addEventListener('pointerdown', e => { if (!qbox.contains(e.target)) closeQlist(); });
 pick.addEventListener('keydown', e => { if (e.key === 'Escape') { closeQlist(); pick.blur(); } });
 // al elegir perfil, recarga su último CSV del servidor (los sueltos por drag no persisten)

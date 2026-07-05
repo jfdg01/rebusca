@@ -16,15 +16,6 @@
         />
         <span class="eyebrow">rebuscador<br />de chollos</span>
     </div>
-    <div class="panel picker perfil-band">
-        <span class="hola">Bienvenido, <b id="perfilName">invitado</b></span>
-        <details class="opts" id="perfilOpts">
-            <summary title="opciones" data-icon="settings"></summary>
-            <div class="menu">
-                <button id="perfilChip" class="chip">Cambiar de perfil</button>
-            </div>
-        </details>
-    </div>
     <div class="panel">
         <div class="search">
             <input
@@ -43,13 +34,23 @@
             <button id="scrape" class="primary">Buscar</button>
         </div>
     </div>
+    <div class="panel picker perfil-band">
+        <span class="hola">Bienvenido, <b id="perfilName">invitado</b></span>
+        <details class="opts" id="perfilOpts">
+            <summary title="opciones" data-icon="settings"></summary>
+            <div class="menu">
+                <button id="perfilChip" class="chip">Cambiar de perfil</button>
+            </div>
+        </details>
+    </div>
     <div class="panel picker">
-        <span class="panel-label">Búsqueda activa</span>
+        <span class="panel-label">Búsqueda activa <span class="hint">pulsa para cambiar</span></span>
         <div class="menu-row">
             <div class="qbox">
                 <input id="pick" class="query" type="search" autocomplete="off"
                     placeholder="elige una búsqueda…"
                     title="tus búsquedas — escribe para filtrar" />
+                <span id="pickSince" class="pick-since" hidden></span>
                 <div id="qlist" class="qlist" hidden></div>
             </div>
         </div>

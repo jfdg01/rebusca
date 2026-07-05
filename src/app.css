@@ -42,22 +42,29 @@
     padding-left: calc(clamp(.75rem, 2vw, 1.5rem) + .8rem);
     padding-right: calc(clamp(.75rem, 2vw, 1.5rem) + .8rem);
   }
-  .panel-label { display: block; font: 600 .72rem/1 var(--mono); letter-spacing: .06em;
+  .panel-label { display: flex; justify-content: space-between; align-items: baseline;
+    font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
     color: var(--ink-soft); margin: 0 0 .55rem .1rem; }
+  .panel-label .hint { font-weight: 400; color: var(--ink-soft); opacity: .6; }
+  /* badge del "desde" a la derecha del selector, en pino oscuro */
+  .pick-since { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%);
+    font: 600 .8rem var(--sans); color: var(--pine-ink); pointer-events: none; }
   /* tira de perfil: banda fina de acento sólido, saludo a la izq + engranaje a la der */
   .perfil-band { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-    background: var(--pine); border: none; margin-top: .9rem; padding-top: .22rem; padding-bottom: .22rem; }
-  .perfil-band .hola { font: 600 .9rem/1.2 var(--sans); color: rgba(255,255,255,.85); min-width: 0;
+    margin-top: .9rem; padding-top: .22rem; padding-bottom: .22rem; border-bottom: none; }
+  /* saludo pegado a "Búsqueda activa": una sola banda continua */
+  .perfil-band + .picker { margin-top: 0; }
+  .perfil-band .hola { font: 600 .9rem/1.2 var(--sans); color: var(--ink-soft); min-width: 0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .perfil-band .hola b { color: #fff; }
+  .perfil-band .hola b { color: var(--ink); }
   .opts { position: relative; flex: 0 0 auto; }
   /* iconos SVG inline: cuadrados, heredan color, alineados con el texto */
   .icon { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -.15em; flex: 0 0 auto; }
   .opts summary .icon { width: 1.25rem; height: 1.25rem; }
-  .opts summary { list-style: none; cursor: pointer; line-height: 1; color: #fff;
+  .opts summary { list-style: none; cursor: pointer; line-height: 1; color: var(--ink-soft);
     display: flex; padding: .3rem .35rem; border-radius: 8px; user-select: none; }
   .opts summary::-webkit-details-marker { display: none; }
-  .opts summary:hover, .opts[open] summary { background: rgba(255,255,255,.2); }
+  .opts summary:hover, .opts[open] summary { background: var(--surface-2); color: var(--ink); }
   .opts .menu { position: absolute; top: calc(100% + .3rem); right: 0; z-index: 30;
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: 0 8px 24px rgba(27,33,30,.18); padding: .4rem; }
@@ -76,6 +83,7 @@
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
   .qbox .query { width: 100%; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
+  .qbox.has-since .query { padding-right: 7rem; }
   .qbox .query:hover { border-color: var(--pine); }
   /* lista desplegable: flota sobre el contenido, scroll propio, filas kw + ventana temporal */
   .qlist { position: absolute; top: calc(100% + .3rem); left: 0; right: 0; z-index: 30;
