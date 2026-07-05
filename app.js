@@ -137,6 +137,7 @@ function render() {
       const h = headers[i];
       if (HIDE.has(h)) return;
       const td = document.createElement('td');
+      td.dataset.label = h;   // etiqueta de campo para el modo tarjeta (móvil)
       if (h === 'dias' && isNum(c)) {
         td.className = 'heat'; const { fg, bg } = heat(+c); td.style.color = fg; td.style.background = bg; td.textContent = c;
       } else if (h === 'descripcion') { td.className = 'desc'; td.textContent = c; }
