@@ -462,7 +462,7 @@ function nextCard() {
     return;
   }
   swipeCount.textContent = (di + 1) + ' / ' + deck.length;
-  card = buildCard(deck[di]); swipeStage.appendChild(card); dragify(card);
+  card = buildCard(deck[di]); swipeStage.appendChild(card);
 }
 
 function buildCard(r) {
@@ -491,34 +491,37 @@ function decide(dx, v) {
   if (dx < -60 || v < -0.5) return -1;
   return 0;
 }
-function dragify(el) {
+// se arma UNA vez sobre toda la vista: arrastra desde cualquier hueco, mueve la tarjeta actual
+function dragify(root) {
   let sx = 0, sy = 0, dx = 0, dy = 0, on = false, axis = 0, t0 = 0;
-  el.onpointerdown = e => {
-    if (e.target.closest('a,button')) return;
+  root.onpointerdown = e => {
+    if (!card || e.target.closest('a,button')) return;   // sin tarjeta (volando/agotado) o sobre un botón: nada
     on = true; dx = dy = axis = 0; sx = e.clientX; sy = e.clientY; t0 = e.timeStamp;
-    el.setPointerCapture(e.pointerId);
+    root.setPointerCapture(e.pointerId);
   };
-  el.onpointermove = e => {
-    if (!on) return;
+  root.onpointermove = e => {
+    if (!on || !card) return;
     dx = e.clientX - sx; dy = e.clientY - sy;
     if (!axis) {                                   // eje aún sin decidir: espera intención clara (8px)
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-      if (axis === 'x') el.classList.add('grab');
+      if (axis === 'x') card.classList.add('grab');
     }
     if (axis !== 'x') return;                       // vertical: deja scrollear la descripción
     e.preventDefault();
-    el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
+    card.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
     const t = Math.min(1, Math.abs(dx) / 120);
     likeStamp.style.opacity = dx > 0 ? t : 0; nopeStamp.style.opacity = dx < 0 ? t : 0;
   };
-  el.onpointerup = el.onpointercancel = e => {
-    if (!on) return; on = false; el.classList.remove('grab');
-    if (axis === 'x') {
+  root.onpointerup = root.onpointercancel = e => {
+    if (!on) return; on = false;
+    if (axis === 'x' && card) {
+      card.classList.remove('grab');
       const d = decide(dx, dx / Math.max(1, e.timeStamp - t0));   // v en px/ms sobre el gesto
       if (d) return fling(d);
+      card.style.transform = '';                   // no cuajó: vuelve al centro
     }
-    el.style.transform = ''; likeStamp.style.opacity = nopeStamp.style.opacity = 0;   // no cuajó: vuelve al centro
+    likeStamp.style.opacity = nopeStamp.style.opacity = 0;
   };
 }
 
@@ -533,6 +536,7 @@ function fling(dir) {
   setTimeout(() => { di++; nextCard(); }, 200);
 }
 
+dragify(swipeView);   // toda la vista es zona de arrastre (no solo la tarjeta)
 $('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
