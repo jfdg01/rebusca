@@ -219,6 +219,7 @@
   .tile .edit { position: absolute; top: -10px; right: -10px; z-index: 1;
     width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
     background: #2A302C; border: 1px solid #4A514C; color: #ECEEE8; font-size: 14px; }
+  .tile:hover, .tile:focus-visible { background: none; }   /* gana al button:hover global (fondo claro ilegible) */
   .tile .edit:hover { border-color: #ECEEE8; transform: scale(1.1); }
   .av { width: clamp(84px, 22vw, 116px); aspect-ratio: 1; border-radius: 12px;
     display: grid; place-items: center; font: 700 clamp(2rem, 7vw, 3rem) var(--mono);
@@ -249,4 +250,51 @@
   .gate-exit { background: none; border: 1px solid #4A514C; color: #A9AFA7; cursor: pointer;
     font: 700 14px var(--mono); letter-spacing: .1em; text-transform: uppercase;
     padding: .6rem 1.6rem; border-radius: 8px; }
-  .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; }
+  .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
+
+  /* ── modo swipe (tinder): botón flotante + baraja a pantalla completa ── */
+  #swipeFab { position: fixed; right: 1rem; bottom: 1.2rem; z-index: 30;
+    width: 3.4rem; height: 3.4rem; border-radius: 50%; padding: 0;
+    background: var(--pine); border-color: var(--pine); color: #fff;
+    font-size: 1.5rem; box-shadow: 0 4px 16px rgba(0,0,0,.28); }
+  #swipeFab:hover { background: #275a4b; }
+
+  .swipe { position: fixed; inset: 0; z-index: 45; background: rgba(20,25,22,.96);
+    display: flex; flex-direction: column; align-items: center; padding: 1rem; }
+  .swipe-x { position: absolute; top: 1rem; left: 1rem; width: 2.6rem; height: 2.6rem;
+    border-radius: 50%; padding: 0; font-size: 1.05rem;
+    background: none; border: 1px solid #4A514C; color: #A9AFA7; }
+  .swipe-x:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
+  .swipe-count { color: #A9AFA7; font: 700 13px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
+  .swipe-stage { position: relative; flex: 1 1 auto; width: min(440px, 100%); display: grid; place-items: center; }
+  .swipe-done { color: #ECEEE8; text-align: center; font: 700 1.4rem var(--mono); }
+
+  .swipe-card { position: relative; z-index: 1; width: 100%; background: var(--surface);
+    border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    touch-action: pan-y; cursor: grab; user-select: none; }
+  .swipe-card.grab { cursor: grabbing; }
+  .sc-price { font: 800 2.2rem/1 var(--mono); color: var(--pine); }
+  .sc-title { font: 700 1.35rem/1.25 var(--sans); margin: .6rem 0; overflow-wrap: anywhere; }
+  .sc-meta { font: 13px var(--mono); color: var(--ink-soft); display: flex; flex-wrap: wrap;
+    gap: .5rem; align-items: center; margin-bottom: .9rem; }
+  .sc-dias { padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
+  .sc-desc { font: 14px/1.5 var(--sans); color: var(--ink-soft);
+    max-height: 42vh; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+  /* sello LIKE/NOPE: vive en el escenario, DETRÁS de la tarjeta; se revela al deslizar y se queda */
+  .sc-badge { position: absolute; inset: 0; opacity: 0; pointer-events: none;
+    display: grid; place-items: center; }
+  .sc-badge > span { border: 5px solid; border-radius: 12px; padding: .5rem 1.3rem;
+    font: 800 2rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .sc-badge.like > span { color: #C8901A; transform: rotate(-9deg); }
+  .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
+
+  .swipe-actions { display: flex; gap: .8rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
+  .sw-btn { flex: 1 1 auto; padding: .9rem .5rem; font: 700 15px var(--mono);
+    border-radius: 10px; border: 2px solid; background: var(--surface); }
+  .sw-btn.nope { color: #b03024; border-color: #b03024; }
+  .sw-btn.nope:hover { background: #b03024; color: #fff; }
+  .sw-btn.like { color: #C8901A; border-color: #C8901A; }
+  .sw-btn.like:hover { background: #C8901A; color: #fff; }
+  .sw-btn.ver { flex: 0 0 auto; color: var(--pine); border-color: var(--pine); }
+  .sw-btn.ver:hover { background: var(--pine); color: #fff; }

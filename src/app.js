@@ -82,7 +82,8 @@ function presetSort() {   // tu orden por defecto: tiempo → precio → distanc
 }
 function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
-function render() {
+// filas visibles con los filtros/orden actuales (compartido por tabla y modo swipe)
+function filteredRows() {
   const q = $('#q').value.toLowerCase();
   const pMin = +$('#pmin').value || 0, pMax = +$('#pmax').value || Infinity;
   const kmMax = $('#fkm').value === '' ? Infinity : +$('#fkm').value;
@@ -102,7 +103,11 @@ function render() {
       return 0;
     });
   }
+  return rows;
+}
 
+function render() {
+  const rows = filteredRows();
   tbody.innerHTML = '';
   const frag = document.createDocumentFragment();
   for (const r of rows) {
@@ -149,6 +154,7 @@ function render() {
   }
   tbody.append(frag);
   $('#empty').hidden = !!headers.length;
+  $('#swipeFab').hidden = !(headers.length && data.length);
   if (headers.length && !rows.length)
     $('#empty').hidden = false, $('#empty').textContent = showTrash ? 'La papelera está vacía.' : 'Nada coincide con el filtro.';
   paintStat();
@@ -452,3 +458,99 @@ fetch('/perfiles').then(r => r.json()).then(list => {
   if (me) setPerfil(me.name, colorOf(me), false);   // dispositivo que ya sabe quién es -> directo
   else { perfil = ''; renderChip(); openGate('first'); }   // sin perfil -> chip vacío + elige/crea
 }).catch(() => { perfil ? setPerfil(perfil, `hsl(${hue(perfil)} 42% 40%)`, false) : (renderChip(), openGate('first')); });
+
+// ── modo swipe (tinder): una tarjeta a la vez; arrastra ← descartar / → interesa ──
+const swipeView = $('#swipeView'), swipeStage = $('#swipeStage'), swipeCount = $('#swipeCount');
+const likeStamp = $('#swLikeStamp'), nopeStamp = $('#swNopeStamp');   // sellos fijos detrás de la tarjeta
+let deck = [], di = 0, card = null;
+const col = (r, name) => { const i = headers.indexOf(name); return i >= 0 ? r[i] : ''; };
+
+function openSwipe() {
+  deck = filteredRows(); di = 0;
+  if (!deck.length) return snack('No hay nada que revisar con estos filtros.', null);
+  swipeView.hidden = false; document.body.style.overflow = 'hidden';
+  nextCard();
+}
+function closeSwipe() { swipeView.hidden = true; document.body.style.overflow = ''; render(); }
+
+function nextCard() {
+  swipeStage.querySelectorAll('.swipe-card, .swipe-done').forEach(e => e.remove());   // conserva los sellos
+  likeStamp.style.opacity = nopeStamp.style.opacity = 0; card = null;
+  if (di >= deck.length) {   // mazo agotado
+    swipeCount.textContent = '';
+    const done = document.createElement('div'); done.className = 'swipe-done';
+    done.textContent = '✓ Revisado todo'; swipeStage.appendChild(done);
+    return;
+  }
+  swipeCount.textContent = (di + 1) + ' / ' + deck.length;
+  card = buildCard(deck[di]); swipeStage.appendChild(card); dragify(card);
+}
+
+function buildCard(r) {
+  const c = document.createElement('div'); c.className = 'swipe-card';
+  const dias = col(r, 'dias'), hs = isNum(dias) ? heat(+dias) : null;
+  const meta = [];
+  if (col(r, 'ciudad')) meta.push(escapeHtml(col(r, 'ciudad')));
+  if (col(r, 'km') !== '') meta.push(col(r, 'km') + ' km');
+  if (hs) meta.push(`<span class="sc-dias" style="color:${hs.fg};background:${hs.bg}">${dias} días</span>`);
+  if (col(r, 'envio') === 'True') meta.push('📦 envío');
+  if (col(r, 'reservado') === 'True') meta.push('reservado');
+  c.innerHTML =
+    `<div class="sc-price">${col(r, 'precio')} €</div>` +
+    '<div class="sc-title"></div>' +
+    `<div class="sc-meta">${meta.join(' · ')}</div>` +
+    '<div class="sc-desc"></div>';
+  c.querySelector('.sc-title').textContent = col(r, 'titulo');     // textContent: a prueba de < & en el texto
+  c.querySelector('.sc-desc').textContent = col(r, 'descripcion');
+  return c;
+}
+const escapeHtml = s => s.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+
+function dragify(el) {
+  let sx = 0, dx = 0, on = false;
+  el.onpointerdown = e => {
+    if (e.target.closest('a,button')) return;
+    on = true; dx = 0; sx = e.clientX; el.setPointerCapture(e.pointerId); el.classList.add('grab');
+  };
+  el.onpointermove = e => {
+    if (!on) return;
+    dx = e.clientX - sx;
+    el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
+    const t = Math.min(1, Math.abs(dx) / 120);
+    likeStamp.style.opacity = dx > 0 ? t : 0; nopeStamp.style.opacity = dx < 0 ? t : 0;
+  };
+  el.onpointerup = el.onpointercancel = () => {
+    if (!on) return; on = false; el.classList.remove('grab');
+    if (dx > 110) return fling(1);
+    if (dx < -110) return fling(-1);
+    el.style.transform = ''; likeStamp.style.opacity = nopeStamp.style.opacity = 0;   // no llegó al umbral: vuelve al centro
+  };
+}
+
+function fling(dir) {
+  const r = deck[di], k = key(r);
+  if (dir > 0) { fav.add(k); save('wp_fav', fav); likeStamp.style.opacity = 1; }
+  else { trash.add(k); save('wp_discarded', trash); nopeStamp.style.opacity = 1; }   // sello a tope mientras la tarjeta se va
+  card.style.transition = 'transform .25s ease, opacity .25s ease';
+  card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`; card.style.opacity = 0;
+  card = null;   // bloquea doble-decisión mientras vuela
+  setTimeout(() => { di++; nextCard(); }, 200);
+}
+
+$('#swipeFab').onclick = openSwipe;
+$('#swipeX').onclick = closeSwipe;
+$('#swNope').onclick = () => card && fling(-1);
+$('#swLike').onclick = () => card && fling(1);
+$('#swVer').onclick = () => {
+  if (di >= deck.length) return;
+  const r = deck[di], url = col(r, 'url');
+  if (!url) return;
+  seen.add(key(r)); save('wp_seen', seen);
+  window.open(url, '_blank');
+};
+document.addEventListener('keydown', e => {
+  if (swipeView.hidden) return;
+  if (e.key === 'Escape') closeSwipe();
+  else if (e.key === 'ArrowLeft') card && fling(-1);
+  else if (e.key === 'ArrowRight') card && fling(1);
+});
