@@ -28,13 +28,13 @@
     position: sticky; top: 0; z-index: 20; background: var(--paper);
     border-bottom: 2px solid var(--ink); padding: .9rem 0 .7rem; margin-bottom: .25rem;
   }
-  .brand { display: flex; flex-direction: column; gap: .2rem; }
+  .brand { display: flex; align-items: center; gap: .7rem; }
   .brand h1 {
     font: 800 1.5rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
   }
   .brand .eyebrow {
-    font: 600 .68rem/1 var(--mono); letter-spacing: .22em; text-transform: uppercase;
-    color: var(--ink-soft);
+    font: 600 .68rem/1.15 var(--mono); letter-spacing: .22em; text-transform: uppercase;
+    color: var(--ink-soft);   /* dos líneas ≈ altura de REBUSCA, alineadas al centro */
   }
   .menu > summary {
     margin-top: .7rem; padding: .45rem .7rem; cursor: pointer; list-style: none;
