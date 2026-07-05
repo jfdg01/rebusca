@@ -29,6 +29,10 @@ python3 src/wallapop.py demo                  # self-check del scraper (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart wallapop
 ```
 
+> **NUNCA matar el servidor del usuario** (`pkill -f servidor.py`, `kill`, etc.).
+> El usuario suele tener uno corriendo y lo está usando. Para verificar cambios,
+> levanta el tuyo en otro puerto (`PORT=8123 python3 src/servidor.py`) y déjalo estar.
+
 Convención: la lógica no trivial deja un `demo()` con `assert`, invocable por `python3 <fichero>.py demo`.
 
 ## Arquitectura (flujo de datos)
