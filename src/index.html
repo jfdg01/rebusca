@@ -215,7 +215,11 @@
             <b class="swipe-cog-badge" id="swipeCogBadge" hidden></b>
         </button>
     </div>
-    <div class="swipe-count" id="swipeCount"></div>
+    <div class="swipe-count-row">
+        <span class="swipe-hint yes" title="desliza a la derecha para guardar"><i data-icon="check"></i><i data-icon="arrow-right"></i></span>
+        <div class="swipe-count" id="swipeCount"></div>
+        <span class="swipe-hint no" title="desliza a la izquierda para descartar"><i data-icon="arrow-left"></i><i data-icon="x"></i></span>
+    </div>
     <div class="swipe-menu" id="swipeMenu" hidden>
         <p class="swipe-sort-label">Ordenar por…</p>
         <div class="swipe-sort" id="swipeSort">
@@ -227,7 +231,7 @@
     </div>
     <div class="swipe-stage" id="swipeStage">
         <div class="sc-badge like" id="swLikeStamp">
-            <span><i data-icon="star"></i>Interesante</span>
+            <span>Interesante</span>
         </div>
         <div class="sc-badge nope" id="swNopeStamp"><span>Rechazado</span></div>
     </div>
@@ -242,9 +246,9 @@
         />
     </div>
     <div class="swipe-actions">
-        <button id="swCopy" class="ghost">Copiar</button>
+        <button id="swCopy" class="ghost"><i data-icon="copy"></i> Copiar</button>
         <button id="swVer" class="primary">
-            Wallapop <i data-icon="external"></i>
+            <i data-icon="external"></i> Wallapop
         </button>
     </div>
 </div>

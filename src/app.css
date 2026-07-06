@@ -263,12 +263,13 @@
 
   /* item de lista compuesto (Destacados / Papelera) */
   .li-img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; margin-bottom: .7rem; background: var(--paper-2, #0002); }
-  .li-title { font: 700 1.09rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem; }
+  .li-title { font: 700 1.09rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .li-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: .15rem .6rem; }
   .li-price { font: 800 1.64rem/1 var(--mono); color: var(--pine); }
-  .li-where { font: 13px var(--sans); color: var(--ink-soft); }
+  .li-where { font: 13px var(--sans); color: var(--ink-soft); margin-left: auto; }
   .li-age { font: 600 12.5px var(--mono); margin-top: .4rem; }
-  .li-flags { font: 12px var(--mono); color: var(--ink-soft); margin-top: .5rem; }
+  .li-flags { font: 12px var(--mono); color: var(--ink-soft); margin-top: .5rem; display: flex; align-items: baseline; gap: .6rem; }
   /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
   .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
     font: 700 11px var(--mono); color: var(--ink-soft); background: var(--surface-2); }
@@ -406,7 +407,13 @@
     border: 1px solid var(--line); color: var(--ink-soft); font: 700 11px var(--mono); }
   .swipe-sort button.on { background: var(--pine); border-color: var(--pine); color: #fff; }
   .swipe-sort button.on::after { content: ' ' attr(data-dir); }
-  .swipe-count { color: var(--ink-soft); font: 700 12px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
+  .swipe-count { color: var(--ink-soft); font: 700 12px var(--mono); letter-spacing: .12em; }
+  .swipe-count-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: min(440px, 100%); margin: .4rem 0 1rem; }
+  /* pistas de deslizamiento: ✓→ guardar (verde) · ←✕ descartar (rojo) */
+  .swipe-hint { display: inline-flex; align-items: center; gap: .05rem; opacity: .9; }
+  .swipe-hint .icon { width: 21px; height: 21px; stroke-width: 2.4; }
+  .swipe-hint.yes { color: var(--pine); }
+  .swipe-hint.no { color: #b03024; }
   .swipe-stage { position: relative; flex: 1 1 auto; min-height: 0; width: min(440px, 100%); display: grid; place-items: center; }
   .swipe-done { color: var(--ink); text-align: center; font: 700 1.34rem var(--mono); }
 
@@ -417,9 +424,8 @@
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
   /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
-  /* título largo: máx 4 líneas, no empuja los botones fuera de pantalla */
-  .swipe-card .li-title { flex: 0 0 auto; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  /* título largo: máx 2 líneas, luego ellipsis (hereda el clamp de .li-title) */
+  .swipe-card .li-title { flex: 0 0 auto; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
   .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; }   /* tope de alto: deja sitio a flags + descripción en pantallas cortas */
   /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
@@ -431,7 +437,7 @@
     display: grid; place-items: center; }
   .sc-badge > span { border: 5px solid; border-radius: 12px; padding: .5rem 1.3rem;
     font: 800 1.94rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
-  .sc-badge.like > span { color: #C8901A; transform: rotate(-9deg); }
+  .sc-badge.like > span { color: var(--pine); transform: rotate(-9deg); }
   .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
 
   /* barra sutil de exclusión dentro del swipe: chips vetados + input pequeño, sin robar protagonismo a la tarjeta */
