@@ -156,6 +156,14 @@
   .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
   .stat .link[hidden] { display: none; }
 
+  /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
+  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+  .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .excl .chips:empty { display: none; }
+  .excl-chip { font: 600 12px var(--mono); padding: .28rem .6rem; min-height: 0;
+    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
+  .excl #exclAdd { width: 100%; min-height: 2.15rem; font: 600 13px var(--mono); }
+
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
   .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
   .list-head-bar { display: flex; align-items: center; gap: .6rem; }
@@ -163,6 +171,7 @@
     display: flex; align-items: center; justify-content: center; font: 400 1.3rem/1 var(--mono); }
   .list-head h2 { margin: 0; font: 800 1.2rem var(--mono); letter-spacing: .04em; text-transform: uppercase; }
   .list-head #listFilter { width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
+  .list-head #exportFav { margin-left: auto; width: auto; height: auto; border-radius: 999px; font: 700 12px var(--mono); }
 
   /* ── tabla ─────────────────────────────────────────────── */
   table { border-collapse: collapse; width: 100%; }

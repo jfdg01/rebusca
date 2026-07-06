@@ -20,6 +20,9 @@ function parseCSV(text) {
 const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
 const trash = load('wp_discarded'), fav = load('wp_fav');   // 2 cubos exclusivos; "sin ver" = ni fav ni trash
+let exclMap = JSON.parse(localStorage.getItem('wp_excl') || '{}');   // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
+const exclTerms = () => (curCsv && exclMap[curCsv]) || [];   // palabras vetadas de la query activa
+const saveExcl = () => { localStorage.setItem('wp_excl', JSON.stringify(exclMap)); pushEstado(); };
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
 let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
@@ -28,7 +31,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], color: perfilColor }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, color: perfilColor }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -37,8 +40,10 @@ function hydrateEstado() {
       set.clear(); (arr || []).forEach(x => set.add(x));
     }
     for (const k of fav) if (trash.has(k)) fav.delete(k);   // cubos exclusivos: limpia solapes heredados (gana papelera)
+    exclMap = (e.excl && typeof e.excl === 'object' && !Array.isArray(e.excl)) ? e.excl : {};   // {csv:[palabras]}; ignora formatos viejos
     localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
     localStorage.setItem('wp_fav', JSON.stringify([...fav]));
+    localStorage.setItem('wp_excl', JSON.stringify(exclMap));
     if (data.length) render();
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
@@ -127,6 +132,7 @@ function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
+const isExcluded = r => { const ws = exclTerms(); if (!ws.length) return false; const t = norm(r[iTitulo] || ''); return ws.some(w => t.includes(w)); };
 function filteredRows() {
   const q = (view === 'trash' || view === 'fav') ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
   let rows = data.filter(r => {
@@ -134,7 +140,7 @@ function filteredRows() {
     if (q && !norm(r[iTitulo] || '').includes(q)) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
-    return !fav.has(k) && !trash.has(k);   // mazo: solo lo aún sin clasificar
+    return !fav.has(k) && !trash.has(k) && !isExcluded(r);   // mazo: sin clasificar y sin palabra vetada
   });
   if (sortKeys.length) {
     rows.sort((a, b) => {
@@ -182,6 +188,7 @@ function render() {
   $('#listHead').hidden = !listView;
   if (!listView && listQ) { listQ = ''; $('#listFilter').value = ''; }   // el filtro no sobrevive al salir de la lista
   if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : 'Papelera';
+  $('#exportFav').hidden = !(view === 'fav' && rows.length);   // copiar solo tiene sentido con destacados a la vista
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
   if (!listView && hasRows) $('#swipeFab').textContent = `A REBUSCAR · ${rows.length}`;
@@ -191,15 +198,36 @@ function render() {
       : view === 'trash' ? 'La papelera está vacía.'
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
+  renderExcl();
+}
+
+// chips de palabras vetadas de la query activa (solo con CSV cargado y fuera de las vistas de lista)
+function renderExcl() {
+  const box = $('#excl'); if (!box) return;
+  box.hidden = !(headers.length && view === '' && curCsv);
+  const chips = $('#exclChips'); chips.innerHTML = '';
+  for (const w of exclTerms()) {
+    const b = document.createElement('button');
+    b.className = 'chip excl-chip'; b.textContent = w + ' ✕';   // textContent: sin inyección desde texto de usuario
+    b.title = 'quitar exclusión';
+    b.onclick = () => {
+      exclMap[curCsv] = exclTerms().filter(x => x !== w);
+      if (!exclMap[curCsv].length) delete exclMap[curCsv];
+      saveExcl(); render();
+    };
+    chips.append(b);
+  }
 }
 
 function paintStat() {
   if (!headers.length) { $('#stat').innerHTML = ''; return; }
   const favs = data.filter(r => fav.has(key(r))).length;
   const disc = data.filter(r => trash.has(key(r))).length;
-  const sinVer = data.length - favs - disc;   // "vistos" = favs + disc, implícito
+  const vetados = exclTerms().length ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
+  const sinVer = data.length - favs - disc - vetados;   // "vistos" = favs + disc; los vetados salen aparte
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
+    (vetados ? `<span><b>${vetados}</b> excluidos</span>` : '') +
     `<span><b>${favs}</b> interesantes ` +
     (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
     `</span>` +
@@ -691,7 +719,22 @@ function fling(dir) {
 
 dragify(swipeView);   // toda la vista es zona de arrastre (no solo la tarjeta)
 $('#listFilter').oninput = e => { listQ = e.target.value; render(); };
+$('#exclAdd').onkeydown = e => {
+  if (e.key !== 'Enter' || !curCsv) return;
+  const w = norm(e.target.value); e.target.value = '';
+  if (w && !exclTerms().includes(w)) { (exclMap[curCsv] ||= []).push(w); saveExcl(); render(); }
+};
 $('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
+$('#exportFav').onclick = () => {   // copia los destacados a la vista (título — precio) para pegar en una IA
+  const txt = filteredRows().map(r => {
+    const p = col(r, 'precio');
+    return col(r, 'titulo') + (p ? ` — ${p}€` : '');
+  }).join('\n');
+  if (!txt) return;
+  navigator.clipboard.writeText(txt)
+    .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
+    .catch(() => snack('No se pudo copiar', null));
+};
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
 $('#swVer').onclick = () => {
