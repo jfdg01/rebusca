@@ -163,7 +163,7 @@
   .stat > span { display: flex; align-items: baseline; gap: .45rem; }
   .stat > span b:first-child { min-width: 2.1rem; text-align: right; }
   .stat b { color: var(--ink); font-weight: 700; font-size: 1.15em; }
-  .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
+  .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; }
 
   /* banner de auto-rechazo por vendedor: sangre completa como .stat, tinte ámbar (es una oferta) */
   .seller-banner {
