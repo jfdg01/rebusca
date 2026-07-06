@@ -307,7 +307,10 @@ function render() {
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
   if (!listView && hasRows) $('#swipeFab').textContent = 'REBUSCAR';
-  $('#empty').hidden = !!hasRows;
+  const favsN = data.filter(r => fav.has(key(r))).length;
+  const showCopy = !listView && headers.length && !rows.length && favsN;   // ya rebuscado todo y hay destacados: ofrece exportarlos a una IA
+  $('#copyFav').hidden = !showCopy;
+  $('#empty').hidden = !!hasRows || showCopy;   // el botón ocupa el hueco de REBUSCAR (mismo sitio); sin "Nada que revisar" que lo empuje abajo
   if (headers.length && !rows.length)
     $('#empty').textContent = listView && listQ ? 'Nada coincide con el filtro.'
       : view === 'trash' ? 'La papelera está vacía.'
@@ -389,11 +392,11 @@ function paintStat() {
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
     (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
-    `<span><b>${favs}</b> interesantes ` +
-    (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
-    `</span>` +
     `<span><b>${disc}</b> descartados ` +
     (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver papelera'}</span>` : '') +
+    `</span>` +
+    `<span><b>${favs}</b> interesantes ` +
+    (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
     `</span>` +
     (sortKeys.length ? `<span>orden: <b>${sortKeys.map(s => headers[s.col]).join(' › ')}</b> · <span class="link" id="clearSort">limpiar</span></span>` : '');
   const toggle = v => () => { view = view === v ? '' : v; listSeller = ''; sellerReturn = false; $('#empty').textContent = ''; render(); };
@@ -1016,23 +1019,67 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
     .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
     .catch(() => snack('No se pudo copiar', null));
 };
-// precio exacto: pide a la API el peso real (tramo up_to_kg) de los destacados con envío sin cachear
-$('#calcPeso').onclick = async () => {
-  const btn = $('#calcPeso');
-  const ids = filteredRows()
+// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
+function favText(rows) {
+  const items = rows.map((r, i) => {
+    const precio = col(r, 'precio'), conEnvio = col(r, 'envio') === 'True';
+    let pl;   // precio a mostrar: final estimado si lleva envío, con '(aprox)' si no hay peso real
+    if (conEnvio && isNum(precio)) {
+      const kg = pesos[col(r, 'id')], exact = typeof kg === 'number';
+      pl = eur(finalPrice(+precio, exact ? kg : undefined)) + (exact ? ' (con envío)' : ' (con envío, aprox)');
+    } else pl = precio !== '' ? `${precio} €` : '—';
+    const lines = [`${i + 1}. ${col(r, 'titulo')} — ${pl}`];
+    const km = col(r, 'km'), ciudad = col(r, 'ciudad');
+    let where = km !== '' ? `a ${km} km` : ''; if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
+    if (where) lines.push('   ' + where);
+    const url = col(r, 'url'); if (url) lines.push('   ' + url);
+    const desc = col(r, 'descripcion'); if (desc) lines.push('   ' + desc.replace(/\s*\n\s*/g, ' '));
+    return lines.join('\n');
+  }).join('\n\n');
+  return 'Dados estos productos de segunda mano de Wallapop, investígalos uno a uno y dime cuál es el mejor calidad/precio y por qué:\n\n' + items;
+}
+// copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
+function copyAsync(makeText) {
+  if (window.ClipboardItem && navigator.clipboard.write) {
+    const blob = Promise.resolve().then(makeText).then(t => new Blob([t], { type: 'text/plain' }));
+    return navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+  }
+  return Promise.resolve().then(makeText).then(t => navigator.clipboard.writeText(t));   // fallback sin ClipboardItem
+}
+// copiar favoritos: calcula el precio exacto (peso real) y copia la ficha de cada destacado para una IA
+function copyFavs(btn) {
+  const rows = data.filter(r => fav.has(key(r)));
+  if (!rows.length) return snack('No tienes destacados que copiar', null);
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparando…';
+  copyAsync(async () => { await fetchPesos(rows).catch(() => {}); return favText(rows); })   // si falla el peso, se copia con el estimado
+    .then(() => snack(`Copiados ${rows.length} destacados para la IA`, null))
+    .catch(() => snack('No se pudo copiar', null))
+    .finally(() => { btn.disabled = false; btn.textContent = prev; });
+}
+$('#copyFav').onclick = e => copyFavs(e.currentTarget);
+$('#copyFavOpt').onclick = e => { opts.open = false; copyFavs(e.currentTarget); };   // desde el menú ⚙: cierra el menú para que se vea el snack
+// precio exacto: pide a la API el peso real (tramo up_to_kg) de los items con envío que aún no conocemos.
+// cachea, repinta y devuelve cuántos pesos numéricos llegaron. -1 si no había nada que pedir.
+async function fetchPesos(rows) {
+  const ids = rows
     .filter(r => col(r, 'envio') === 'True')
     .map(r => col(r, 'id'))
     .filter(id => id && !(id in pesos));   // sin recalcular lo ya conocido (incluye nulos: ítems sin peso)
-  if (!ids.length) return snack('Precios ya calculados', null);
-  btn.disabled = true; const prev = btn.textContent; btn.textContent = `Calculando ${ids.length}…`;
+  if (!ids.length) return -1;
+  const res = await fetch('/pesos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }) }).then(r => r.json());
+  Object.assign(pesos, res);
+  localStorage.setItem('wp_pesos', JSON.stringify(pesos));
+  render();
+  return Object.values(res).filter(v => typeof v === 'number').length;
+}
+$('#calcPeso').onclick = async () => {
+  const btn = $('#calcPeso');
+  btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Calculando…';
   try {
-    const res = await fetch('/pesos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }) }).then(r => r.json());
-    Object.assign(pesos, res);
-    localStorage.setItem('wp_pesos', JSON.stringify(pesos));
-    render();
-    const ok = Object.values(res).filter(v => typeof v === 'number').length;
-    snack(ok ? `Precio exacto de ${ok} artículo${ok === 1 ? '' : 's'}` : 'Sin peso disponible', null);
+    const ok = await fetchPesos(filteredRows());
+    snack(ok < 0 ? 'Precios ya calculados' : ok ? `Precio exacto de ${ok} artículo${ok === 1 ? '' : 's'}` : 'Sin peso disponible', null);
   } catch {
     snack('No se pudo calcular', null);
   } finally {

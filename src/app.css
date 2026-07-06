@@ -392,11 +392,12 @@
     font: 600 12px var(--sans); color: var(--ink-soft); cursor: pointer; }
   .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
 
-  #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
+  #swipeFab, #copyFav { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: none; color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover { background: #10A896; border-color: #10A896; box-shadow: none; }
-  #swipeFab:active { box-shadow: none; }
+  #swipeFab:hover, #copyFav:hover { background: #10A896; border-color: #10A896; box-shadow: none; }
+  #swipeFab:active, #copyFav:active { box-shadow: none; }
+  #copyFav { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
