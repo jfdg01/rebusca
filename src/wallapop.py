@@ -23,10 +23,6 @@ API = "https://api.wallapop.com/api/v3/search"
 HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json",
            "Accept-Language": "es-ES"}   # taxonomía (categoría) en español
 
-# Rotacion de IP: lista de proxies "http://user:pass@host:port". Vacia = IP directa.
-# Rellenala desde un fichero (--proxies) o pega aqui tus proxies residenciales.
-PROXIES = []
-
 
 def haversine_km(lat1, lon1, lat2, lon2):
     r = 6371.0
@@ -39,21 +35,13 @@ class Blocked(Exception):
     pass
 
 
-def _opener():
-    """Opener con un proxy al azar de PROXIES (o directo si esta vacia)."""
-    if not PROXIES:
-        return urllib.request.build_opener()
-    px = random.choice(PROXIES)
-    return urllib.request.build_opener(urllib.request.ProxyHandler({"http": px, "https": px}))
-
-
 def get(params, retries=5):
     """GET con reintentos + backoff exponencial. Distingue throttle de bloqueo real."""
     url = API + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers=HEADERS)
     for attempt in range(retries):
         try:
-            with _opener().open(req, timeout=20) as r:
+            with urllib.request.urlopen(req, timeout=20) as r:
                 body = r.read()
             d = json.loads(body)
             if isinstance(d, dict) and d.get("status") == 400:
@@ -145,17 +133,11 @@ def main():
                    help="solo anuncios publicados en la ultima hora/dia/semana/mes")
     p.add_argument("--title-only", action="store_true", help="solo si el término está en el título")
     p.add_argument("-n", "--limit", type=int, default=None, help="corta a N items")
-    p.add_argument("--proxies", help="fichero con un proxy por linea (http://user:pass@host:port)")
     p.add_argument("-o", "--out", default=None, help="por defecto: <query>.csv")
     a = p.parse_args()
     if not a.out:
         slug = "-".join(a.keywords.lower().split()) or "wallapop"
         a.out = f"{slug}.csv"
-
-    if a.proxies:
-        with open(a.proxies) as f:
-            PROXIES.extend(l.strip() for l in f if l.strip() and not l.startswith("#"))
-        print(f"{len(PROXIES)} proxies cargados")
 
     max_dias = {"hora": 1 / 24, "dia": 1, "semana": 7, "mes": 30}.get(a.since)
     # el server filtra por antiguedad; 'hora' no existe alli -> pide 'today' y afinamos en cliente

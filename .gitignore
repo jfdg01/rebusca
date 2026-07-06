@@ -1,6 +1,5 @@
 *.csv
 csv/
-estado.json
 estados/
 __pycache__/
 .venv/

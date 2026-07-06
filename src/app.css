@@ -66,7 +66,7 @@
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: 0 8px 24px rgba(27,33,30,.18); padding: .4rem; }
   .opts .menu .chip { white-space: nowrap; }
-  /* cabecera: avatar a la izq, título centrado, engranaje a la der */
+  /* cabecera: engranaje a la izq, título centrado, avatar a la der */
   .brand { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .brand-title { display: flex; align-items: center; gap: .5rem; min-width: 0; }
   .avatar { flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none;
@@ -116,8 +116,6 @@
     background: var(--field); color: var(--ink);
   }
   input[type=search] { min-width: 180px; flex: 1 1 180px; max-width: 320px; }
-  .flt { display: flex; align-items: center; gap: .3rem; font: 12px var(--mono); color: var(--ink-soft); }
-  .flt input[type=number] { width: 5rem; }
   button {
     padding: .38rem .7rem; border: 1px solid #B7BCB0; border-radius: 6px;
     background: var(--surface); color: var(--ink); cursor: pointer;
@@ -203,6 +201,8 @@
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   .list-head #exportFav { margin-left: auto; width: auto; height: auto; border-radius: 999px; font: 700 12px var(--mono); }
+  .list-head #listSort { flex-wrap: wrap; }   /* 4 pills no caben en 320px: que envuelvan */
+  .list-head #listSort button { width: auto; height: auto; }   /* reusa .swipe-sort (pill), sin el círculo de .list-head button */
 
   /* ── lista compuesta (Destacados / Papelera): SIEMPRE pila de tarjetas ──
      cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas
@@ -248,6 +248,10 @@
   .li-where { font: 14px var(--sans); color: var(--ink-soft); }
   .li-age { font: 600 13.5px var(--mono); margin-top: .4rem; }
   .li-flags { font: 13px var(--mono); color: var(--ink-soft); margin-top: .5rem; }
+  /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
+  .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
+    font: 700 12px var(--mono); color: var(--ink-soft); background: var(--surface-2); }
+  .li-when.fav { color: var(--pine-ink); background: var(--pine-soft); }
   .li-desc { font: 13.5px/1.5 var(--sans); color: var(--ink-soft); margin-top: .8rem; overflow-wrap: anywhere;
     white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 
@@ -280,9 +284,8 @@
   @media (max-width: 640px) {
     body { padding-bottom: 6rem; }
     /* controles con texto de 16px: dedo-friendly y sin auto-zoom en iOS */
-    select, input[type=search], input[type=number], button, input[type=file], .btn { font-size: 16px; }
+    select, input[type=search], button, .btn { font-size: 16px; }
     input[type=search] { max-width: none; flex: 1 1 100%; }
-    .flt { flex-wrap: wrap; }   /* el grupo buscar (input+select+botón) no cabe en una línea → que envuelva */
     /* botones de acción de la tarjeta a lo ancho, grandes para el pulgar */
     td.act .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; border-radius: 12px; }
   }

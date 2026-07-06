@@ -6,7 +6,12 @@
 
 <header>
     <div class="brand">
-        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">?</button>
+        <details class="opts" id="perfilOpts">
+            <summary title="opciones" data-icon="settings"></summary>
+            <div class="menu">
+                <button id="perfilChip" class="chip">Cambiar de perfil</button>
+            </div>
+        </details>
         <div class="brand-title">
             <h1>Rebusca</h1>
             <img
@@ -18,12 +23,7 @@
             />
             <span class="eyebrow">rebuscador<br />de chollos</span>
         </div>
-        <details class="opts" id="perfilOpts">
-            <summary title="opciones" data-icon="settings"></summary>
-            <div class="menu">
-                <button id="perfilChip" class="chip">Cambiar de perfil</button>
-            </div>
-        </details>
+        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">?</button>
     </div>
     <div class="panel">
         <div class="search">
@@ -81,6 +81,12 @@
         </div>
         <input id="listFilter" type="search" autocomplete="off"
             placeholder="filtrar en la lista…" title="filtra por título" />
+        <div class="swipe-sort" id="listSort">
+            <button data-sort="">Entrada</button>
+            <button data-sort="precio">Precio</button>
+            <button data-sort="dias">Fecha</button>
+            <button data-sort="km">Distancia</button>
+        </div>
     </div>
 </header>
 

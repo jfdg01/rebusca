@@ -20,6 +20,9 @@ function parseCSV(text) {
 const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
 const trash = load('wp_discarded'), fav = load('wp_fav');   // 2 cubos exclusivos; "sin ver" = ni fav ni trash
+let stamp = JSON.parse(localStorage.getItem('wp_stamp') || '{}');   // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
+const stampNow = k => { stamp[k] = Date.now(); localStorage.setItem('wp_stamp', JSON.stringify(stamp)); };
+const unstamp = k => { if (k in stamp) { delete stamp[k]; localStorage.setItem('wp_stamp', JSON.stringify(stamp)); } };
 let exclMap = JSON.parse(localStorage.getItem('wp_excl') || '{}');   // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
 const exclTerms = () => (curCsv && exclMap[curCsv]) || [];   // palabras vetadas de la query activa
 const saveExcl = () => { localStorage.setItem('wp_excl', JSON.stringify(exclMap)); pushEstado(); };
@@ -41,7 +44,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, exclPresets, exclSel: exclSelMap, color: perfilColor }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, exclPresets, exclSel: exclSelMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -54,6 +57,8 @@ function hydrateEstado() {
     catExclMap = (e.catExcl && typeof e.catExcl === 'object' && !Array.isArray(e.catExcl)) ? e.catExcl : {};   // {csv:[categorias]}
     exclPresets = Array.isArray(e.exclPresets) ? e.exclPresets : [];
     exclSelMap = (e.exclSel && typeof e.exclSel === 'object' && !Array.isArray(e.exclSel)) ? e.exclSel : {};
+    stamp = (e.stamp && typeof e.stamp === 'object' && !Array.isArray(e.stamp)) ? e.stamp : {};   // {key:epochMs} cuándo se clasificó
+    localStorage.setItem('wp_stamp', JSON.stringify(stamp));
     localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
     localStorage.setItem('wp_fav', JSON.stringify([...fav]));
     localStorage.setItem('wp_excl', JSON.stringify(exclMap));
@@ -108,6 +113,19 @@ function humanAge(dias) {
 console.assert(humanAge(16.8) === 'hace 16 días y 19 horas' && humanAge(1) === 'hace 1 día'
   && humanAge(0.05) === 'hace 1 hora' && humanAge(0) === 'recién puesto', 'humanAge() roto');
 
+// "hace 3 min / 5 h / 2 días" desde un epochMs: cuándo se descartó/destacó (granularidad min→h→día)
+function ago(ms) {
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1) return 'hace un momento';
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+}
+console.assert(ago(Date.now() - 3 * 60000) === 'hace 3 min' && ago(Date.now() - 5 * 3600000) === 'hace 5 h'
+  && ago(Date.now() - 2 * 86400000) === 'hace 2 días' && ago(Date.now()) === 'hace un momento', 'ago() roto');
+
 // tarjeta compuesta (Destacados/Papelera + swipe): precio + ubicación + antigüedad + flags + descripción
 function fillCard(el, r) {
   const add = (cls, txt) => { const e = document.createElement('div'); e.className = cls; e.textContent = txt; el.append(e); return e; };
@@ -125,6 +143,9 @@ function fillCard(el, r) {
 
   if (isNum(dias)) add('li-age', humanAge(+dias)).style.color = heat(+dias).fg;
   add('li-flags', `${col(r, 'reservado') === 'True' ? 'Reservado' : 'Sin reserva'} · ${col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío'}`);
+  // cuándo se clasificó (solo en papelera/destacados y si hay marca de tiempo)
+  if ((view === 'trash' || view === 'fav') && stamp[key(r)])
+    add('li-when' + (view === 'fav' ? ' fav' : ''), `${view === 'fav' ? 'Destacado' : 'Descartado'} ${ago(stamp[key(r)])}`);
 
   const desc = col(r, 'descripcion');
   if (desc) add('li-desc', desc);
@@ -147,6 +168,21 @@ function paintSortHeaders() {
 }
 function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
+// barra de orden de las listas: reclic invierte; "Entrada" (data-sort="") = orden de llegada
+function applyListSort(name) {
+  if (name === listSort) listSortDir = -listSortDir;
+  else { listSort = name; listSortDir = name ? 1 : -1; }   // columnas asc (barato/cerca/reciente); entrada: recién añadido arriba
+  render();
+}
+function paintListSort() {
+  document.querySelectorAll('#listSort button').forEach(b => {
+    const on = b.dataset.sort === listSort;
+    b.classList.toggle('on', on);
+    b.dataset.dir = on ? (listSortDir > 0 ? '▲' : '▼') : '';
+  });
+}
+document.querySelectorAll('#listSort button').forEach(b => b.onclick = () => applyListSort(b.dataset.sort));
+
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
 const isExcluded = r => {   // vetada por lo ad-hoc de la query O por cualquier preset activo (palabra en título / categoría exacta)
@@ -164,8 +200,29 @@ const isExcluded = r => {   // vetada por lo ad-hoc de la query O por cualquier 
 // "lejos sin envío": a más de 10 km y sin envío, inalcanzable en la práctica. Se ocultan por defecto (toggle).
 const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > 10 && col(r, 'envio') !== 'True'; };
 let hideLejos = localStorage.getItem('wp_hidelejos') !== '0';   // por defecto ocultos
+// compara dos celdas: numérica si ambas lo son (vacío = -∞), si no alfabética con acentos
+function cmpCell(x, y) {
+  if ((x === '' || isNum(x)) && (y === '' || isNum(y))) {
+    x = x === '' ? -Infinity : +x; y = y === '' ? -Infinity : +y; return x - y;
+  }
+  return x.localeCompare(y, 'es', { numeric: true });
+}
+// orden de la lista (papelera/destacados): '' = momento de entrada (Set preserva inserción) | columna del CSV
+let listSort = '', listSortDir = -1;   // por defecto: recién añadido arriba
+function sortList(rows) {
+  if (!listSort) {
+    const order = [...(view === 'trash' ? trash : fav)];   // orden de llegada a la lista
+    const pos = new Map(order.map((k, i) => [k, i]));
+    rows.sort((a, b) => ((pos.get(key(a)) ?? -1) - (pos.get(key(b)) ?? -1)) * listSortDir);
+    return;
+  }
+  const c = headers.indexOf(listSort); if (c < 0) return;
+  rows.sort((a, b) => cmpCell(a[c], b[c]) * listSortDir);
+}
+
 function filteredRows() {
-  const q = (view === 'trash' || view === 'fav') ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
+  const listView = view === 'trash' || view === 'fav';
+  const q = listView ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
   let rows = data.filter(r => {
     const k = key(r);
     if (q && !norm(r[iTitulo] || '').includes(q)) return false;
@@ -173,18 +230,11 @@ function filteredRows() {
     if (view === 'fav') return fav.has(k);
     return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r));   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
   });
-  if (sortKeys.length) {
-    rows.sort((a, b) => {
-      for (const { col, dir } of sortKeys) {
-        let x = a[col], y = b[col], c;
-        if ((x === '' || isNum(x)) && (y === '' || isNum(y))) {
-          x = x === '' ? -Infinity : +x; y = y === '' ? -Infinity : +y; c = x - y;
-        } else c = x.localeCompare(y, 'es', { numeric: true });
-        if (c) return c * dir;
-      }
-      return 0;
-    });
-  }
+  if (listView) sortList(rows);   // las listas ordenan con su barra (#listSort)
+  else if (sortKeys.length) rows.sort((a, b) => {   // mazo/swipe: orden multinivel
+    for (const { col, dir } of sortKeys) { const c = cmpCell(a[col], b[col]); if (c) return c * dir; }
+    return 0;
+  });
   return rows;
 }
 
@@ -229,6 +279,7 @@ function render() {
       : view === 'trash' ? 'La papelera está vacía.'
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
+  paintListSort();
   renderExcl();
   renderCats();
 }
@@ -327,9 +378,9 @@ function paintStat() {
 function trashExcluded() {
   const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).map(key);
   if (!ks.length) return;
-  ks.forEach(k => trash.add(k)); save('wp_discarded', trash); render();
+  ks.forEach(k => { trash.add(k); stampNow(k); }); save('wp_discarded', trash); render();
   snack(`${ks.length} excluido${ks.length === 1 ? '' : 's'} a la papelera`, () => {
-    ks.forEach(k => trash.delete(k)); save('wp_discarded', trash); render();
+    ks.forEach(k => { trash.delete(k); unstamp(k); }); save('wp_discarded', trash); render();
   });
 }
 
@@ -337,14 +388,14 @@ function trashExcluded() {
 let snackTimer;
 function discard(k, titulo) {
   const wasFav = fav.has(k);                 // al descartar sale de interesantes (cubos exclusivos)
-  fav.delete(k); trash.add(k); save('wp_fav', fav); save('wp_discarded', trash); render();
+  fav.delete(k); trash.add(k); stampNow(k); save('wp_fav', fav); save('wp_discarded', trash); render();
   snack(`Descartado: ${(titulo || '').slice(0, 40)}`, () => {
-    trash.delete(k); if (wasFav) fav.add(k); save('wp_fav', fav); save('wp_discarded', trash); render();
+    trash.delete(k); if (wasFav) { fav.add(k); stampNow(k); } else unstamp(k); save('wp_fav', fav); save('wp_discarded', trash); render();
   });
 }
 function restore(k) {                          // restaurar = volver a "sin ver"
-  trash.delete(k); save('wp_discarded', trash); render();
-  snack('Restaurado', () => { trash.add(k); save('wp_discarded', trash); render(); });
+  trash.delete(k); unstamp(k); save('wp_discarded', trash); render();
+  snack('Restaurado', () => { trash.add(k); stampNow(k); save('wp_discarded', trash); render(); });
 }
 function snack(msg, undo) {
   $('#snackmsg').textContent = msg; const s = $('#snack'); s.hidden = false;
@@ -706,8 +757,6 @@ console.assert(ink('#FFD43B') === '#1A1E1B' && ink('#A23B4E') === '#F4F6F2'
 // pinta el avatar (inicial + color del perfil) y el texto del menú
 function renderChip() {
   avatarEl.textContent = perfil ? initial(perfil) : '?';
-  if (perfil) { avatarEl.style.background = perfilColor; avatarEl.style.color = ink(perfilColor); }
-  else { avatarEl.style.background = ''; avatarEl.style.color = ''; }
   chip.textContent = perfil ? 'Cambiar de perfil' : 'Elegir perfil';
 }
 
@@ -903,7 +952,7 @@ function fling(dir) {
   const r = deck[di], k = key(r);
   if (dir > 0) { fav.add(k); trash.delete(k); likeStamp.style.opacity = 1; }
   else { trash.add(k); fav.delete(k); nopeStamp.style.opacity = 1; }   // clasifica en un cubo exclusivo; sello a tope
-  save('wp_fav', fav); save('wp_discarded', trash);
+  stampNow(k); save('wp_fav', fav); save('wp_discarded', trash);
   card.style.transition = 'transform .25s ease, opacity .25s ease';
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`; card.style.opacity = 0;
   card = null;   // bloquea doble-decisión mientras vuela
