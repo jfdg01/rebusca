@@ -199,17 +199,16 @@ document.querySelectorAll('#listSort button').forEach(b => b.onclick = () => app
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
 let listSeller = '';   // filtro por vendedor en la papelera (desde el banner: "ver" rechazados de un vendedor)
-let lejosExcl = new Set();   // lejos-sin-envío que el usuario ha movido a "excluidos" a mano (en memoria; al rechazar van a la papelera)
-const isExcluded = r => {   // vetada por la query activa: categoría exacta, palabra en el título o lejos añadido a mano
-  if (lejosExcl.has(key(r))) return true;
+const isExcluded = r => {   // vetada por la query activa: categoría exacta o palabra en el título
   const cats = catExclTerms();
   if (cats.length && cats.includes(col(r, 'categoria'))) return true;
   const t = norm(r[iTitulo] || '');
   return exclTerms().some(w => t.includes(w));
 };
-// "lejos sin envío": a más de 10 km y sin envío, inalcanzable en la práctica. Se ocultan por defecto (toggle).
-const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > 10 && col(r, 'envio') !== 'True'; };
-let hideLejos = localStorage.getItem('wp_hidelejos') !== '0';   // por defecto ocultos
+// "lejos sin envío": a más de N km y sin envío, inalcanzable en la práctica. Nunca entran al mazo.
+let lejosKm = +localStorage.getItem('wp_lejoskm') || 10;   // umbral configurable (Ajustes)
+const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > lejosKm && col(r, 'envio') !== 'True'; };
+let autoExclLejos = localStorage.getItem('wp_autoexcllejos') === '1';   // si activo, los lejos-sin-envío van solos a la papelera (Ajustes)
 // compara dos celdas: numérica si ambas lo son (vacío = -∞), si no alfabética con acentos
 function cmpCell(x, y) {
   if ((x === '' || isNum(x)) && (y === '' || isNum(y))) {
@@ -239,7 +238,7 @@ function filteredRows() {
     if (view === 'trash' && listSeller && col(r, 'vendedor') !== listSeller) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
-    return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r));   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
+    return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !isLejos(r);   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
   });
   if (listView) sortList(rows);   // las listas ordenan con su barra (#listSort)
   else if (sortKeys.length) rows.sort((a, b) => {   // mazo/swipe: orden multinivel
@@ -249,8 +248,20 @@ function filteredRows() {
   return rows;
 }
 
+// ajuste activo: manda solos los lejos-sin-envío al grupo de excluidos (igual que el enlace "excluir", pero automático)
+function enforceLejos() {
+  if (!autoExclLejos) return;
+  let changed = false;
+  for (const r of data) {
+    const k = key(r);
+    if (!fav.has(k) && !trash.has(k) && isLejos(r)) { trash.add(k); stampNow(k); changed = true; }
+  }
+  if (changed) save('wp_discarded', trash);
+}
+
 function render() {
   enforceBlocks();   // vendedores bloqueados a la papelera antes de filtrar
+  enforceLejos();    // auto-exclusión de lejos-sin-envío si el ajuste está activo
   const rows = filteredRows();
   tbody.innerHTML = '';
   const frag = document.createDocumentFragment();
@@ -361,14 +372,14 @@ function paintStat() {
   if (!headers.length) { $('#stat').innerHTML = ''; return; }
   const favs = data.filter(r => fav.has(key(r))).length;
   const disc = data.filter(r => trash.has(key(r))).length;
-  const hasExcl = exclTerms().length || catExclTerms().length || lejosExcl.size;   // ad-hoc: palabra en título, categoría o lejos añadidos a mano
+  const hasExcl = exclTerms().length || catExclTerms().length;   // ad-hoc: palabra en título o categoría
   const vetados = hasExcl ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
   const lejos = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).length;
-  const sinVer = data.length - favs - disc - vetados - (hideLejos ? lejos : 0);   // "vistos" = favs + disc; vetados y lejos-ocultos salen aparte
+  const sinVer = data.length - favs - disc - vetados - lejos;   // "vistos" = favs + disc; vetados y lejos (nunca en mazo) salen aparte
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
-    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="toggleLejos">${hideLejos ? 'mostrar' : 'ocultar'}</span> · <span class="link" id="exclLejos">excluir</span></span>` : '') +
+    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
     `<span><b>${favs}</b> interesantes ` +
     (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
     `</span>` +
@@ -379,19 +390,20 @@ function paintStat() {
   const toggle = v => () => { view = view === v ? '' : v; listSeller = ''; sellerReturn = false; $('#empty').textContent = ''; render(); };
   const t = $('#toggleTrash'); if (t) t.onclick = toggle('trash');
   const f = $('#toggleFav'); if (f) f.onclick = toggle('fav');
-  const tl = $('#toggleLejos');
-  if (tl) tl.onclick = () => { hideLejos = !hideLejos; localStorage.setItem('wp_hidelejos', hideLejos ? '1' : '0'); render(); };
-  const el = $('#exclLejos'); if (el) el.onclick = exclLejos;
+  const el = $('#trashLejos'); if (el) el.onclick = trashLejos;
   const te = $('#trashExcl'); if (te) te.onclick = trashExcluded;
   const cs = $('#clearSort');
   if (cs) cs.onclick = clearSort;
 }
 
-// mueve los "lejos y sin envío" actuales al grupo de excluidos (se unen al contador; luego "mandar a rechazados" los tira a todos)
-function exclLejos() {
-  const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).map(key);
+// manda los "lejos y sin envío" actuales a la papelera de una vez (deshacer: los saca)
+function trashLejos() {
+  const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isLejos(r)).map(key);
   if (!ks.length) return;
-  ks.forEach(k => lejosExcl.add(k)); render();
+  ks.forEach(k => { trash.add(k); stampNow(k); }); save('wp_discarded', trash); render();
+  snack(`${ks.length} lejos a la papelera`, () => {
+    ks.forEach(k => { trash.delete(k); unstamp(k); }); save('wp_discarded', trash); render();
+  });
 }
 // manda todos los excluidos actuales a la papelera de una vez (deshacer: los saca)
 function trashExcluded() {
@@ -423,7 +435,7 @@ function sellerCandidates() {
     const s = col(r, 'vendedor'); if (!s) continue;
     const k = key(r);
     if (trash.has(k)) rej[s] = (rej[s] || 0) + 1;
-    else if (!fav.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r))) (fresh[s] = fresh[s] || []).push(r);
+    else if (!fav.has(k) && !isExcluded(r) && !isLejos(r)) (fresh[s] = fresh[s] || []).push(r);
   }
   return Object.keys(rej).filter(s => rej[s] >= 2 && fresh[s] && !blockSel.has(s))
     .map(s => ({ s, rejected: rej[s], fresh: fresh[s] }))
@@ -721,6 +733,12 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !searchesV
 const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];
 const chip = $('#perfilChip'), gate = $('#gate');
 const avatarEl = $('#perfilAvatar'), opts = $('#perfilOpts');
+// ── ajustes: auto-exclusión y umbral "lejos" (por dispositivo, en localStorage) ──
+const autoExclEl = $('#autoExclLejos'), lejosKmEl = $('#lejosKm');
+autoExclEl.checked = autoExclLejos;
+lejosKmEl.value = lejosKm;
+autoExclEl.onchange = () => { autoExclLejos = autoExclEl.checked; localStorage.setItem('wp_autoexcllejos', autoExclLejos ? '1' : '0'); render(); };
+lejosKmEl.onchange = () => { lejosKm = +lejosKmEl.value || 10; lejosKmEl.value = lejosKm; localStorage.setItem('wp_lejoskm', lejosKm); render(); };
 const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
 let knownPerfiles = [];            // [{name, color}]
 let pendingColor = COLORS[0];
@@ -879,10 +897,12 @@ function nextCard() {
   swipeStage.querySelectorAll('.swipe-card, .swipe-done').forEach(e => e.remove());   // conserva los sellos
   likeStamp.style.opacity = nopeStamp.style.opacity = 0; card = null;
   paintSellerBanner();   // candidatos cambian al rechazar cartas dentro del swipe
-  if (di >= deck.length) {   // mazo agotado
+  const done = di >= deck.length;   // mazo agotado: no hay tarjeta a la que copiar/abrir
+  $('#swVer').disabled = $('#swCopy').disabled = done;
+  if (done) {
     swipeCount.textContent = '';
-    const done = document.createElement('div'); done.className = 'swipe-done';
-    done.textContent = '✓ Revisado todo'; swipeStage.appendChild(done);
+    const el = document.createElement('div'); el.className = 'swipe-done';
+    el.textContent = '✓ Has rebuscado todo'; swipeStage.appendChild(el);
     return;
   }
   swipeCount.textContent = (di + 1) + ' / ' + deck.length;
@@ -987,6 +1007,8 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
     .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
     .catch(() => snack('No se pudo copiar', null));
 };
+$('#swYes').onclick = () => card && fling(1);   // los hints ✓→ / ←✕ también clasifican, no solo el swipe
+$('#swNo').onclick = () => card && fling(-1);
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
 $('#swUndo').onclick = swUndo;

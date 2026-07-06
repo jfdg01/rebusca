@@ -13,6 +13,23 @@
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
                 <button id="perfilChip" class="chip">Cambiar de perfil</button>
+                <label class="opt-row check"
+                    ><input type="checkbox" id="autoExclLejos" /> Excluir
+                    automáticamente items lejos y sin envío</label
+                >
+                <label class="opt-row num">
+                    <span>Distancia para considerarse lejos</span>
+                    <span class="num-ctl"
+                        ><input
+                            type="number"
+                            id="lejosKm"
+                            min="1"
+                            max="500"
+                            step="1"
+                        />
+                        km</span
+                    >
+                </label>
             </div>
         </details>
         <div class="brand-title">
@@ -216,9 +233,9 @@
         </button>
     </div>
     <div class="swipe-count-row">
-        <span class="swipe-hint yes" title="desliza a la derecha para guardar"><i data-icon="check"></i><i data-icon="arrow-right"></i></span>
+        <button class="swipe-hint yes" id="swYes" title="marcar interesante"><i data-icon="check"></i><i data-icon="arrow-right"></i></button>
         <div class="swipe-count" id="swipeCount"></div>
-        <span class="swipe-hint no" title="desliza a la izquierda para descartar"><i data-icon="arrow-left"></i><i data-icon="x"></i></span>
+        <button class="swipe-hint no" id="swNo" title="descartar"><i data-icon="arrow-left"></i><i data-icon="x"></i></button>
     </div>
     <div class="swipe-menu" id="swipeMenu" hidden>
         <p class="swipe-sort-label">Ordenar por…</p>
