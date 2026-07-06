@@ -302,22 +302,33 @@ function renderCats() {
   }
 }
 
-// chips de palabras vetadas de la query activa (solo con CSV cargado y fuera de las vistas de lista)
-function renderExcl() {
-  const box = $('#excl'); if (!box) return;
-  box.hidden = !(headers.length && view === '' && curCsv);
-  const chips = $('#exclChips'); chips.innerHTML = '';
+// añade/quita una palabra de la exclusión de la query activa (compartido main + swipe)
+function addExcl(raw) {   // true si cambió; norma la palabra, evita duplicados
+  const w = norm(raw);
+  if (!w || !curCsv || exclTerms().includes(w)) return false;
+  (exclMap[curCsv] ||= []).push(w); saveExcl(); return true;
+}
+function delExcl(w) {
+  exclMap[curCsv] = exclTerms().filter(x => x !== w);
+  if (!exclMap[curCsv].length) delete exclMap[curCsv];
+  saveExcl();
+}
+// pinta chips de palabras vetadas en un contenedor; onChange se llama al quitar una
+function fillExclChips(chips, onChange) {
+  chips.innerHTML = '';
   for (const w of exclTerms()) {
     const b = document.createElement('button');
     b.className = 'chip excl-chip'; b.textContent = w + ' ✕';   // textContent: sin inyección desde texto de usuario
     b.title = 'quitar exclusión';
-    b.onclick = () => {
-      exclMap[curCsv] = exclTerms().filter(x => x !== w);
-      if (!exclMap[curCsv].length) delete exclMap[curCsv];
-      saveExcl(); render();
-    };
+    b.onclick = () => { delExcl(w); onChange(); };
     chips.append(b);
   }
+}
+// chips de palabras vetadas de la query activa (solo con CSV cargado y fuera de las vistas de lista)
+function renderExcl() {
+  const box = $('#excl'); if (!box) return;
+  box.hidden = !(headers.length && view === '' && curCsv);
+  fillExclChips($('#exclChips'), render);
 }
 
 function paintStat() {
@@ -833,8 +844,11 @@ function openSwipe() {
   deck = filteredRows(); di = 0;
   if (!deck.length) return snack('No hay nada que revisar con estos filtros.', null);
   swipeView.hidden = false; document.body.style.overflow = 'hidden';
-  nextCard();
+  renderSwExcl(); nextCard();
 }
+function rebuildDeck() { deck = filteredRows(); di = 0; nextCard(); }   // re-baraja desde el principio (ya excluye clasificados/vetados)
+// chips sutiles de palabras vetadas dentro del swipe; añadir/quitar re-baraja el mazo en vivo
+function renderSwExcl() { fillExclChips($('#swExclChips'), () => { rebuildDeck(); renderSwExcl(); }); }
 function closeSwipe() { swipeView.hidden = true; document.body.style.overflow = ''; render(); }
 
 function nextCard() {
@@ -866,7 +880,7 @@ function decide(dx, v) {
 function dragify(root) {
   let sx = 0, sy = 0, dx = 0, dy = 0, on = false, axis = 0, t0 = 0;
   root.onpointerdown = e => {
-    if (!card || e.target.closest('a,button')) return;   // sin tarjeta (volando/agotado) o sobre un botón: nada
+    if (!card || e.target.closest('a,button,input')) return;   // sin tarjeta (volando/agotado) o sobre botón/input: nada
     on = true; dx = dy = axis = 0; sx = e.clientX; sy = e.clientY; t0 = e.timeStamp;
     root.setPointerCapture(e.pointerId);
   };
@@ -911,9 +925,14 @@ function fling(dir) {
 dragify(swipeView);   // toda la vista es zona de arrastre (no solo la tarjeta)
 $('#listFilter').oninput = e => { listQ = e.target.value; render(); };
 $('#exclAdd').onkeydown = e => {
-  if (e.key !== 'Enter' || !curCsv) return;
-  const w = norm(e.target.value); e.target.value = '';
-  if (w && !exclTerms().includes(w)) { (exclMap[curCsv] ||= []).push(w); saveExcl(); render(); }
+  if (e.key !== 'Enter') return;
+  if (addExcl(e.target.value)) render();
+  e.target.value = '';
+};
+$('#swExclAdd').onkeydown = e => {
+  if (e.key !== 'Enter') return;
+  if (addExcl(e.target.value)) rebuildDeck();
+  e.target.value = ''; renderSwExcl();
 };
 $('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
 $('#exportFav').onclick = () => {   // copia los destacados a la vista (título — precio) para pegar en una IA
@@ -961,7 +980,7 @@ function applySwipeSort(name) {
   if (swSortCol === name) swSortDir = -swSortDir; else { swSortCol = name; swSortDir = 1; }
   sortKeys = [{ col: c, dir: swSortDir }]; paintSortHeaders();
   paintSwipeSort();
-  deck = filteredRows(); di = 0; nextCard();   // re-baraja desde el principio con el nuevo orden
+  rebuildDeck();   // re-baraja desde el principio con el nuevo orden
 }
 function paintSwipeSort() {
   document.querySelectorAll('#swipeSort button').forEach(b => {

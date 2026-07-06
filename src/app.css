@@ -365,8 +365,8 @@
   /* X alineada al borde izq de la columna centrada (min(440px,100%)), como la main view; 1rem en móvil */
   .swipe-x { position: absolute; top: 1rem; left: max(1rem, calc(50% - 220px)); width: 2.6rem; height: 2.6rem;
     border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
-  .swipe-sort-label { margin: 3rem 0 .5rem; font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
-    color: var(--ink-soft); }   /* baja para no chocar con la X flotante */
+  .swipe-sort-label { margin: 1.8rem 0 .5rem; font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
+    color: var(--ink-soft); }   /* baja para no chocar con la X flotante (centrada, no la pisa) */
   .swipe-sort { display: flex; gap: .4rem; margin: 0 0 .2rem; }
   .swipe-sort button { padding: .35rem .8rem; border-radius: 999px; background: var(--surface);
     border: 1px solid var(--line); color: var(--ink-soft); font: 700 12px var(--mono); }
@@ -379,7 +379,7 @@
   .swipe-card { position: relative; z-index: 1; width: 100%; max-height: 100%; min-height: 0;
     background: var(--surface); border: 1px solid var(--line);
     border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 8px 30px rgba(27,33,30,.18);
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; overflow: hidden;   /* el contenido no se sale de la tarjeta (la descripción ya scrollea sola) */
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
   /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
@@ -387,10 +387,10 @@
   .swipe-card .li-title { flex: 0 0 auto; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
-  .swipe-card .li-img { flex: 0 0 auto; }
+  .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; }   /* tope de alto: deja sitio a flags + descripción en pantallas cortas */
   /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
-  .swipe-card .li-desc { flex: 0 1 auto; min-height: 3rem; max-height: 40vh; overflow-y: auto;
-    display: block; -webkit-line-clamp: unset; }
+  .swipe-card .li-desc { flex: 0 1 auto; min-height: 0; max-height: 40vh; overflow-y: auto;
+    display: block; -webkit-line-clamp: unset; }   /* min-height 0: en pantallas cortas se colapsa antes de recortar los flags */
 
   /* sello LIKE/NOPE: vive en el escenario, DETRÁS de la tarjeta; se revela al deslizar y se queda */
   .sc-badge { position: absolute; inset: 0; opacity: 0; pointer-events: none;
@@ -399,6 +399,13 @@
     font: 800 2rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
   .sc-badge.like > span { color: #C8901A; transform: rotate(-9deg); }
   .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
+
+  /* barra sutil de exclusión dentro del swipe: chips vetados + input pequeño, sin robar protagonismo a la tarjeta */
+  .swipe-excl { width: min(440px, 100%); display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: .5rem 0 0; }
+  .swipe-excl .chips { display: contents; }   /* chips + input fluyen en la misma fila (ahorra alto en pantallas cortas) */
+  .swipe-excl #swExclAdd { flex: 1 1 8rem; min-width: 6rem; max-width: none; min-height: 1.9rem;
+    font: 600 12px var(--mono); opacity: .7; }
+  .swipe-excl #swExclAdd:focus { opacity: 1; }
 
   .swipe-actions { display: flex; justify-content: center; gap: .6rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
   .swipe-actions button { padding: .7rem 1.6rem; font-size: 1rem; }
