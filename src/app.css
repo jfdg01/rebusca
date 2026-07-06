@@ -25,12 +25,15 @@
 
   /* ── cabecera / mesa de mandos ─────────────────────────── */
   header {
-    position: sticky; top: 0; z-index: 20; background: var(--paper);
-    /* sangre completa: el fondo tapa las tarjetas que pasan por debajo al hacer scroll */
+    background: var(--paper);
     margin: 0 calc(-1 * var(--bleed)) .25rem;
     padding: .9rem var(--bleed) .7rem;
     container-type: inline-size;   /* la marca consulta este ancho para esconder el subtítulo */
   }
+  /* solo se fija en la vista de lista (barra compacta): así su fondo tapa las tarjetas que scrollean debajo.
+     en la vista de mazo NO se fija — si no, al desplegar categorías el header supera el alto de pantalla
+     y su fondo opaco tapaba el botón REBUSCAR. Ahora todo baja y sube en flujo normal. */
+  header.pinned { position: sticky; top: 0; z-index: 20; }
   /* panel de búsqueda: agrupa configuración + input + botón en una zona con tarjeta */
   .panel {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
@@ -51,6 +54,9 @@
     font: 400 .66rem/1 var(--mono); letter-spacing: .01em;
     color: var(--ink-soft); margin: 0 0 .55rem .1rem; }
   .panel-label .hint { font-weight: 400; color: var(--ink-soft); opacity: .6; }
+  /* misma tinta y grosor que el texto del lado (hereda de .hint); pegada al texto y desplazada para apuntar al centro del botón */
+  .panel-label .hint-arrow { display: inline-block; font-size: .95rem; margin-left: -.15em; margin-right: 1rem;
+    vertical-align: -.12em; }
   /* badge del "desde" a la derecha del selector, en pino oscuro */
   .pick-since { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%);
     font: 600 .74rem var(--sans); color: var(--pine-ink); pointer-events: none; }
@@ -62,7 +68,7 @@
     display: flex; padding: .3rem .35rem; border-radius: 8px; user-select: none; }
   .opts summary::-webkit-details-marker { display: none; }
   .opts summary:hover, .opts[open] summary { background: var(--surface-2); color: var(--ink); }
-  .opts .menu { position: absolute; top: calc(100% + .3rem); right: 0; z-index: 30;
+  .opts .menu { position: absolute; top: calc(100% + .3rem); left: 0; z-index: 30;
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: 0 8px 24px rgba(27,33,30,.18); padding: .4rem; }
   .opts .menu .chip { white-space: nowrap; }
@@ -192,7 +198,7 @@
   /* flex/max-width: mismo caso que #listFilter — en la columna flex .excl, el flex:1 1 180px de
      input[type=search] se volvía ALTURA y el max-width:320px capaba el ancho (caja alta y estrecha) */
   /* placeholder/texto en sans, igual que #kw y #pick — no mono (era la barra distinta) */
-  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; }
+  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-size: 14px; }
 
   .cats { margin-top: .8rem; }
   .cats summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
@@ -368,7 +374,7 @@
 
   #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
-    box-shadow: none; color: #fff; font: 700 .99rem var(--mono); letter-spacing: .02em; }
+    box-shadow: none; color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
   #swipeFab:hover { background: #10A896; border-color: #10A896; box-shadow: none; }
   #swipeFab:active { box-shadow: none; }
 

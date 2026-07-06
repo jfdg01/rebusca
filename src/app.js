@@ -183,7 +183,9 @@ document.querySelectorAll('#listSort button').forEach(b => b.onclick = () => app
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
-const isExcluded = r => {   // vetada por la query activa: categoría exacta o palabra en el título
+let lejosExcl = new Set();   // lejos-sin-envío que el usuario ha movido a "excluidos" a mano (en memoria; al rechazar van a la papelera)
+const isExcluded = r => {   // vetada por la query activa: categoría exacta, palabra en el título o lejos añadido a mano
+  if (lejosExcl.has(key(r))) return true;
   const cats = catExclTerms();
   if (cats.length && cats.includes(col(r, 'categoria'))) return true;
   const t = norm(r[iTitulo] || '');
@@ -257,6 +259,7 @@ function render() {
   const listView = view === 'trash' || view === 'fav';
   $('table').hidden = !(listView && headers.length);   // la tabla es la vista de lista editable (interesantes/papelera)
   // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
+  document.querySelector('header').classList.toggle('pinned', listView);   // fija la barra solo en modo lista (ver CSS)
   $('.brand').hidden = listView;
   document.querySelectorAll('header .panel').forEach(p => p.hidden = listView);   // varios paneles ahora (perfil, buscar, query activa)
   $('#listHead').hidden = !listView;
@@ -265,7 +268,7 @@ function render() {
   $('#exportFav').hidden = !(view === 'fav' && rows.length);   // copiar solo tiene sentido con destacados a la vista
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
-  if (!listView && hasRows) $('#swipeFab').textContent = `A REBUSCAR · ${rows.length}`;
+  if (!listView && hasRows) $('#swipeFab').textContent = 'REBUSCAR';
   $('#empty').hidden = !!hasRows;
   if (headers.length && !rows.length)
     $('#empty').textContent = listView && listQ ? 'Nada coincide con el filtro.'
@@ -340,14 +343,14 @@ function paintStat() {
   if (!headers.length) { $('#stat').innerHTML = ''; return; }
   const favs = data.filter(r => fav.has(key(r))).length;
   const disc = data.filter(r => trash.has(key(r))).length;
-  const hasExcl = exclTerms().length || catExclTerms().length;   // ad-hoc: palabra en título o categoría
+  const hasExcl = exclTerms().length || catExclTerms().length || lejosExcl.size;   // ad-hoc: palabra en título, categoría o lejos añadidos a mano
   const vetados = hasExcl ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
   const lejos = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).length;
   const sinVer = data.length - favs - disc - vetados - (hideLejos ? lejos : 0);   // "vistos" = favs + disc; vetados y lejos-ocultos salen aparte
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
-    (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">a la papelera</span></span>` : '') +
-    (lejos ? `<span><b>${lejos}</b> lejos sin envío · <span class="link" id="toggleLejos">${hideLejos ? 'mostrar' : 'ocultar'}</span></span>` : '') +
+    (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
+    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="toggleLejos">${hideLejos ? 'mostrar' : 'ocultar'}</span> · <span class="link" id="exclLejos">excluir</span></span>` : '') +
     `<span><b>${favs}</b> interesantes ` +
     (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
     `</span>` +
@@ -360,11 +363,18 @@ function paintStat() {
   const f = $('#toggleFav'); if (f) f.onclick = toggle('fav');
   const tl = $('#toggleLejos');
   if (tl) tl.onclick = () => { hideLejos = !hideLejos; localStorage.setItem('wp_hidelejos', hideLejos ? '1' : '0'); render(); };
+  const el = $('#exclLejos'); if (el) el.onclick = exclLejos;
   const te = $('#trashExcl'); if (te) te.onclick = trashExcluded;
   const cs = $('#clearSort');
   if (cs) cs.onclick = clearSort;
 }
 
+// mueve los "lejos y sin envío" actuales al grupo de excluidos (se unen al contador; luego "mandar a rechazados" los tira a todos)
+function exclLejos() {
+  const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).map(key);
+  if (!ks.length) return;
+  ks.forEach(k => lejosExcl.add(k)); render();
+}
 // manda todos los excluidos actuales a la papelera de una vez (deshacer: los saca)
 function trashExcluded() {
   const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).map(key);
