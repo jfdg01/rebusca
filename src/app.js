@@ -75,6 +75,7 @@ const thead = $('thead'), tbody = $('tbody');
 const ICON = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   'arrow-left': '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   star: '<path d="M11.5 2.3 8.9 8.6 2.2 9.2c-.9.1-1.2 1.2-.5 1.8l5 4.4-1.5 6.5c-.2.9.7 1.6 1.5 1.1l5.8-3.5 5.8 3.5c.8.5 1.7-.2 1.5-1.1l-1.5-6.5 5-4.4c.7-.6.4-1.7-.5-1.8l-6.7-.6L13 2.3c-.3-.8-1.4-.8-1.7 0Z"/>',
@@ -825,21 +826,22 @@ fetch('/perfiles').then(r => r.json()).then(list => {
 // ── modo swipe (tinder): una tarjeta a la vez; arrastra ← descartar / → interesa ──
 const swipeView = $('#swipeView'), swipeStage = $('#swipeStage'), swipeCount = $('#swipeCount');
 const likeStamp = $('#swLikeStamp'), nopeStamp = $('#swNopeStamp');   // sellos fijos detrás de la tarjeta
-let deck = [], di = 0, card = null;
+let deck = [], di = 0, card = null, undoStack = [];
 const col = (r, name) => { const i = headers.indexOf(name); return i >= 0 ? r[i] : ''; };
 
 function openSwipe() {
-  deck = filteredRows(); di = 0;
+  deck = filteredRows(); di = 0; undoStack = [];
   if (!deck.length) return snack('No hay nada que revisar con estos filtros.', null);
   swipeView.hidden = false; document.body.style.overflow = 'hidden';
   renderSwExcl(); nextCard();
 }
-function rebuildDeck() { deck = filteredRows(); di = 0; nextCard(); }   // re-baraja desde el principio (ya excluye clasificados/vetados)
+function rebuildDeck() { deck = filteredRows(); di = 0; undoStack = []; nextCard(); }   // re-baraja desde el principio (ya excluye clasificados/vetados); el historial de deshacer deja de ser válido
 // chips sutiles de palabras vetadas dentro del swipe; añadir/quitar re-baraja el mazo en vivo
 function renderSwExcl() { fillExclChips($('#swExclChips'), () => { rebuildDeck(); renderSwExcl(); }); }
 function closeSwipe() { swipeView.hidden = true; $('#swipeMenu').hidden = true; document.body.style.overflow = ''; render(); }
 
 function nextCard() {
+  refreshUndo();
   swipeStage.querySelectorAll('.swipe-card, .swipe-done').forEach(e => e.remove());   // conserva los sellos
   likeStamp.style.opacity = nopeStamp.style.opacity = 0; card = null;
   paintSellerBanner();   // candidatos cambian al rechazar cartas dentro del swipe
@@ -852,6 +854,7 @@ function nextCard() {
   swipeCount.textContent = (di + 1) + ' / ' + deck.length;
   card = buildCard(deck[di]); swipeStage.appendChild(card);
 }
+function refreshUndo() { $('#swUndo').disabled = !undoStack.length; }
 
 function buildCard(r) {
   const c = document.createElement('div'); c.className = 'swipe-card';
@@ -902,6 +905,7 @@ function dragify(root) {
 
 function fling(dir) {
   const r = deck[di], k = key(r);
+  undoStack.push({ di, k, wasFav: fav.has(k), wasTrash: trash.has(k), wasStamp: stamp[k] });   // estado previo para deshacer
   if (dir > 0) { fav.add(k); trash.delete(k); likeStamp.style.opacity = 1; }
   else { trash.add(k); fav.delete(k); nopeStamp.style.opacity = 1; }   // clasifica en un cubo exclusivo; sello a tope
   stampNow(k); save('wp_fav', fav); save('wp_discarded', trash);
@@ -909,6 +913,17 @@ function fling(dir) {
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`; card.style.opacity = 0;
   card = null;   // bloquea doble-decisión mientras vuela
   setTimeout(() => { di++; nextCard(); }, 200);
+}
+// deshacer el último swipe: restaura el cubo/sello previo del item y vuelve a mostrar su tarjeta
+function swUndo() {
+  const h = undoStack.pop();
+  if (!h) return;
+  if (h.wasFav) fav.add(h.k); else fav.delete(h.k);
+  if (h.wasTrash) trash.add(h.k); else trash.delete(h.k);
+  if (h.wasStamp === undefined) unstamp(h.k);
+  else { stamp[h.k] = h.wasStamp; localStorage.setItem('wp_stamp', JSON.stringify(stamp)); }
+  save('wp_fav', fav); save('wp_discarded', trash);
+  di = h.di; nextCard();   // vuelve a la tarjeta que se había swipeado
 }
 
 dragify(swipeView);   // toda la vista es zona de arrastre (no solo la tarjeta)
@@ -936,6 +951,7 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
 };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
+$('#swUndo').onclick = swUndo;
 // cog: menú flotante con orden + gestión de vendedores; se cierra al tocar fuera
 const swipeMenu = $('#swipeMenu');
 $('#swipeCog').onclick = e => { e.stopPropagation(); swipeMenu.hidden = !swipeMenu.hidden; };
