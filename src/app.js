@@ -578,7 +578,7 @@ function renderQlist(term) {
 const norm = s => s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function openQlist() { renderQlist(pick.value); }
 function closeQlist() { qlist.hidden = true; }
-pick.onfocus = () => { pick.select(); openQlist(); };   // al enfocar: abre y selecciona para reescribir directo
+pick.onfocus = () => { pick.select(); renderQlist(''); };   // al enfocar: abre la lista COMPLETA (aún no se ha tocado); filtra solo tras teclear
 pick.oninput = () => { pickSince.hidden = true; qbox.classList.remove('has-since'); openQlist(); };   // al teclear para filtrar, oculta el badge
 document.addEventListener('pointerdown', e => { if (!qbox.contains(e.target)) closeQlist(); });
 pick.addEventListener('keydown', e => { if (e.key === 'Escape') { closeQlist(); pick.blur(); } });
