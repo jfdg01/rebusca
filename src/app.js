@@ -603,6 +603,7 @@ const csvNameOf = (kw, since) => kw.toLowerCase().split(/\s+/).filter(Boolean).j
 function setLoading(on, n) {
   const box = $('#loading');
   $('#stat').hidden = on;    // los stats son de la query vieja: ocúltalos mientras se busca
+  $('.panel.picker').hidden = on;   // búsqueda activa + exclusiones son de la query vieja: fuera mientras se busca
   if (!on) { box.hidden = true; return; }   // render() recoloca #empty/botón al cargar el CSV
   $('#empty').hidden = true; $('#swipeFab').hidden = true; box.hidden = false;
   $('#loadingCount').textContent = n ? `${n} encontrados` : 'Buscando…';
