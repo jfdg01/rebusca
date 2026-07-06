@@ -273,6 +273,7 @@
   .li-age { font: 600 12.5px var(--mono); color: var(--ink-soft); text-align: right; }
   /* envío + distancia: una línea centrada bajo el precio */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: center; margin-top: .4rem; }
+  .li-star { font-size: .55em; vertical-align: super; margin-left: .1em; font-weight: 700; }   /* asterisco del precio estimado (comisión + porte); explicación en Ajustes */
   /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
   .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
     font: 700 11px var(--mono); color: var(--ink-soft); background: var(--surface-2); }
@@ -404,6 +405,9 @@
     background: var(--surface); border: 1px solid var(--line); border-radius: .8rem; padding: 1rem;
     box-shadow: 0 10px 34px rgba(0, 0, 0, .18); }
   .swipe-menu[hidden] { display: none; }
+  .swipe-note { margin: .8rem 0 0; padding: .8rem 0 0; border-top: 1px solid var(--line);
+    font: 400 11px/1.5 var(--mono); color: var(--ink-soft); }
+  .swipe-note b { color: var(--ink); }
   .swipe-sort-label { margin: 0 0 .5rem; font: 400 .66rem/1 var(--mono); letter-spacing: .01em; color: var(--ink-soft); }
   .swipe-sort { display: flex; gap: .4rem; margin: 0 0 .2rem; }
   .swipe-sort button { padding: .35rem .8rem; border-radius: 999px; background: var(--surface);

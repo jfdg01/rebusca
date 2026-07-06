@@ -69,6 +69,15 @@ const isNum = v => v !== '' && !isNaN(v);
 // identidad inmutable: id de Wallapop. Fallback titulo|precio solo para drag de CSV sin id.
 const key = r => (iId >= 0 && r[iId]) || (r[iTitulo] + '|' + r[iPrecio]);
 
+// --- precio final estimado al comprador (envío protegido de Wallapop) ---
+// tarifa de envío por tramo de peso (up_to_kg), verificada contra la API: kg <= tope -> €
+const SHIP = [[2, 3.5], [5, 4.5], [10, 6.5], [20, 9.5], [30, 14.5]];
+const porte = kg => (SHIP.find(([b]) => kg <= b) || SHIP[SHIP.length - 1])[1];
+// ponytail: comisión de protección ~0,70€ + 5% del precio; las fuentes divergen (5–10%),
+// ajústalo aquí si cambia. Un solo sitio para toda la app.
+const finalPrice = (precio, kg = 5) => precio + 0.70 + 0.05 * precio + porte(kg);
+const eur = n => n.toFixed(2).replace('.', ',') + '€';   // 78.7 -> "78,70€"
+
 const $ = s => document.querySelector(s);
 const thead = $('thead'), tbody = $('tbody');
 // ── iconos: SVG inline de Lucide (MIT), heredan color con currentColor ──
@@ -128,17 +137,25 @@ function fillCard(el, r) {
   add('li-title', col(r, 'titulo'));
 
   // precio a la izquierda; antigüedad (sin color de frescura) a la derecha
+  const conEnvio = col(r, 'envio') === 'True';
   const head = document.createElement('div'); head.className = 'li-head';
   const price = document.createElement('span'); price.className = 'li-price';
-  price.textContent = precio !== '' ? `${precio} €` : '—'; head.append(price);
+  // con envío: el precio mostrado ES el final estimado al comprador (comisión + porte a 5 kg),
+  // con * en superíndice; su explicación vive en Ajustes. Sin envío: precio del anuncio tal cual.
+  if (conEnvio && isNum(precio)) {
+    price.textContent = eur(finalPrice(+precio));
+    const s = document.createElement('sup'); s.className = 'li-star'; s.textContent = '*'; price.append(s);
+  } else {
+    price.textContent = precio !== '' ? `${precio} €` : '—';
+  }
+  head.append(price);
   if (isNum(dias)) { const a = document.createElement('div'); a.className = 'li-age'; a.textContent = humanAge(+dias); head.append(a); }
   el.append(head);
 
   // envío + distancia en una sola línea centrada bajo el precio
   let where = km !== '' ? `a ${km} km` : '';
   if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
-  const envio = col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío';
-  add('li-flags', where ? `${envio}, ${where}` : envio);
+  add('li-flags', where ? `${conEnvio ? 'Con envío' : 'Sin envío'}, ${where}` : (conEnvio ? 'Con envío' : 'Sin envío'));
   // cuándo se clasificó (solo en papelera/destacados y si hay marca de tiempo)
   if ((view === 'trash' || view === 'fav') && stamp[key(r)])
     add('li-when' + (view === 'fav' ? ' fav' : ''), `${view === 'fav' ? 'Destacado' : 'Descartado'} ${ago(stamp[key(r)])}`);
