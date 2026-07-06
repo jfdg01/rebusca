@@ -300,6 +300,9 @@ function renderCats() {
     };
     chips.append(b);
   }
+  const clr = $('#catClear');   // limpiar (en el summary): reactiva todas las categorías vetadas
+  clr.hidden = !excl.length;
+  clr.onclick = e => { e.preventDefault(); e.stopPropagation(); delete catExclMap[curCsv]; saveCatExcl(); render(); };
 }
 
 // añade/quita una palabra de la exclusión de la query activa (compartido main + swipe)

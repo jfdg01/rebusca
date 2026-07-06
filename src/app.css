@@ -192,6 +192,9 @@
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
   .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
     text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
+  .cats summary .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline;
+    text-transform: none; letter-spacing: 0; margin-left: .5rem; }
+  .cats summary .link[hidden] { display: none; }
 
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
   .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
