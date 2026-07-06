@@ -110,6 +110,8 @@
   .search #kw { flex: 1 1 100%; max-width: none; }
   .search #since { flex: 1 1 auto; }
   .search button { flex: 0 0 auto; }
+  /* misma altura que las barras del picker (query activa / excluir) para que todas las barras sean iguales */
+  .search #kw, .search #since, .search button { min-height: 2.15rem; }
   select, input[type=search], button, input[type=file] { font: 13px var(--sans); }
   select, input[type=search], input[type=number] {
     padding: .38rem .55rem; border: 1px solid var(--line); border-radius: 6px;
@@ -176,13 +178,15 @@
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
   .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+  .excl .panel-label { margin-bottom: 0; }
   .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
   .excl .chips:empty { display: none; }
   .excl-chip { font: 600 12px var(--mono); padding: .28rem .6rem; min-height: 0;
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
   /* flex/max-width: mismo caso que #listFilter — en la columna flex .excl, el flex:1 1 180px de
      input[type=search] se volvía ALTURA y el max-width:320px capaba el ancho (caja alta y estrecha) */
-  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font: 600 13px var(--mono); }
+  /* placeholder/texto en sans, igual que #kw y #pick — no mono (era la barra distinta) */
+  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; }
 
   .cats { margin-top: .8rem; }
   .cats summary { cursor: pointer; font: 700 12px var(--mono); letter-spacing: .04em;

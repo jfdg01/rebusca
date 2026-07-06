@@ -1,6 +1,9 @@
 <!doctype html>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+/>
 <title>Rebusca</title>
 <link rel="stylesheet" href="app.css" />
 
@@ -23,7 +26,9 @@
             />
             <span class="eyebrow">rebuscador<br />de chollos</span>
         </div>
-        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">?</button>
+        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">
+            ?
+        </button>
     </div>
     <div class="panel">
         <div class="search">
@@ -42,29 +47,51 @@
             </select>
             <button id="scrape" class="primary">Buscar</button>
         </div>
-        <label class="titleonly"><input type="checkbox" id="titleOnly" /> solo en el título</label>
+        <label class="titleonly"
+            ><input type="checkbox" id="titleOnly" /> solo en el título</label
+        >
     </div>
     <div class="panel picker">
-        <span class="panel-label">Búsqueda activa <span class="hint">pulsa para cambiar</span></span>
+        <span class="panel-label"
+            >Búsqueda activa <span class="hint">pulsa para cambiar</span></span
+        >
         <div class="menu-row">
             <div class="qbox">
-                <input id="pick" class="query" type="search" autocomplete="off"
+                <input
+                    id="pick"
+                    class="query"
+                    type="search"
+                    autocomplete="off"
                     placeholder="elige una búsqueda…"
-                    title="tus búsquedas — escribe para filtrar" />
+                    title="tus búsquedas — escribe para filtrar"
+                />
                 <span id="pickSince" class="pick-since" hidden></span>
                 <div id="qlist" class="qlist" hidden></div>
             </div>
-            <button id="manageSearches" class="icon-btn" title="gestionar búsquedas"
-                data-icon="list"></button>
+            <button
+                id="manageSearches"
+                class="icon-btn"
+                title="gestionar búsquedas"
+                data-icon="list"
+            ></button>
         </div>
         <div class="excl" id="excl" hidden>
+            <span class="panel-label">Excluir items que contengan...</span>
             <div class="chips" id="exclChips"></div>
-            <input id="exclAdd" type="search" autocomplete="off"
+            <input
+                id="exclAdd"
+                type="search"
+                autocomplete="off"
                 placeholder="excluir palabra solo en esta búsqueda…"
-                title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)" />
+                title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)"
+            />
         </div>
         <details class="cats" id="cats" hidden>
-            <summary>Excluir por categoría<span class="link" id="catClear" hidden>limpiar</span></summary>
+            <summary>
+                Excluir por categoría<span class="link" id="catClear" hidden
+                    >limpiar</span
+                >
+            </summary>
             <div class="chips" id="catChips"></div>
         </details>
         <div class="stat" id="stat"></div>
@@ -72,12 +99,28 @@
     </div>
     <div class="list-head" id="listHead" hidden>
         <div class="list-head-bar">
-            <button id="listBack" title="volver" data-icon="arrow-left"></button>
+            <button
+                id="listBack"
+                title="volver"
+                data-icon="arrow-left"
+            ></button>
             <h2 id="listTitle"></h2>
-            <button id="exportFav" class="chip" title="copiar la lista al portapapeles" hidden>Copiar</button>
+            <button
+                id="exportFav"
+                class="chip"
+                title="copiar la lista al portapapeles"
+                hidden
+            >
+                Copiar
+            </button>
         </div>
-        <input id="listFilter" type="search" autocomplete="off"
-            placeholder="filtrar en la lista…" title="filtra por título" />
+        <input
+            id="listFilter"
+            type="search"
+            autocomplete="off"
+            placeholder="filtrar en la lista…"
+            title="filtra por título"
+        />
         <div class="swipe-sort" id="listSort">
             <button data-sort="">Entrada</button>
             <button data-sort="precio">Precio</button>
@@ -91,9 +134,7 @@
     <thead></thead>
     <tbody></tbody>
 </table>
-<div class="empty" id="empty">
-    Busca algo primero
-</div>
+<div class="empty" id="empty">Busca algo primero</div>
 
 <div class="loading" id="loading" hidden>
     <svg class="spin" viewBox="0 0 44 44" aria-hidden="true">
@@ -101,8 +142,10 @@
         <circle class="arc" cx="22" cy="22" r="19"></circle>
     </svg>
     <div class="loading-count" id="loadingCount">Buscando…</div>
-    <div class="loading-note"><span id="loadingTime">0s</span> buscando…
-        · <span class="link" id="stopScrape">parar búsqueda</span></div>
+    <div class="loading-note">
+        <span id="loadingTime">0s</span> buscando… ·
+        <span class="link" id="stopScrape">parar búsqueda</span>
+    </div>
 </div>
 
 <button id="swipeFab" hidden>Empezar a swipe</button>
@@ -120,13 +163,20 @@
             />
             <div class="swatches" id="swatches"></div>
             <div class="creator-btns">
-                <button type="button" class="ghost danger" id="deletePerfil" hidden>
+                <button
+                    type="button"
+                    class="ghost danger"
+                    id="deletePerfil"
+                    hidden
+                >
                     Borrar
                 </button>
                 <button type="button" class="ghost" id="cancelCreate" hidden>
                     Volver
                 </button>
-                <button class="primary" type="submit" id="saveBtn">Entrar</button>
+                <button class="primary" type="submit" id="saveBtn">
+                    Entrar
+                </button>
             </div>
         </form>
         <button class="gate-exit" id="gateX" hidden>Salir</button>
@@ -135,11 +185,21 @@
 
 <div class="searches" id="searchesView" hidden>
     <div class="searches-bar">
-        <button class="swipe-x" id="searchesX" title="volver" data-icon="arrow-left"></button>
+        <button
+            class="swipe-x"
+            id="searchesX"
+            title="volver"
+            data-icon="arrow-left"
+        ></button>
         <h2>Búsquedas</h2>
     </div>
-    <input id="searchesFilter" type="search" autocomplete="off"
-        placeholder="filtrar búsquedas…" title="filtra por término" />
+    <input
+        id="searchesFilter"
+        type="search"
+        autocomplete="off"
+        placeholder="filtrar búsquedas…"
+        title="filtra por término"
+    />
     <div class="searches-list" id="searchesList"></div>
 </div>
 
@@ -153,17 +213,26 @@
     </div>
     <div class="swipe-count" id="swipeCount"></div>
     <div class="swipe-stage" id="swipeStage">
-        <div class="sc-badge like" id="swLikeStamp"><span><i data-icon="star"></i> Interesa</span></div>
+        <div class="sc-badge like" id="swLikeStamp">
+            <span><i data-icon="star"></i> Interesa</span>
+        </div>
         <div class="sc-badge nope" id="swNopeStamp"><span>Descartar</span></div>
     </div>
     <div class="swipe-excl" id="swExcl">
         <div class="chips" id="swExclChips"></div>
-        <input id="swExclAdd" type="search" autocomplete="off" placeholder="excluir palabra…"
-            title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)" />
+        <input
+            id="swExclAdd"
+            type="search"
+            autocomplete="off"
+            placeholder="excluir palabra…"
+            title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)"
+        />
     </div>
     <div class="swipe-actions">
         <button id="swCopy" class="ghost">Copiar datos</button>
-        <button id="swVer" class="primary">Ver en Wallapop <i data-icon="external"></i></button>
+        <button id="swVer" class="primary">
+            Ver en Wallapop <i data-icon="external"></i>
+        </button>
     </div>
 </div>
 
