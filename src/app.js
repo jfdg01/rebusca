@@ -300,9 +300,11 @@ function render() {
   $('#listHead').hidden = !listView;
   if (!listView && listQ) { listQ = ''; $('#listFilter').value = ''; }   // el filtro no sobrevive al salir de la lista
   if (!listView) listSeller = '';   // ni el filtro por vendedor
-  if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : listSeller ? 'Rechazados del vendedor' : 'Papelera';
+  if (listView) $('#listTitle').textContent = view === 'fav' ? 'Favoritos' : listSeller ? 'Rechazados del vendedor' : 'Rechazados';
   $('#exportFav').hidden = !(view === 'fav' && rows.length);   // copiar solo tiene sentido con destacados a la vista
-  $('#calcPeso').hidden = !(view === 'fav' && rows.some(r => col(r, 'envio') === 'True'));   // solo con destacados con envío
+  const favConEnvio = view === 'fav' && rows.some(r => col(r, 'envio') === 'True');
+  $('#calcPeso').hidden = !favConEnvio;   // solo con favoritos con envío
+  $('#priceNote').hidden = !favConEnvio;   // la nota explica ese precio final: mismo criterio que el botón
   $('#listActions').hidden = !(view === 'fav' && rows.length);   // la sección solo existe con destacados a la vista
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
@@ -313,7 +315,7 @@ function render() {
   $('#empty').hidden = !!hasRows || showCopy;   // el botón ocupa el hueco de REBUSCAR (mismo sitio); sin "Nada que revisar" que lo empuje abajo
   if (headers.length && !rows.length)
     $('#empty').textContent = listView && listQ ? 'Nada coincide con el filtro.'
-      : view === 'trash' ? 'La papelera está vacía.'
+      : view === 'trash' ? 'No hay rechazados.'
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
   paintSellerBanner();
@@ -393,10 +395,10 @@ function paintStat() {
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
     (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
     `<span><b>${disc}</b> descartados ` +
-    (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver papelera'}</span>` : '') +
+    (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver rechazados'}</span>` : '') +
     `</span>` +
     `<span><b>${favs}</b> interesantes ` +
-    (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
+    (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver interesantes'}</span>` : '') +
     `</span>` +
     (sortKeys.length ? `<span>orden: <b>${sortKeys.map(s => headers[s.col]).join(' › ')}</b> · <span class="link" id="clearSort">limpiar</span></span>` : '');
   const toggle = v => () => { view = view === v ? '' : v; listSeller = ''; sellerReturn = false; $('#empty').textContent = ''; render(); };
