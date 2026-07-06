@@ -23,6 +23,9 @@ const trash = load('wp_discarded'), fav = load('wp_fav');   // 2 cubos exclusivo
 let exclMap = JSON.parse(localStorage.getItem('wp_excl') || '{}');   // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
 const exclTerms = () => (curCsv && exclMap[curCsv]) || [];   // palabras vetadas de la query activa
 const saveExcl = () => { localStorage.setItem('wp_excl', JSON.stringify(exclMap)); pushEstado(); };
+let catExclMap = JSON.parse(localStorage.getItem('wp_catexcl') || '{}');   // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
+const catExclTerms = () => (curCsv && catExclMap[curCsv]) || [];
+const saveCatExcl = () => { localStorage.setItem('wp_catexcl', JSON.stringify(catExclMap)); pushEstado(); };
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
 let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
@@ -31,7 +34,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, color: perfilColor }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, color: perfilColor }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -41,9 +44,11 @@ function hydrateEstado() {
     }
     for (const k of fav) if (trash.has(k)) fav.delete(k);   // cubos exclusivos: limpia solapes heredados (gana papelera)
     exclMap = (e.excl && typeof e.excl === 'object' && !Array.isArray(e.excl)) ? e.excl : {};   // {csv:[palabras]}; ignora formatos viejos
+    catExclMap = (e.catExcl && typeof e.catExcl === 'object' && !Array.isArray(e.catExcl)) ? e.catExcl : {};   // {csv:[categorias]}
     localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
     localStorage.setItem('wp_fav', JSON.stringify([...fav]));
     localStorage.setItem('wp_excl', JSON.stringify(exclMap));
+    localStorage.setItem('wp_catexcl', JSON.stringify(catExclMap));
     if (data.length) render();
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
@@ -132,7 +137,12 @@ function clearSort() { sortKeys = []; paintSortHeaders(); render(); }
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
-const isExcluded = r => { const ws = exclTerms(); if (!ws.length) return false; const t = norm(r[iTitulo] || ''); return ws.some(w => t.includes(w)); };
+const isExcluded = r => {   // vetada por palabra en el título O por categoría exacta
+  const cats = catExclTerms();
+  if (cats.length && cats.includes(col(r, 'categoria'))) return true;
+  const ws = exclTerms(); if (!ws.length) return false;
+  const t = norm(r[iTitulo] || ''); return ws.some(w => t.includes(w));
+};
 function filteredRows() {
   const q = (view === 'trash' || view === 'fav') ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
   let rows = data.filter(r => {
@@ -199,6 +209,33 @@ function render() {
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
   renderExcl();
+  renderCats();
+}
+
+// chips de categorías presentes en la query (con nº de cartas); clic veta/reactiva la categoría
+function renderCats() {
+  const box = $('#cats'); if (!box) return;
+  const show = headers.length && view === '' && curCsv && headers.includes('categoria');
+  box.hidden = !show;
+  const chips = $('#catChips'); chips.innerHTML = '';
+  if (!show) return;
+  const counts = {};
+  for (const r of data) { const c = col(r, 'categoria'); if (c) counts[c] = (counts[c] || 0) + 1; }
+  const excl = catExclTerms();
+  for (const c of Object.keys(counts).sort((a, b) => counts[b] - counts[a])) {
+    const b = document.createElement('button');
+    const off = excl.includes(c);
+    b.className = 'chip cat-chip' + (off ? ' off' : '');
+    b.textContent = `${c} (${counts[c]})`;   // textContent: a prueba de < & en el nombre
+    b.onclick = () => {
+      const cur = catExclMap[curCsv] || (catExclMap[curCsv] = []);
+      const i = cur.indexOf(c);
+      if (i >= 0) cur.splice(i, 1); else cur.push(c);
+      if (!cur.length) delete catExclMap[curCsv];
+      saveCatExcl(); render();
+    };
+    chips.append(b);
+  }
 }
 
 // chips de palabras vetadas de la query activa (solo con CSV cargado y fuera de las vistas de lista)
@@ -291,8 +328,8 @@ const pick = $('#pick'), qbox = $('.qbox'), qlist = $('#qlist'), pickSince = $('
 let allQueries = [];   // [{csv, label, kw, since}] — fuente del combobox
 let curCsv = null;     // csv de la query seleccionada (el input solo muestra el kw)
 const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último dataset por persona
-function loadQuery(csv) {   // carga el CSV y lo recuerda como el último de la persona
-  fetch(csv).then(r => r.text()).then(t => loadCSV(t, csv));
+function loadQuery(csv) {   // carga el CSV (scopeado al perfil) y lo recuerda como el último de la persona
+  fetch('/csvfile' + qsPerfil() + '&csv=' + encodeURIComponent(csv)).then(r => r.text()).then(t => loadCSV(t, csv));
   if (perfil) localStorage.setItem(lastCsvKey(), csv);
 }
 function selectQuery(csv) {   // input = solo el kw; el "desde" va como badge pino a la derecha
@@ -353,7 +390,7 @@ console.assert(queryLabel('ps4--semana.csv') === 'ps4 (última semana)'
 
 // CSVs que hay en el servidor → items del combobox (kw + ventana temporal, filtrable al escribir)
 function refreshCsvs() {
-  return fetch('/csvs').then(r => r.json()).then(list => {
+  return fetch('/csvs' + qsPerfil()).then(r => r.json()).then(list => {
     const have = new Set(allQueries.map(q => q.csv));
     for (const c of list) if (!have.has(c)) {
       const { kw, since } = queryParts(c);
@@ -394,18 +431,18 @@ $('#scrape').onclick = async () => {
   function doStop() {   // corta el scraper; el /scrape en curso vuelve con el CSV parcial ya escrito
     stop.onclick = null; stop.classList.remove('link'); stop.textContent = 'parando…';
     fetch('/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ csv: csvNameOf(kw, since) }) }).catch(() => {});
+      body: JSON.stringify({ csv: csvNameOf(kw, since), perfil: perfil || 'casa' }) }).catch(() => {});
   }
   setLoading(true, null); startTimer();
   const poll = setInterval(async () => {           // el server responde /progress en paralelo al scrape
     try {
-      const p = (await (await fetch('/progress?csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
+      const p = (await (await fetch('/progress' + qsPerfil() + '&csv=' + encodeURIComponent(csvNameOf(kw, since)))).json()).progress;
       if (p) setLoading(true, p);   // el sidecar ya es solo el contador
     } catch {}
   }, 800);
   try {
     const res = await fetch('/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: kw, since: since || null }) });
+      body: JSON.stringify({ keywords: kw, since: since || null, titleOnly: $('#titleOnly').checked, perfil: perfil || 'casa' }) });
     const r = await res.json();
     if (r.error) throw new Error(r.error);
     await refreshCsvs();
@@ -427,7 +464,7 @@ function closeManager() { searchesView.hidden = true; document.body.style.overfl
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;   // "última semana" → "Última semana"
 function renderSearches() {   // relee del servidor y repinta con el filtro actual
   searchesList.innerHTML = '<div class="qempty">cargando…</div>';
-  fetch('/searches').then(r => r.json()).then(list => {
+  fetch('/searches' + qsPerfil()).then(r => r.json()).then(list => {
     allSearches = list; paintSearches();
   }).catch(() => { searchesList.innerHTML = '<div class="qempty">no se pudo cargar</div>'; });
 }
@@ -466,7 +503,7 @@ function renameSearch(csv, kw, since) {
   if (nuevo === null) return;
   const name = nuevo.trim();
   if (!name || name === kw) return;
-  fetch('/csv?csv=' + encodeURIComponent(csv), {
+  fetch('/csv' + qsPerfil() + '&csv=' + encodeURIComponent(csv), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nuevo: csvNameOf(name, since) }) })
     .then(r => r.json()).then(res => {
@@ -476,7 +513,7 @@ function renameSearch(csv, kw, since) {
 }
 function deleteSearch(csv, kw) {
   if (!confirm(`¿Borrar la búsqueda "${kw}"? Se pierde el CSV (el estado por perfil se conserva).`)) return;
-  fetch('/csv?csv=' + encodeURIComponent(csv), {
+  fetch('/csv' + qsPerfil() + '&csv=' + encodeURIComponent(csv), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ borrar: true }) })
     .then(r => r.json()).then(res => {
@@ -533,11 +570,15 @@ function setPerfil(name, color, isNew) {
   if (found) found.color = color; else knownPerfiles.push({ name, color });
   renderChip();
   closeGate();
+  // cambiar de perfil: olvida el combobox y el dataset del perfil anterior (búsquedas aisladas)
+  allQueries = []; curCsv = null; pick.value = ''; pickSince.hidden = true; qbox.classList.remove('has-since');
+  headers = []; data = []; sortKeys = []; view = ''; thead.innerHTML = '';
+  $('#empty').textContent = 'Busca algo primero'; render();
   if (isNew) {                     // persiste ya el perfil vacío con su color
     for (const s of [trash, fav]) s.clear();
     fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trash: [], fav: [], color }) }).catch(() => {});
-    if (data.length) render();
+    refreshCsvs();               // combobox del perfil nuevo (vacío)
   } else { hydrateEstado(); restoreLastCsv(); }
 }
 
@@ -687,7 +728,8 @@ function dragify(root) {
     dx = e.clientX - sx; dy = e.clientY - sy;
     if (!axis) {                                   // eje aún sin decidir: espera intención clara (8px)
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      axis = Math.abs(dy) > Math.abs(dx) * 1.4 ? 'y' : 'x';   // ponytail: el swipe manda; solo bloquea a scroll un arrastre claramente vertical
+
       if (axis === 'x') card.classList.add('grab');
     }
     if (axis !== 'x') return;                       // vertical: deja scrollear la descripción
@@ -745,6 +787,43 @@ $('#swVer').onclick = () => {
   if (!url) return;
   window.open(url, '_blank');
 };
+// texto plano de la tarjeta actual (título, precio, ubicación, antigüedad, flags, url, descripción)
+function cardText(r) {
+  const precio = col(r, 'precio'), km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
+  const lines = [col(r, 'titulo')];
+  lines.push(precio !== '' ? `${precio} €` : '—');
+  let where = km !== '' ? `a ${km} km` : '';
+  if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
+  if (where) lines.push(where);
+  if (isNum(dias)) lines.push(humanAge(+dias));
+  lines.push(`${col(r, 'reservado') === 'True' ? 'Reservado' : 'Sin reserva'} · ${col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío'}`);
+  const url = col(r, 'url'); if (url) lines.push(url);
+  const desc = col(r, 'descripcion'); if (desc) lines.push('', desc);
+  return lines.join('\n');
+}
+$('#swCopy').onclick = () => {
+  if (di >= deck.length) return;
+  navigator.clipboard.writeText(cardText(deck[di]))
+    .then(() => snack('Datos copiados al portapapeles', null))
+    .catch(() => snack('No se pudo copiar', null));
+};
+// ── ordenar el mazo en vivo (precio ↑ · distancia ↑ · más reciente); reclic invierte ──
+let swSortCol = null, swSortDir = 1;
+function applySwipeSort(name) {
+  const c = headers.indexOf(name); if (c < 0) return;
+  if (swSortCol === name) swSortDir = -swSortDir; else { swSortCol = name; swSortDir = 1; }
+  sortKeys = [{ col: c, dir: swSortDir }]; paintSortHeaders();
+  paintSwipeSort();
+  deck = filteredRows(); di = 0; nextCard();   // re-baraja desde el principio con el nuevo orden
+}
+function paintSwipeSort() {
+  document.querySelectorAll('#swipeSort button').forEach(b => {
+    const on = b.dataset.sort === swSortCol;
+    b.classList.toggle('on', on);
+    b.dataset.dir = on ? (swSortDir > 0 ? '▲' : '▼') : '';
+  });
+}
+document.querySelectorAll('#swipeSort button').forEach(b => b.onclick = () => applySwipeSort(b.dataset.sort));
 document.addEventListener('keydown', e => {
   if (swipeView.hidden) return;
   if (e.key === 'Escape') closeSwipe();

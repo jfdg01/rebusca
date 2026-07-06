@@ -5,12 +5,23 @@ Uso:
     python3 wallapop.py "deshumidificador" --lat 37.7796 --lon -3.7849 -o jaen.csv
     python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a wallapop.csv
 """
-import argparse, csv, json, random, sys, time, urllib.parse, urllib.request, urllib.error
+import argparse, csv, json, random, sys, time, unicodedata, urllib.parse, urllib.request, urllib.error
 from math import radians, sin, cos, asin, sqrt
 from pathlib import Path
 
+
+def _norm(s):   # minúsculas sin acentos, para comparar título ~ términos
+    return "".join(c for c in unicodedata.normalize("NFD", (s or "").lower())
+                   if unicodedata.category(c) != "Mn")
+
+
+def title_matches(title, keywords):   # todas las palabras del término aparecen en el título
+    t = _norm(title)
+    return all(tok in t for tok in _norm(keywords).split())
+
 API = "https://api.wallapop.com/api/v3/search"
-HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json",
+           "Accept-Language": "es-ES"}   # taxonomía (categoría) en español
 
 # Rotacion de IP: lista de proxies "http://user:pass@host:port". Vacia = IP directa.
 # Rellenala desde un fichero (--proxies) o pega aqui tus proxies residenciales.
@@ -97,7 +108,7 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
         time.sleep(0.5 + random.random())   # jitter: menos patron detectable. Sube si te capan
 
 
-FIELDS = ["id", "titulo", "precio", "ciudad", "cp", "km", "dias",
+FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
           "reservado", "envio", "url", "descripcion"]  # id inmutable primero, descripcion al final
 
 
@@ -107,10 +118,12 @@ def row(it, origin):
     dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if lat and lon else ""
     ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
     dias = round((time.time() * 1000 - ca) / 86400000, 1) if ca else ""
+    tax = it.get("taxonomy") or []   # breadcrumb de categorias; la hoja es la mas especifica
     return {
         "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
         "titulo": it["title"],
         "precio": it["price"]["amount"],
+        "categoria": tax[-1]["name"] if tax else "",
         "descripcion": " ".join((it.get("description") or "").split()),  # 1 sola linea
         "ciudad": loc.get("city", ""),
         "cp": loc.get("postal_code", ""),
@@ -130,6 +143,7 @@ def main():
     p.add_argument("--max-km", type=float, default=None, help="filtra por distancia")
     p.add_argument("--since", choices=["hora", "dia", "semana", "mes"], default=None,
                    help="solo anuncios publicados en la ultima hora/dia/semana/mes")
+    p.add_argument("--title-only", action="store_true", help="solo si el término está en el título")
     p.add_argument("-n", "--limit", type=int, default=None, help="corta a N items")
     p.add_argument("--proxies", help="fichero con un proxy por linea (http://user:pass@host:port)")
     p.add_argument("-o", "--out", default=None, help="por defecto: <query>.csv")
@@ -159,6 +173,11 @@ def main():
             for page in search(a.keywords, a.lat, a.lon, order_by, time_filter):
                 for it in page:
                     r = row(it, origin)
+                    if a.title_only and not title_matches(r["titulo"], a.keywords):
+                        continue
+                    if r["km"] != "" and r["km"] > 10 and not r["envio"]:
+                        continue   # a más de 10 km y sin envío: inalcanzable en la práctica, se descarta
+
                     if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
                         continue
                     if max_dias is not None:
@@ -196,6 +215,8 @@ def demo():
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
     it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}}
     assert row(it, (0, 0))["id"] == "abc123", "id no capturado"
+    assert title_matches("iPhone 12 azul", "iphone azul"), "title_matches: acentos/orden"
+    assert not title_matches("Funda para móvil", "iphone"), "title_matches: no debería casar"
     print("ok")
 
 

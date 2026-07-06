@@ -164,6 +164,15 @@
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
   .excl #exclAdd { width: 100%; min-height: 2.15rem; font: 600 13px var(--mono); }
 
+  .cats { margin-top: .8rem; }
+  .cats summary { cursor: pointer; font: 700 12px var(--mono); letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-soft); }
+  .cats .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
+  .cat-chip { font: 600 12px var(--mono); padding: .28rem .6rem; min-height: 0;
+    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
+  .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
+    text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
+
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
   .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
   .list-head-bar { display: flex; align-items: center; gap: .6rem; }
@@ -358,6 +367,10 @@
   .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
 
   /* ── modo swipe (tinder): el swipe es la interfaz principal (la tabla queda [hidden]) ── */
+  .titleonly { display: flex; align-items: center; gap: .4rem; margin-top: .5rem;
+    font: 600 13px var(--sans); color: var(--ink-soft); cursor: pointer; }
+  .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
+
   #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 12px; background: var(--pine); border-color: var(--pine);
     color: #fff; font: 700 1.05rem var(--mono); letter-spacing: .02em; }
@@ -369,6 +382,11 @@
   /* cerrar: hereda el botón claro global, solo redondo arriba-izq */
   .swipe-x { position: absolute; top: 1rem; left: 1rem; width: 2.6rem; height: 2.6rem;
     border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .swipe-sort { display: flex; gap: .4rem; margin: 3rem 0 .2rem; }   /* baja para no chocar con la X flotante */
+  .swipe-sort button { padding: .35rem .8rem; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--ink-soft); font: 700 12px var(--mono); }
+  .swipe-sort button.on { background: var(--pine); border-color: var(--pine); color: #fff; }
+  .swipe-sort button.on::after { content: ' ' attr(data-dir); }
   .swipe-count { color: var(--ink-soft); font: 700 13px var(--mono); letter-spacing: .12em; margin: .4rem 0 1rem; }
   .swipe-stage { position: relative; flex: 1 1 auto; min-height: 0; width: min(440px, 100%); display: grid; place-items: center; }
   .swipe-done { color: var(--ink); text-align: center; font: 700 1.4rem var(--mono); }
@@ -396,7 +414,7 @@
   .sc-badge.like > span { color: #C8901A; transform: rotate(-9deg); }
   .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
 
-  .swipe-actions { display: flex; justify-content: center; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
+  .swipe-actions { display: flex; justify-content: center; gap: .6rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
   .swipe-actions button { padding: .7rem 1.6rem; font-size: 1rem; }
 
   /* ── gestión de búsquedas ──────────────────────────────── */

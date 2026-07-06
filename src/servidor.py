@@ -19,10 +19,18 @@ ESTADOS = ROOT / "estados"     # un JSON por persona: estados/<nombre>.json
 PORT = int(os.environ.get("PORT", 8000))
 
 
-def perfil_path(name, base=None):
+def perfil_slug(name):
     # \w (unicode) conserva acentos y descarta /, ., espacios -> a prueba de path traversal
-    slug = re.sub(r"[^\w-]", "", name or "", flags=re.UNICODE)[:40] or "casa"
-    return (base or ESTADOS) / f"{slug}.json"
+    return re.sub(r"[^\w-]", "", name or "", flags=re.UNICODE)[:40] or "casa"
+
+
+def perfil_path(name, base=None):
+    return (base or ESTADOS) / f"{perfil_slug(name)}.json"
+
+
+def perfil_csv_dir(perfil):
+    # cada perfil ve solo sus búsquedas: csv/<perfil>/  (aislamiento entre personas)
+    return CSV_DIR / perfil_slug(perfil)
 
 
 def perfil_update(old, data, base=None):
@@ -162,14 +170,33 @@ class H(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
         if u.path == "/csvs":
-            return self._json(sorted(p.name for p in CSV_DIR.glob("*.csv")))
+            perfil = (parse_qs(u.query).get("perfil") or ["casa"])[0]
+            d = perfil_csv_dir(perfil)
+            return self._json(sorted(p.name for p in d.glob("*.csv")) if d.exists() else [])
         if u.path == "/searches":
-            return self._json(searches())
+            perfil = (parse_qs(u.query).get("perfil") or ["casa"])[0]
+            return self._json(searches(perfil_csv_dir(perfil)))
+        if u.path == "/csvfile":                       # descarga de un CSV, ya scopeado por perfil
+            q = parse_qs(u.query)
+            perfil = (q.get("perfil") or ["casa"])[0]
+            name = Path((q.get("csv") or [""])[0]).name   # .name: anti-traversal
+            f = perfil_csv_dir(perfil) / name
+            if not name.endswith(".csv") or not f.exists():
+                return self._json({"error": "búsqueda no encontrada"}, 404)
+            body = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if u.path == "/perfiles":
             return self._json(perfiles())
         if u.path == "/progress":
-            name = Path((parse_qs(u.query).get("csv") or [""])[0]).name   # .name: anti-traversal
-            f = CSV_DIR / (name + ".progress")
+            q = parse_qs(u.query)
+            perfil = (q.get("perfil") or ["casa"])[0]
+            name = Path((q.get("csv") or [""])[0]).name   # .name: anti-traversal
+            f = perfil_csv_dir(perfil) / (name + ".progress")
             return self._json({"progress": f.read_text() if f.exists() else ""})
         if u.path == "/estado":
             perfil = (parse_qs(u.query).get("perfil") or ["casa"])[0]
@@ -192,16 +219,20 @@ class H(SimpleHTTPRequestHandler):
                 res = perfil_update(perfil, data)
                 return self._json(res, 400 if res.get("error") else 200)
             if u.path == "/csv":
-                name = (parse_qs(u.query).get("csv") or [""])[0]
-                res = csv_op(name, data)
+                q = parse_qs(u.query)
+                perfil = (q.get("perfil") or ["casa"])[0]
+                name = (q.get("csv") or [""])[0]
+                res = csv_op(name, data, perfil_csv_dir(perfil))
                 return self._json(res, 400 if res.get("error") else 200)
             if u.path == "/scrape":
                 return self._scrape(data)
             if u.path == "/stop":
+                perfil = data.get("perfil") or "casa"
                 name = Path(data.get("csv") or "").name   # .name: anti-traversal
-                proc = RUNNING.get(name)
+                key = str(perfil_csv_dir(perfil) / name)
+                proc = RUNNING.get(key)
                 if proc:
-                    STOPPED.add(name)   # marca antes de matar: _scrape lo lee al salir
+                    STOPPED.add(key)   # marca antes de matar: _scrape lo lee al salir
                     proc.terminate()
                 return self._json({"ok": bool(proc)})
         except Exception as e:                    # ponytail: 1 handler; el cliente muestra el mensaje
@@ -215,20 +246,24 @@ class H(SimpleHTTPRequestHandler):
             return self._json({"error": "faltan keywords"}, 400)
         if since and since not in ("hora", "dia", "semana", "mes"):
             return self._json({"error": "since inválido"}, 400)
-        CSV_DIR.mkdir(parents=True, exist_ok=True)
-        out = CSV_DIR / csv_name(kw, since)   # sin cache: cada búsqueda re-scrapea (parar a la mitad no bloquea la siguiente)
+        cdir = perfil_csv_dir(data.get("perfil") or "casa")   # el CSV va a la carpeta del perfil
+        cdir.mkdir(parents=True, exist_ok=True)
+        out = cdir / csv_name(kw, since)   # sin cache: cada búsqueda re-scrapea (parar a la mitad no bloquea la siguiente)
+        key = str(out)
         cmd = [sys.executable, str(HERE / "wallapop.py"), kw]
         if since:
             cmd += ["--since", since]
+        if data.get("titleOnly"):
+            cmd += ["--title-only"]
         cmd += ["-o", str(out)]
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        RUNNING[out.name] = proc
+        RUNNING[key] = proc
         try:
             _, err = proc.communicate(timeout=300)
         finally:
-            RUNNING.pop(out.name, None)
-        stopped = out.name in STOPPED
-        STOPPED.discard(out.name)
+            RUNNING.pop(key, None)
+        stopped = key in STOPPED
+        STOPPED.discard(key)
         if err:                           # throttle/backoff/403 del scraper -> journald (antes se perdian)
             print(err, file=sys.stderr, end="", flush=True)
         if proc.returncode != 0 and not stopped:   # parada a mano no es fallo: el CSV parcial ya está en disco
@@ -248,6 +283,9 @@ def demo():
     assert perfil_path("").name == "casa.json"                        # default
     assert perfil_path("Mamá").name == "Mamá.json"                    # conserva acentos
     assert perfil_path("../../etc/passwd").parent == ESTADOS          # siempre dentro de estados/
+    assert perfil_csv_dir("Javi") == CSV_DIR / "Javi"                 # cada perfil -> su subcarpeta
+    assert perfil_csv_dir("../../etc").name == "etc"                  # scope aislado, sin traversal
+    assert perfil_csv_dir("") == CSV_DIR / "casa"                     # default
     assert stamp_versions('<link href="app.css"><script src="app.js">', {"app.css": 5, "app.js": 9}) \
         == '<link href="app.css?v=5"><script src="app.js?v=9">'       # cache-busting por mtime
     import tempfile
