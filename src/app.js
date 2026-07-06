@@ -82,6 +82,7 @@ const ICON = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/>',
+  cog: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 const ic = n => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = ic(e.dataset.icon));
@@ -413,20 +414,17 @@ function blockSeller(s) {
     if (!swipeView.hidden) rebuildDeck();
   });
 }
-let sellerBannerOpen = false;
 function paintSellerBanner() {
   const box = $('#sellerBanner'); if (!box) return;
   const cands = !swipeView.hidden && headers.length ? sellerCandidates() : [];
+  const badge = $('#swipeCogBadge');   // señal en la cog para no perder el aviso al esconder el banner en el menú
+  if (badge) { badge.hidden = !cands.length; badge.textContent = cands.length; }
   box.hidden = !cands.length; box.innerHTML = '';
-  if (!cands.length) { sellerBannerOpen = false; return; }
+  if (!cands.length) return;
   const head = document.createElement('div'); head.className = 'sb-head';
   const lbl = document.createElement('span');
   lbl.innerHTML = `<b>${cands.length}</b> vendedor${cands.length === 1 ? '' : 'es'} con 2+ rechazos y anuncios nuevos`;
-  const tog = document.createElement('span'); tog.className = 'link';
-  tog.textContent = sellerBannerOpen ? 'ocultar' : 'gestionar';
-  tog.onclick = () => { sellerBannerOpen = !sellerBannerOpen; paintSellerBanner(); };
-  head.append(lbl, tog); box.append(head);
-  if (!sellerBannerOpen) return;
+  head.append(lbl); box.append(head);
   const list = document.createElement('div'); list.className = 'sb-list';
   for (const c of cands) {
     const row = document.createElement('div'); row.className = 'sb-row';
@@ -854,7 +852,7 @@ function openSwipe() {
 function rebuildDeck() { deck = filteredRows(); di = 0; nextCard(); }   // re-baraja desde el principio (ya excluye clasificados/vetados)
 // chips sutiles de palabras vetadas dentro del swipe; añadir/quitar re-baraja el mazo en vivo
 function renderSwExcl() { fillExclChips($('#swExclChips'), () => { rebuildDeck(); renderSwExcl(); }); }
-function closeSwipe() { swipeView.hidden = true; document.body.style.overflow = ''; render(); }
+function closeSwipe() { swipeView.hidden = true; $('#swipeMenu').hidden = true; document.body.style.overflow = ''; render(); }
 
 function nextCard() {
   swipeStage.querySelectorAll('.swipe-card, .swipe-done').forEach(e => e.remove());   // conserva los sellos
@@ -953,6 +951,13 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
 };
 $('#swipeFab').onclick = openSwipe;
 $('#swipeX').onclick = closeSwipe;
+// cog: menú flotante con orden + gestión de vendedores; se cierra al tocar fuera
+const swipeMenu = $('#swipeMenu');
+$('#swipeCog').onclick = e => { e.stopPropagation(); swipeMenu.hidden = !swipeMenu.hidden; };
+document.addEventListener('click', e => {
+  if (swipeMenu.hidden) return;
+  if (!swipeMenu.contains(e.target) && !$('#swipeCog').contains(e.target)) swipeMenu.hidden = true;
+});
 $('#swVer').onclick = () => {
   if (di >= deck.length) return;
   const r = deck[di], url = col(r, 'url');

@@ -203,15 +203,25 @@
 </div>
 
 <div class="swipe" id="swipeView" hidden>
-    <button class="swipe-x" id="swipeX" title="cerrar" data-icon="x"></button>
-    <p class="swipe-sort-label">Ordenar por…</p>
-    <div class="swipe-sort" id="swipeSort">
-        <button data-sort="precio">Precio</button>
-        <button data-sort="km">Distancia</button>
-        <button data-sort="dias">Reciente</button>
+    <div class="swipe-top">
+        <button class="swipe-tool" id="swipeX" title="cerrar">
+            <i data-icon="x"></i><span>Cerrar</span>
+        </button>
+        <button class="swipe-tool" id="swipeCog" title="ordenar y vendedores">
+            <i data-icon="cog"></i><span>Ajustes</span>
+            <b class="swipe-cog-badge" id="swipeCogBadge" hidden></b>
+        </button>
     </div>
     <div class="swipe-count" id="swipeCount"></div>
-    <div class="seller-banner" id="sellerBanner" hidden></div>
+    <div class="swipe-menu" id="swipeMenu" hidden>
+        <p class="swipe-sort-label">Ordenar por…</p>
+        <div class="swipe-sort" id="swipeSort">
+            <button data-sort="precio">Precio</button>
+            <button data-sort="km">Distancia</button>
+            <button data-sort="dias">Reciente</button>
+        </div>
+        <div class="seller-banner" id="sellerBanner" hidden></div>
+    </div>
     <div class="swipe-stage" id="swipeStage">
         <div class="sc-badge like" id="swLikeStamp">
             <span><i data-icon="star"></i>Interesante</span>

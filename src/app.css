@@ -166,6 +166,12 @@
     font: 13px/1.35 var(--sans); color: var(--ink);
   }
   .seller-banner[hidden] { display: none; }
+  /* dentro del menú del swipe: sin sangre completa ni tinte, separador superior */
+  .swipe-menu .seller-banner { margin: .8rem 0 0; padding: .8rem 0 0; background: none;
+    border: 0; border-top: 1px solid var(--line); }
+  /* poco ancho dentro del menú: apila info + botón en vez de comprimir el texto */
+  .swipe-menu .sb-row { flex-direction: column; align-items: stretch; gap: .5rem; }
+  .swipe-menu .sb-block { align-self: flex-start; }
   .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
   .sb-head .link { color: #9a6a12; cursor: pointer; text-decoration: underline; white-space: nowrap; }
   .sb-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; }
@@ -368,12 +374,24 @@
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
     touch-action: pan-y; }   /* arrastre horizontal desde cualquier hueco de la vista, no solo la tarjeta */
-  /* cerrar: hereda el botón claro global, solo redondo arriba-izq */
-  /* X alineada al borde izq de la columna centrada (min(440px,100%)), como la main view; 1rem en móvil */
+  /* barra superior: X + cog etiquetados, alineados a los bordes de la columna centrada */
   .swipe-x { position: absolute; top: 1rem; left: max(1rem, calc(50% - 220px)); width: 2.6rem; height: 2.6rem;
-    border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
-  .swipe-sort-label { margin: 1.8rem 0 .5rem; font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
-    color: var(--ink-soft); }   /* baja para no chocar con la X flotante (centrada, no la pisa) */
+    border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }   /* solo la barra de búsquedas */
+  .swipe-top { width: min(440px, 100%); display: flex; align-items: center; justify-content: space-between; margin-bottom: .8rem; }
+  .swipe-tool { position: relative; display: inline-flex; align-items: center; gap: .45rem; height: 2.6rem; padding: 0 .95rem;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+    font: 700 12px var(--mono); letter-spacing: .02em; }
+  .swipe-tool .icon { width: 1.05rem; height: 1.05rem; }
+  .swipe-cog-badge { position: absolute; top: -.35rem; right: -.35rem; min-width: 1.15rem; height: 1.15rem; padding: 0 .28rem;
+    border-radius: 999px; background: #b0872b; color: #fff; font: 700 11px var(--mono);
+    display: flex; align-items: center; justify-content: center; }
+  .swipe-cog-badge[hidden] { display: none; }
+  /* menú (cog): flota sobre la tarjeta anclado bajo la barra, no la reescala */
+  .swipe-menu { position: absolute; z-index: 5; top: 4.4rem; left: max(1rem, calc(50% - 220px)); right: max(1rem, calc(50% - 220px));
+    background: var(--surface); border: 1px solid var(--line); border-radius: .8rem; padding: 1rem;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .18); }
+  .swipe-menu[hidden] { display: none; }
+  .swipe-sort-label { margin: 0 0 .5rem; font: 400 .72rem/1 var(--mono); letter-spacing: .01em; color: var(--ink-soft); }
   .swipe-sort { display: flex; gap: .4rem; margin: 0 0 .2rem; }
   .swipe-sort button { padding: .35rem .8rem; border-radius: 999px; background: var(--surface);
     border: 1px solid var(--line); color: var(--ink-soft); font: 700 12px var(--mono); }
