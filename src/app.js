@@ -144,6 +144,9 @@ const isExcluded = r => {   // vetada por palabra en el título O por categoría
   const ws = exclTerms(); if (!ws.length) return false;
   const t = norm(r[iTitulo] || ''); return ws.some(w => t.includes(w));
 };
+// "lejos sin envío": a más de 10 km y sin envío, inalcanzable en la práctica. Se ocultan por defecto (toggle).
+const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > 10 && col(r, 'envio') !== 'True'; };
+let hideLejos = localStorage.getItem('wp_hidelejos') !== '0';   // por defecto ocultos
 function filteredRows() {
   const q = (view === 'trash' || view === 'fav') ? norm(listQ) : '';   // el filtro solo aplica en vista de lista
   let rows = data.filter(r => {
@@ -151,7 +154,7 @@ function filteredRows() {
     if (q && !norm(r[iTitulo] || '').includes(q)) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
-    return !fav.has(k) && !trash.has(k) && !isExcluded(r);   // mazo: sin clasificar y sin palabra vetada
+    return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r));   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
   });
   if (sortKeys.length) {
     rows.sort((a, b) => {
@@ -262,10 +265,12 @@ function paintStat() {
   const favs = data.filter(r => fav.has(key(r))).length;
   const disc = data.filter(r => trash.has(key(r))).length;
   const vetados = exclTerms().length ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
-  const sinVer = data.length - favs - disc - vetados;   // "vistos" = favs + disc; los vetados salen aparte
+  const lejos = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).length;
+  const sinVer = data.length - favs - disc - vetados - (hideLejos ? lejos : 0);   // "vistos" = favs + disc; vetados y lejos-ocultos salen aparte
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
-    (vetados ? `<span><b>${vetados}</b> excluidos</span>` : '') +
+    (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">a la papelera</span></span>` : '') +
+    (lejos ? `<span><b>${lejos}</b> lejos sin envío · <span class="link" id="toggleLejos">${hideLejos ? 'mostrar' : 'ocultar'}</span></span>` : '') +
     `<span><b>${favs}</b> interesantes ` +
     (favs || view === 'fav' ? `· <span class="link" id="toggleFav">${view === 'fav' ? 'volver' : 'ver lista'}</span>` : '') +
     `</span>` +
@@ -276,8 +281,21 @@ function paintStat() {
   const toggle = v => () => { view = view === v ? '' : v; $('#empty').textContent = ''; render(); };
   const t = $('#toggleTrash'); if (t) t.onclick = toggle('trash');
   const f = $('#toggleFav'); if (f) f.onclick = toggle('fav');
+  const tl = $('#toggleLejos');
+  if (tl) tl.onclick = () => { hideLejos = !hideLejos; localStorage.setItem('wp_hidelejos', hideLejos ? '1' : '0'); render(); };
+  const te = $('#trashExcl'); if (te) te.onclick = trashExcluded;
   const cs = $('#clearSort');
   if (cs) cs.onclick = clearSort;
+}
+
+// manda todos los excluidos actuales a la papelera de una vez (deshacer: los saca)
+function trashExcluded() {
+  const ks = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).map(key);
+  if (!ks.length) return;
+  ks.forEach(k => trash.add(k)); save('wp_discarded', trash); render();
+  snack(`${ks.length} excluido${ks.length === 1 ? '' : 's'} a la papelera`, () => {
+    ks.forEach(k => trash.delete(k)); save('wp_discarded', trash); render();
+  });
 }
 
 // ── descartar / restaurar con deshacer claro ──

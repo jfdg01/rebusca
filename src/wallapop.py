@@ -175,9 +175,8 @@ def main():
                     r = row(it, origin)
                     if a.title_only and not title_matches(r["titulo"], a.keywords):
                         continue
-                    if r["km"] != "" and r["km"] > 10 and not r["envio"]:
-                        continue   # a más de 10 km y sin envío: inalcanzable en la práctica, se descarta
-
+                    # nota: los "lejos sin envío" (km>10 && !envio) ya NO se descartan aquí;
+                    # se guardan en el CSV y el frontend los oculta por defecto con un toggle.
                     if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
                         continue
                     if max_dias is not None:
