@@ -165,7 +165,7 @@ function fillCard(el, r) {
   add('li-flags', where ? `${conEnvio ? 'Con envío' : 'Sin envío'}, ${where}` : (conEnvio ? 'Con envío' : 'Sin envío'));
   // cuándo se clasificó (solo en papelera/destacados y si hay marca de tiempo)
   if ((view === 'trash' || view === 'fav') && stamp[key(r)])
-    add('li-when' + (view === 'fav' ? ' fav' : ''), `${view === 'fav' ? 'Destacado' : 'Descartado'} ${ago(stamp[key(r)])}`);
+    add('li-when' + (view === 'fav' ? ' fav' : ''), `${view === 'fav' ? 'Favorito' : 'Rechazado'} ${ago(stamp[key(r)])}`);
 
   const desc = col(r, 'descripcion');
   if (desc) add('li-desc', desc);
@@ -393,8 +393,8 @@ function paintStat() {
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
-    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">descartar</span></span>` : '') +
-    `<span><b>${disc}</b> descartados ` +
+    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
+    `<span><b>${disc}</b> rechazados ` +
     (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver rechazados'}</span>` : '') +
     `</span>` +
     `<span><b>${favs}</b> interesantes ` +
@@ -492,7 +492,7 @@ function paintSellerBanner() {
     ver.onclick = () => showSellerTrash(c.s);   // papelera filtrada a este vendedor
     info.append(b, ' rechazados · ', ver);
     const btn = document.createElement('button'); btn.className = 'chip sb-block';
-    btn.textContent = `Descartar siguientes (${c.fresh.length})`;
+    btn.textContent = `Rechazar siguientes (${c.fresh.length})`;
     btn.onclick = () => blockSeller(c.s);
     row.append(info, btn); list.append(row);
   }
@@ -504,7 +504,7 @@ let snackTimer;
 function discard(k, titulo) {
   const wasFav = fav.has(k);                 // al descartar sale de interesantes (cubos exclusivos)
   fav.delete(k); trash.add(k); stampNow(k); save('wp_fav', fav); save('wp_discarded', trash); render();
-  snack(`Descartado: ${(titulo || '').slice(0, 40)}`, () => {
+  snack(`Rechazado: ${(titulo || '').slice(0, 40)}`, () => {
     trash.delete(k); if (wasFav) { fav.add(k); stampNow(k); } else unstamp(k); save('wp_fav', fav); save('wp_discarded', trash); render();
   });
 }
