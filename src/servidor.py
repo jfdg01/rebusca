@@ -226,6 +226,8 @@ class H(SimpleHTTPRequestHandler):
                 return self._json(res, 400 if res.get("error") else 200)
             if u.path == "/scrape":
                 return self._scrape(data)
+            if u.path == "/pesos":
+                return self._pesos(data.get("ids") or [])
             if u.path == "/stop":
                 perfil = data.get("perfil") or "casa"
                 name = Path(data.get("csv") or "").name   # .name: anti-traversal
@@ -269,6 +271,31 @@ class H(SimpleHTTPRequestHandler):
         if proc.returncode != 0 and not stopped:   # parada a mano no es fallo: el CSV parcial ya está en disco
             return self._json({"error": err[-500:] or "scraper falló"}, 500)
         return self._json({"csv": out.name, "stopped": stopped})
+
+    def _pesos(self, ids):
+        """Peso real (tramo up_to_kg) por item, vía el detalle de la API. -> {id: kg|None}.
+
+        Proxy server-side: el browser no puede pegar a api.wallapop.com (CORS/DataDome).
+        None = ítem borrado, sin peso, o bloqueo -> el cliente cae al estimado de 5 kg."""
+        import random, time, urllib.request
+        out = {}
+        for iid in list(ids)[:200]:                # ponytail: tope defensivo; una lista de favs no llega
+            iid = str(iid)
+            if not re.fullmatch(r"[a-zA-Z0-9]+", iid):   # id opaco de Wallapop: alfanumérico
+                out[iid] = None
+                continue
+            try:
+                req = urllib.request.Request(
+                    "https://api.wallapop.com/api/v3/items/" + iid,
+                    headers={"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0",
+                             "Accept": "application/json", "Accept-Language": "es-ES"})
+                d = json.loads(urllib.request.urlopen(req, timeout=20).read())
+                v = ((d.get("type_attributes") or {}).get("up_to_kg") or {}).get("value")
+                out[iid] = float(v) if v else None
+            except Exception:
+                out[iid] = None
+            time.sleep(0.25 + random.random() * 0.25)   # jitter anti-DataDome
+        return self._json(out)
 
     def log_message(self, *a):                    # menos ruido: solo POST/errores
         if self.command == "POST":

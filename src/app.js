@@ -76,6 +76,11 @@ const porte = kg => (SHIP.find(([b]) => kg <= b) || SHIP[SHIP.length - 1])[1];
 // ponytail: comisión de protección ~0,70€ + 5% del precio; las fuentes divergen (5–10%),
 // ajústalo aquí si cambia. Un solo sitio para toda la app.
 const finalPrice = (precio, kg = 5) => precio + 0.70 + 0.05 * precio + porte(kg);
+// peso real (tramo up_to_kg) por id, cacheado del detalle de la API (botón "Precio exacto").
+// número -> porte exacto; sin entrada -> se estima con 5 kg y un '*'.
+let pesos = JSON.parse(localStorage.getItem('wp_pesos') || '{}');
+console.assert(porte(1.5) === 3.5 && porte(2) === 3.5 && porte(2.1) === 4.5 && porte(40) === 14.5, 'porte() por tramo roto');
+console.assert(finalPrice(50, 1.5).toFixed(2) === '56.70' && finalPrice(50).toFixed(2) === '57.70', 'finalPrice roto');
 const eur = n => n.toFixed(2).replace('.', ',') + '€';   // 78.7 -> "78,70€"
 
 const $ = s => document.querySelector(s);
@@ -143,8 +148,10 @@ function fillCard(el, r) {
   // con envío: el precio mostrado ES el final estimado al comprador (comisión + porte a 5 kg),
   // con * en superíndice; su explicación vive en Ajustes. Sin envío: precio del anuncio tal cual.
   if (conEnvio && isNum(precio)) {
-    price.textContent = eur(finalPrice(+precio));
-    const s = document.createElement('sup'); s.className = 'li-star'; s.textContent = '*'; price.append(s);
+    const kg = pesos[col(r, 'id')];   // peso real cacheado; si no hay, 5 kg + '*'
+    const exact = typeof kg === 'number';
+    price.textContent = eur(finalPrice(+precio, exact ? kg : undefined));
+    if (!exact) { const s = document.createElement('sup'); s.className = 'li-star'; s.textContent = '*'; price.append(s); }
   } else {
     price.textContent = precio !== '' ? `${precio} €` : '—';
   }
@@ -295,6 +302,8 @@ function render() {
   if (!listView) listSeller = '';   // ni el filtro por vendedor
   if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : listSeller ? 'Rechazados del vendedor' : 'Papelera';
   $('#exportFav').hidden = !(view === 'fav' && rows.length);   // copiar solo tiene sentido con destacados a la vista
+  $('#calcPeso').hidden = !(view === 'fav' && rows.some(r => col(r, 'envio') === 'True'));   // solo con destacados con envío
+  $('#listActions').hidden = !(view === 'fav' && rows.length);   // la sección solo existe con destacados a la vista
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
   if (!listView && hasRows) $('#swipeFab').textContent = 'REBUSCAR';
@@ -1006,6 +1015,29 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
   navigator.clipboard.writeText(txt)
     .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
     .catch(() => snack('No se pudo copiar', null));
+};
+// precio exacto: pide a la API el peso real (tramo up_to_kg) de los destacados con envío sin cachear
+$('#calcPeso').onclick = async () => {
+  const btn = $('#calcPeso');
+  const ids = filteredRows()
+    .filter(r => col(r, 'envio') === 'True')
+    .map(r => col(r, 'id'))
+    .filter(id => id && !(id in pesos));   // sin recalcular lo ya conocido (incluye nulos: ítems sin peso)
+  if (!ids.length) return snack('Precios ya calculados', null);
+  btn.disabled = true; const prev = btn.textContent; btn.textContent = `Calculando ${ids.length}…`;
+  try {
+    const res = await fetch('/pesos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }) }).then(r => r.json());
+    Object.assign(pesos, res);
+    localStorage.setItem('wp_pesos', JSON.stringify(pesos));
+    render();
+    const ok = Object.values(res).filter(v => typeof v === 'number').length;
+    snack(ok ? `Precio exacto de ${ok} artículo${ok === 1 ? '' : 's'}` : 'Sin peso disponible', null);
+  } catch {
+    snack('No se pudo calcular', null);
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
 };
 $('#swYes').onclick = () => card && fling(1);   // los hints ✓→ / ←✕ también clasifican, no solo el swipe
 $('#swNo').onclick = () => card && fling(-1);

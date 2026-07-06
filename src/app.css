@@ -226,16 +226,20 @@
   .cats summary .link[hidden] { display: none; }
 
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
-  .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
+  .list-head { display: flex; flex-direction: column; gap: .6rem; padding: .1rem 0 .7rem; }
   .list-head-bar { display: flex; align-items: center; gap: .6rem; }
-  .list-head button { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; border-radius: 50%;
+  /* el círculo solo aplica al botón "volver" de la barra de título */
+  .list-head-bar button { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; font: 400 1.24rem/1 var(--mono); }
   .list-head h2 { margin: 0; font: 800 1.14rem var(--mono); letter-spacing: .04em; text-transform: uppercase; }
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
-  .list-head #exportFav { margin-left: auto; width: auto; height: auto; border-radius: 999px; font: 700 11px var(--mono); }
-  .list-head #listSort { flex-wrap: wrap; }   /* 4 pills no caben en 320px: que envuelvan */
-  .list-head #listSort button { width: auto; height: auto; }   /* reusa .swipe-sort (pill), sin el círculo de .list-head button */
+  /* pills de orden: una sola fila, segmentadas a ancho equitativo (caben las 4 en 320px) */
+  .list-head #listSort { flex-wrap: nowrap; gap: .4rem; }
+  .list-head #listSort button { flex: 1 1 0; min-width: 0; padding: .4rem .25rem; justify-content: center; text-align: center; }
+  /* acciones bajo las pills, en su propia sección; se reparten el ancho como Ver/Quitar */
+  .list-actions { display: flex; gap: .5rem; }
+  .list-actions .btn { flex: 1 1 0; margin: 0; padding: .55rem .5rem; white-space: nowrap; }
 
   /* ── lista compuesta (Destacados / Papelera): SIEMPRE pila de tarjetas ──
      cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas

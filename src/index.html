@@ -121,14 +121,6 @@
                 data-icon="arrow-left"
             ></button>
             <h2 id="listTitle"></h2>
-            <button
-                id="exportFav"
-                class="chip"
-                title="copiar la lista al portapapeles"
-                hidden
-            >
-                Copiar
-            </button>
         </div>
         <input
             id="listFilter"
@@ -142,6 +134,24 @@
             <button data-sort="precio">Precio</button>
             <button data-sort="dias">Fecha</button>
             <button data-sort="km">Distancia</button>
+        </div>
+        <div class="list-actions" id="listActions" hidden>
+            <button
+                id="calcPeso"
+                class="btn ver"
+                title="calcular el precio exacto (peso real) de los destacados con envío"
+                hidden
+            >
+                Precio exacto
+            </button>
+            <button
+                id="exportFav"
+                class="btn"
+                title="copiar la lista al portapapeles"
+                hidden
+            >
+                Copiar
+            </button>
         </div>
     </div>
 </header>
