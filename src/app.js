@@ -405,16 +405,18 @@ function blockSeller(s) {
   blockSel.add(s); saveBlockSel();
   newly.forEach(k => { fav.delete(k); trash.add(k); stampNow(k); });
   save('wp_fav', fav); save('wp_discarded', trash); render();
+  if (!swipeView.hidden) rebuildDeck();   // saca del mazo lo recién rechazado
   snack(`Vendedor bloqueado · ${newly.length} a la papelera`, () => {
     blockSel.delete(s); saveBlockSel();
     newly.forEach(k => { trash.delete(k); unstamp(k); });
     save('wp_discarded', trash); render();
+    if (!swipeView.hidden) rebuildDeck();
   });
 }
 let sellerBannerOpen = false;
 function paintSellerBanner() {
   const box = $('#sellerBanner'); if (!box) return;
-  const cands = view === '' && headers.length ? sellerCandidates() : [];
+  const cands = !swipeView.hidden && headers.length ? sellerCandidates() : [];
   box.hidden = !cands.length; box.innerHTML = '';
   if (!cands.length) { sellerBannerOpen = false; return; }
   const head = document.createElement('div'); head.className = 'sb-head';
@@ -857,6 +859,7 @@ function closeSwipe() { swipeView.hidden = true; document.body.style.overflow = 
 function nextCard() {
   swipeStage.querySelectorAll('.swipe-card, .swipe-done').forEach(e => e.remove());   // conserva los sellos
   likeStamp.style.opacity = nopeStamp.style.opacity = 0; card = null;
+  paintSellerBanner();   // candidatos cambian al rechazar cartas dentro del swipe
   if (di >= deck.length) {   // mazo agotado
     swipeCount.textContent = '';
     const done = document.createElement('div'); done.className = 'swipe-done';
@@ -883,7 +886,7 @@ function decide(dx, v) {
 function dragify(root) {
   let sx = 0, sy = 0, dx = 0, dy = 0, on = false, axis = 0, t0 = 0;
   root.onpointerdown = e => {
-    if (!card || e.target.closest('a,button,input')) return;   // sin tarjeta (volando/agotado) o sobre botón/input: nada
+    if (!card || e.target.closest('a,button,input,.seller-banner')) return;   // sin tarjeta o sobre botón/input/banner: nada
     on = true; dx = dy = axis = 0; sx = e.clientX; sy = e.clientY; t0 = e.timeStamp;
     root.setPointerCapture(e.pointerId);
   };

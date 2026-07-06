@@ -95,7 +95,6 @@
             <div class="chips" id="catChips"></div>
         </details>
         <div class="stat" id="stat"></div>
-        <div class="seller-banner" id="sellerBanner" hidden></div>
     </div>
     <div class="list-head" id="listHead" hidden>
         <div class="list-head-bar">
@@ -134,21 +133,21 @@
     <thead></thead>
     <tbody></tbody>
 </table>
-<div class="empty" id="empty">Busca algo primero</div>
+<div class="empty" id="empty">Para rebuscar debes buscar algo primero.</div>
 
 <div class="loading" id="loading" hidden>
     <svg class="spin" viewBox="0 0 44 44" aria-hidden="true">
         <circle class="track" cx="22" cy="22" r="19"></circle>
         <circle class="arc" cx="22" cy="22" r="19"></circle>
     </svg>
-    <div class="loading-count" id="loadingCount">Buscando…</div>
+    <div class="loading-count" id="loadingCount">Buscando anuncios.</div>
     <div class="loading-note">
         <span id="loadingTime">0s</span> buscando… ·
         <span class="link" id="stopScrape">parar búsqueda</span>
     </div>
 </div>
 
-<button id="swipeFab" hidden>Empezar a swipe</button>
+<button id="swipeFab" hidden>Empezar a rebuscar</button>
 
 <div class="gate" id="gate">
     <div class="gate-inner">
@@ -172,10 +171,10 @@
                     Borrar
                 </button>
                 <button type="button" class="ghost" id="cancelCreate" hidden>
-                    Volver
+                    Cancelar
                 </button>
                 <button class="primary" type="submit" id="saveBtn">
-                    Entrar
+                    Guardar
                 </button>
             </div>
         </form>
@@ -191,7 +190,7 @@
             title="volver"
             data-icon="arrow-left"
         ></button>
-        <h2>Búsquedas</h2>
+        <h2>Tus búsquedas</h2>
     </div>
     <input
         id="searchesFilter"
@@ -212,11 +211,12 @@
         <button data-sort="dias">Reciente</button>
     </div>
     <div class="swipe-count" id="swipeCount"></div>
+    <div class="seller-banner" id="sellerBanner" hidden></div>
     <div class="swipe-stage" id="swipeStage">
         <div class="sc-badge like" id="swLikeStamp">
-            <span><i data-icon="star"></i> Interesa</span>
+            <span><i data-icon="star"></i>Interesante</span>
         </div>
-        <div class="sc-badge nope" id="swNopeStamp"><span>Descartar</span></div>
+        <div class="sc-badge nope" id="swNopeStamp"><span>Rechazado</span></div>
     </div>
     <div class="swipe-excl" id="swExcl">
         <div class="chips" id="swExclChips"></div>
