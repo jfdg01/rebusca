@@ -633,7 +633,7 @@ function setLoading(on, n) {
   $('#stat').hidden = on;    // los stats son de la query vieja: ocúltalos mientras se busca
   $('.panel.picker').hidden = on;   // búsqueda activa + exclusiones son de la query vieja: fuera mientras se busca
   if (!on) { box.hidden = true; return; }   // render() recoloca #empty/botón al cargar el CSV
-  $('#empty').hidden = true; $('#swipeFab').hidden = true; box.hidden = false;
+  $('#empty').hidden = true; $('#swipeFab').hidden = true; $('#copyFav').hidden = true; box.hidden = false;
   $('#loadingCount').textContent = n ? `${n} encontrados` : 'Buscando…';
 }
 let _timer;
@@ -1030,14 +1030,14 @@ function priceLabel(r) {
 function favText(rows) {
   const items = rows.map((r, i) => {
     const lines = [`${i + 1}. ${col(r, 'titulo')} — ${priceLabel(r)}`];
-    const km = col(r, 'km'), ciudad = col(r, 'ciudad');
-    let where = km !== '' ? `a ${km} km` : ''; if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
-    if (where) lines.push('   ' + where);
     const url = col(r, 'url'); if (url) lines.push('   ' + url);
     const desc = col(r, 'descripcion'); if (desc) lines.push('   ' + desc.replace(/\s*\n\s*/g, ' '));
     return lines.join('\n');
   }).join('\n\n');
-  return 'Dados estos productos de segunda mano de Wallapop, investígalos uno a uno y dime cuál es el mejor calidad/precio y por qué:\n\n' + items;
+  return 'Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. ' +
+    'Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
+    'y dime cuál es el mejor calidad/precio. Responde con el ganador primero y el porqué en detalle, ' +
+    'y luego una valoración breve del resto ordenados de mejor a peor:\n\n' + items;
 }
 // copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
 function copyAsync(makeText) {
@@ -1105,14 +1105,11 @@ $('#swVer').onclick = () => {
   if (!url) return;
   window.open(url, '_blank');
 };
-// texto plano de la tarjeta actual (título, precio, ubicación, antigüedad, flags, url, descripción)
+// texto plano de la tarjeta actual (título, precio, antigüedad, flags, url, descripción)
 function cardText(r) {
-  const km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
+  const dias = col(r, 'dias');
   const lines = [col(r, 'titulo')];
   lines.push(priceLabel(r));
-  let where = km !== '' ? `a ${km} km` : '';
-  if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
-  if (where) lines.push(where);
   if (isNum(dias)) lines.push(humanAge(+dias));
   lines.push(col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío');
   const url = col(r, 'url'); if (url) lines.push(url);
