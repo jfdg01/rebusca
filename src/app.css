@@ -176,16 +176,17 @@
   /* dentro del menú del swipe: sin sangre completa ni tinte, separador superior */
   .swipe-menu .seller-banner { margin: .8rem 0 0; padding: .8rem 0 0; background: none;
     border: 0; border-top: 1px solid var(--line); }
-  /* poco ancho dentro del menú: apila info + botón en vez de comprimir el texto */
-  .swipe-menu .sb-row { flex-direction: column; align-items: stretch; gap: .5rem; }
-  .swipe-menu .sb-block { align-self: flex-start; }
   .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
   .sb-head .link { color: #9a6a12; cursor: pointer; text-decoration: underline; white-space: nowrap; }
   .sb-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; }
-  .sb-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
-  .sb-info { min-width: 0; overflow-wrap: anywhere; color: var(--ink-soft); }
+  .sb-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .sb-info { min-width: 0; white-space: nowrap; color: var(--ink-soft); }
   .sb-info b { color: var(--ink); }
-  .sb-block { flex: 0 0 auto; color: #b03024; border-color: #d0a59f; background: var(--field); }
+  .sb-info .link { color: #9a6a12; cursor: pointer; text-decoration: underline; }
+  .sb-block { flex: 0 0 auto; white-space: nowrap; color: #b03024; border-color: #d0a59f; background: var(--field); }
+  /* banner estrecho (320px): encoge fila para que texto + botón quepan en una línea */
+  .swipe-menu .sb-info { font-size: 12px; }
+  .swipe-menu .sb-block { font-size: 10px; padding: .28rem .6rem; }
   .sb-block:hover { color: #fff; background: #b03024; border-color: #b03024; }
   .stat .link[hidden] { display: none; }
 

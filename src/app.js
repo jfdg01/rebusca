@@ -181,6 +181,7 @@ document.querySelectorAll('#listSort button').forEach(b => b.onclick = () => app
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
+let listSeller = '';   // filtro por vendedor en la papelera (desde el banner: "ver" rechazados de un vendedor)
 let lejosExcl = new Set();   // lejos-sin-envío que el usuario ha movido a "excluidos" a mano (en memoria; al rechazar van a la papelera)
 const isExcluded = r => {   // vetada por la query activa: categoría exacta, palabra en el título o lejos añadido a mano
   if (lejosExcl.has(key(r))) return true;
@@ -218,6 +219,7 @@ function filteredRows() {
   let rows = data.filter(r => {
     const k = key(r);
     if (q && !norm(r[iTitulo] || '').includes(q)) return false;
+    if (view === 'trash' && listSeller && col(r, 'vendedor') !== listSeller) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
     return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r));   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
@@ -262,7 +264,8 @@ function render() {
   document.querySelectorAll('header .panel').forEach(p => p.hidden = listView);   // varios paneles ahora (perfil, buscar, query activa)
   $('#listHead').hidden = !listView;
   if (!listView && listQ) { listQ = ''; $('#listFilter').value = ''; }   // el filtro no sobrevive al salir de la lista
-  if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : 'Papelera';
+  if (!listView) listSeller = '';   // ni el filtro por vendedor
+  if (listView) $('#listTitle').textContent = view === 'fav' ? 'Destacados' : listSeller ? 'Rechazados del vendedor' : 'Papelera';
   $('#exportFav').hidden = !(view === 'fav' && rows.length);   // copiar solo tiene sentido con destacados a la vista
   const hasRows = headers.length && rows.length;
   $('#swipeFab').hidden = !hasRows || listView;         // en modo lista se edita en la tabla, no se hace swipe
@@ -356,7 +359,7 @@ function paintStat() {
     (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver papelera'}</span>` : '') +
     `</span>` +
     (sortKeys.length ? `<span>orden: <b>${sortKeys.map(s => headers[s.col]).join(' › ')}</b> · <span class="link" id="clearSort">limpiar</span></span>` : '');
-  const toggle = v => () => { view = view === v ? '' : v; $('#empty').textContent = ''; render(); };
+  const toggle = v => () => { view = view === v ? '' : v; listSeller = ''; sellerReturn = false; $('#empty').textContent = ''; render(); };
   const t = $('#toggleTrash'); if (t) t.onclick = toggle('trash');
   const f = $('#toggleFav'); if (f) f.onclick = toggle('fav');
   const tl = $('#toggleLejos');
@@ -423,6 +426,9 @@ function blockSeller(s) {
     if (!swipeView.hidden) rebuildDeck();
   });
 }
+// "ver" del banner: cierra el swipe y abre la papelera filtrada a los rechazados de ese vendedor
+let sellerReturn = false;   // al volver de esa lista, reabrir el swipe con los ajustes abiertos (de donde vino)
+function showSellerTrash(s) { sellerReturn = true; listSeller = s; view = 'trash'; closeSwipe(); }
 function paintSellerBanner() {
   const box = $('#sellerBanner'); if (!box) return;
   const cands = !swipeView.hidden && headers.length ? sellerCandidates() : [];
@@ -432,16 +438,18 @@ function paintSellerBanner() {
   if (!cands.length) return;
   const head = document.createElement('div'); head.className = 'sb-head';
   const lbl = document.createElement('span');
-  lbl.innerHTML = `<b>${cands.length}</b> vendedor${cands.length === 1 ? '' : 'es'} con 2+ rechazos y anuncios nuevos`;
+  lbl.innerHTML = `<b>${cands.length}</b> vendedor${cands.length === 1 ? '' : 'es'} con 2+ rechazos`;
   head.append(lbl); box.append(head);
   const list = document.createElement('div'); list.className = 'sb-list';
   for (const c of cands) {
     const row = document.createElement('div'); row.className = 'sb-row';
     const info = document.createElement('span'); info.className = 'sb-info';
     const b = document.createElement('b'); b.textContent = c.rejected;
-    info.append(b, ` rechazados · nuevo: “${c.fresh[0][iTitulo]}”` + (c.fresh.length > 1 ? ` (+${c.fresh.length - 1})` : ''));
+    const ver = document.createElement('span'); ver.className = 'link'; ver.textContent = 'ver';
+    ver.onclick = () => showSellerTrash(c.s);   // papelera filtrada a este vendedor
+    info.append(b, ' rechazados · ', ver);
     const btn = document.createElement('button'); btn.className = 'chip sb-block';
-    btn.textContent = `Rechazar todos (${c.fresh.length})`;
+    btn.textContent = `Rechazar siguientes (${c.fresh.length})`;
     btn.onclick = () => blockSeller(c.s);
     row.append(info, btn); list.append(row);
   }
@@ -946,7 +954,11 @@ $('#swExclAdd').onkeydown = e => {
   if (addExcl(e.target.value)) rebuildDeck();
   e.target.value = ''; renderSwExcl();
 };
-$('#listBack').onclick = () => { view = ''; $('#empty').textContent = ''; render(); };
+$('#listBack').onclick = e => {
+  view = ''; $('#empty').textContent = '';
+  if (sellerReturn) { sellerReturn = false; listSeller = ''; openSwipe(); swipeMenu.hidden = false; e.stopPropagation(); return; }   // volver justo a donde vino: swipe + ajustes abiertos (frena el "cerrar al tocar fuera")
+  render();
+};
 $('#exportFav').onclick = () => {   // copia los destacados a la vista (título — precio) para pegar en una IA
   const txt = filteredRows().map(r => {
     const p = col(r, 'precio');
