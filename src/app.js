@@ -1021,16 +1021,19 @@ $('#exportFav').onclick = () => {   // copia los destacados a la vista (título 
     .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
     .catch(() => snack('No se pudo copiar', null));
 };
+// precio a copiar/mostrar: final estimado al comprador si lleva envío (con '(aprox)' si no hay peso real), si no el del anuncio
+function priceLabel(r) {
+  const precio = col(r, 'precio');
+  if (col(r, 'envio') === 'True' && isNum(precio)) {
+    const kg = pesos[col(r, 'id')], exact = typeof kg === 'number';
+    return eur(finalPrice(+precio, exact ? kg : undefined)) + (exact ? ' (con envío)' : ' (con envío, aprox)');
+  }
+  return precio !== '' ? `${precio} €` : '—';
+}
 // mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
 function favText(rows) {
   const items = rows.map((r, i) => {
-    const precio = col(r, 'precio'), conEnvio = col(r, 'envio') === 'True';
-    let pl;   // precio a mostrar: final estimado si lleva envío, con '(aprox)' si no hay peso real
-    if (conEnvio && isNum(precio)) {
-      const kg = pesos[col(r, 'id')], exact = typeof kg === 'number';
-      pl = eur(finalPrice(+precio, exact ? kg : undefined)) + (exact ? ' (con envío)' : ' (con envío, aprox)');
-    } else pl = precio !== '' ? `${precio} €` : '—';
-    const lines = [`${i + 1}. ${col(r, 'titulo')} — ${pl}`];
+    const lines = [`${i + 1}. ${col(r, 'titulo')} — ${priceLabel(r)}`];
     const km = col(r, 'km'), ciudad = col(r, 'ciudad');
     let where = km !== '' ? `a ${km} km` : ''; if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
     if (where) lines.push('   ' + where);
@@ -1108,9 +1111,9 @@ $('#swVer').onclick = () => {
 };
 // texto plano de la tarjeta actual (título, precio, ubicación, antigüedad, flags, url, descripción)
 function cardText(r) {
-  const precio = col(r, 'precio'), km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
+  const km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
   const lines = [col(r, 'titulo')];
-  lines.push(precio !== '' ? `${precio} €` : '—');
+  lines.push(priceLabel(r));
   let where = km !== '' ? `a ${km} km` : '';
   if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
   if (where) lines.push(where);
