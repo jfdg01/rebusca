@@ -29,13 +29,6 @@ const saveExcl = () => { localStorage.setItem('wp_excl', JSON.stringify(exclMap)
 let catExclMap = JSON.parse(localStorage.getItem('wp_catexcl') || '{}');   // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
 const catExclTerms = () => (curCsv && catExclMap[curCsv]) || [];
 const saveCatExcl = () => { localStorage.setItem('wp_catexcl', JSON.stringify(catExclMap)); pushEstado(); };
-// presets de exclusión del perfil: [{id, name, words:[], cats:[]}]; una búsqueda activa varios (se suman a lo ad-hoc)
-let exclPresets = JSON.parse(localStorage.getItem('wp_presets') || '[]');
-let exclSelMap = JSON.parse(localStorage.getItem('wp_exclsel') || '{}');   // {csv: [presetId,...]} presets activos por búsqueda
-const selPresetIds = () => (curCsv && exclSelMap[curCsv]) || [];
-const activePresets = () => exclPresets.filter(p => selPresetIds().includes(p.id));
-const savePresets = () => { localStorage.setItem('wp_presets', JSON.stringify(exclPresets)); pushEstado(); };
-const saveExclSel = () => { localStorage.setItem('wp_exclsel', JSON.stringify(exclSelMap)); pushEstado(); };
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
 let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
@@ -44,7 +37,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, exclPresets, exclSel: exclSelMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -55,16 +48,12 @@ function hydrateEstado() {
     for (const k of fav) if (trash.has(k)) fav.delete(k);   // cubos exclusivos: limpia solapes heredados (gana papelera)
     exclMap = (e.excl && typeof e.excl === 'object' && !Array.isArray(e.excl)) ? e.excl : {};   // {csv:[palabras]}; ignora formatos viejos
     catExclMap = (e.catExcl && typeof e.catExcl === 'object' && !Array.isArray(e.catExcl)) ? e.catExcl : {};   // {csv:[categorias]}
-    exclPresets = Array.isArray(e.exclPresets) ? e.exclPresets : [];
-    exclSelMap = (e.exclSel && typeof e.exclSel === 'object' && !Array.isArray(e.exclSel)) ? e.exclSel : {};
     stamp = (e.stamp && typeof e.stamp === 'object' && !Array.isArray(e.stamp)) ? e.stamp : {};   // {key:epochMs} cuándo se clasificó
     localStorage.setItem('wp_stamp', JSON.stringify(stamp));
     localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
     localStorage.setItem('wp_fav', JSON.stringify([...fav]));
     localStorage.setItem('wp_excl', JSON.stringify(exclMap));
     localStorage.setItem('wp_catexcl', JSON.stringify(catExclMap));
-    localStorage.setItem('wp_presets', JSON.stringify(exclPresets));
-    localStorage.setItem('wp_exclsel', JSON.stringify(exclSelMap));
     if (data.length) render();
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
@@ -185,17 +174,11 @@ document.querySelectorAll('#listSort button').forEach(b => b.onclick = () => app
 
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = '';   // filtro de texto de la pantalla de lista (papelera/destacados)
-const isExcluded = r => {   // vetada por lo ad-hoc de la query O por cualquier preset activo (palabra en título / categoría exacta)
-  const ps = activePresets();
-  const cats = new Set(catExclTerms());
-  for (const p of ps) for (const c of p.cats) cats.add(c);
-  if (cats.size && cats.has(col(r, 'categoria'))) return true;
-  const ws = new Set(exclTerms());
-  for (const p of ps) for (const w of p.words) ws.add(w);
-  if (!ws.size) return false;
+const isExcluded = r => {   // vetada por la query activa: categoría exacta o palabra en el título
+  const cats = catExclTerms();
+  if (cats.length && cats.includes(col(r, 'categoria'))) return true;
   const t = norm(r[iTitulo] || '');
-  for (const w of ws) if (t.includes(w)) return true;
-  return false;
+  return exclTerms().some(w => t.includes(w));
 };
 // "lejos sin envío": a más de 10 km y sin envío, inalcanzable en la práctica. Se ocultan por defecto (toggle).
 const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > 10 && col(r, 'envio') !== 'True'; };
@@ -314,23 +297,6 @@ function renderCats() {
 function renderExcl() {
   const box = $('#excl'); if (!box) return;
   box.hidden = !(headers.length && view === '' && curCsv);
-  // presets del perfil como toggles: relleno = activo en esta búsqueda
-  const pc = $('#presetChips'); pc.innerHTML = '';
-  const sel = selPresetIds();
-  for (const p of exclPresets) {
-    const b = document.createElement('button');
-    b.className = 'chip preset-chip' + (sel.includes(p.id) ? ' on' : '');
-    b.textContent = p.name;   // textContent: a prueba de < & en el nombre
-    b.title = `${p.words.length} palabra(s) · ${p.cats.length} categoría(s)`;
-    b.onclick = () => {
-      const cur = exclSelMap[curCsv] || (exclSelMap[curCsv] = []);
-      const i = cur.indexOf(p.id);
-      if (i >= 0) cur.splice(i, 1); else cur.push(p.id);
-      if (!cur.length) delete exclSelMap[curCsv];
-      saveExclSel(); render();
-    };
-    pc.append(b);
-  }
   const chips = $('#exclChips'); chips.innerHTML = '';
   for (const w of exclTerms()) {
     const b = document.createElement('button');
@@ -349,7 +315,7 @@ function paintStat() {
   if (!headers.length) { $('#stat').innerHTML = ''; return; }
   const favs = data.filter(r => fav.has(key(r))).length;
   const disc = data.filter(r => trash.has(key(r))).length;
-  const hasExcl = exclTerms().length || catExclTerms().length || activePresets().length;   // ad-hoc palabra/categoría o algún preset activo
+  const hasExcl = exclTerms().length || catExclTerms().length;   // ad-hoc: palabra en título o categoría
   const vetados = hasExcl ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
   const lejos = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).length;
   const sinVer = data.length - favs - disc - vetados - (hideLejos ? lejos : 0);   // "vistos" = favs + disc; vetados y lejos-ocultos salen aparte
@@ -641,98 +607,6 @@ $('#manageSearches').onclick = openManager;
 $('#searchesX').onclick = closeManager;
 $('#searchesFilter').oninput = e => { searchesQ = e.target.value; paintSearches(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !searchesView.hidden) closeManager(); });
-
-// ── gestor de exclusiones (presets del perfil): CRUD full sobre {id,name,words,cats} ──
-const presetView = $('#presetView');
-let editingPreset = null;   // id del preset con el editor inline abierto
-function openPresetMgr() { presetView.hidden = false; document.body.style.overflow = 'hidden'; editingPreset = null; paintPresetList(); }
-function closePresetMgr() { presetView.hidden = true; document.body.style.overflow = ''; render(); }
-// categorías disponibles para el editor: las presentes en el CSV cargado ∪ las ya guardadas en el preset
-const catOptions = extra => {
-  const s = new Set(extra || []);
-  if (headers.includes('categoria')) for (const r of data) { const c = col(r, 'categoria'); if (c) s.add(c); }
-  return [...s].sort((a, b) => a.localeCompare(b, 'es'));
-};
-function paintPresetList() {
-  const list = $('#presetList'); list.innerHTML = '';
-  if (!exclPresets.length) { list.innerHTML = '<div class="qempty">no hay exclusiones guardadas</div>'; return; }
-  for (const p of exclPresets) {
-    const card = document.createElement('div'); card.className = 'search-card';
-    const top = document.createElement('div'); top.className = 'sc-top';
-    const name = document.createElement('span'); name.className = 'sc-kw'; name.textContent = p.name;   // textContent: seguro
-    top.append(name);
-    const meta = document.createElement('div'); meta.className = 'sc-meta';
-    meta.textContent = `${p.words.length} palabra${p.words.length === 1 ? '' : 's'} · ${p.cats.length} categoría${p.cats.length === 1 ? '' : 's'}`;
-    const btns = document.createElement('div'); btns.className = 'sc-btns';
-    const edit = document.createElement('button'); edit.className = 'ghost'; edit.innerHTML = `${ic('pencil')} ${editingPreset === p.id ? 'Cerrar' : 'Editar'}`;
-    edit.onclick = () => { editingPreset = editingPreset === p.id ? null : p.id; paintPresetList(); };
-    const ren = document.createElement('button'); ren.className = 'ghost'; ren.textContent = 'Renombrar';
-    ren.onclick = () => renamePreset(p);
-    const del = document.createElement('button'); del.className = 'ghost danger'; del.innerHTML = `${ic('trash')} Borrar`;
-    del.onclick = () => deletePreset(p);
-    btns.append(edit, ren, del);
-    card.append(top, meta, btns);
-    if (editingPreset === p.id) card.append(presetEditor(p));
-    list.append(card);
-  }
-}
-function presetEditor(p) {
-  const box = document.createElement('div'); box.className = 'preset-editor';
-  const paint = () => { box.innerHTML = ''; savePresets();
-    const lw = document.createElement('div'); lw.className = 'pe-label'; lw.textContent = 'Palabras (título)';
-    const wl = document.createElement('div'); wl.className = 'chips';
-    for (const w of p.words) {
-      const b = document.createElement('button'); b.className = 'chip excl-chip'; b.textContent = w + ' ✕'; b.title = 'quitar';
-      b.onclick = () => { p.words = p.words.filter(x => x !== w); paint(); };
-      wl.append(b);
-    }
-    const wi = document.createElement('input'); wi.type = 'search'; wi.autocomplete = 'off';
-    wi.className = 'pe-word'; wi.placeholder = 'añadir palabra…';
-    wi.onkeydown = e => { if (e.key !== 'Enter') return; const w = norm(wi.value); wi.value = '';
-      if (w && !p.words.includes(w)) { p.words.push(w); paint(); } };
-    const lc = document.createElement('div'); lc.className = 'pe-label'; lc.textContent = 'Categorías';
-    const cl = document.createElement('div'); cl.className = 'chips';
-    const opts = catOptions(p.cats);
-    if (!opts.length) { const e = document.createElement('span'); e.className = 'qempty'; e.textContent = 'abre una búsqueda para elegir categorías'; cl.append(e); }
-    for (const c of opts) {
-      const on = p.cats.includes(c);
-      const b = document.createElement('button'); b.className = 'chip preset-chip' + (on ? ' on' : ''); b.textContent = c;
-      b.onclick = () => { on ? p.cats = p.cats.filter(x => x !== c) : p.cats.push(c); paint(); };
-      cl.append(b);
-    }
-    box.append(lw, wl, wi, lc, cl);
-  };
-  paint();
-  return box;
-}
-function renamePreset(p) {
-  const nuevo = prompt('Nombre de la exclusión:', p.name);
-  if (nuevo === null) return;
-  const name = nuevo.trim();
-  if (!name || name === p.name) return;
-  p.name = name; savePresets(); paintPresetList();
-}
-function deletePreset(p) {
-  if (!confirm(`¿Borrar la exclusión "${p.name}"? Se quita de las búsquedas que la usaban.`)) return;
-  exclPresets = exclPresets.filter(x => x !== p);
-  for (const csv in exclSelMap) {
-    exclSelMap[csv] = exclSelMap[csv].filter(id => id !== p.id);
-    if (!exclSelMap[csv].length) delete exclSelMap[csv];
-  }
-  if (editingPreset === p.id) editingPreset = null;
-  savePresets(); saveExclSel(); paintPresetList();
-}
-function newPreset() {
-  const nuevo = prompt('Nombre de la nueva exclusión:');
-  if (nuevo === null) return;
-  const name = nuevo.trim(); if (!name) return;
-  const p = { id: crypto.randomUUID(), name, words: [], cats: [] };
-  exclPresets.push(p); editingPreset = p.id; savePresets(); paintPresetList();
-}
-$('#managePresets').onclick = openPresetMgr;
-$('#presetX').onclick = closePresetMgr;
-$('#presetNew').onclick = newPreset;
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !presetView.hidden) closePresetMgr(); });
 
 // ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
 const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];
