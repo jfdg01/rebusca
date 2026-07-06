@@ -265,11 +265,12 @@
   .li-img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; margin-bottom: .7rem; background: var(--paper-2, #0002); }
   .li-title { font: 700 1.09rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-  .li-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: .15rem .6rem; }
-  .li-price { font: 800 1.64rem/1 var(--mono); color: var(--pine); }
-  .li-where { font: 13px var(--sans); color: var(--ink-soft); margin-left: auto; }
-  .li-age { font: 600 12.5px var(--mono); margin-top: .4rem; }
-  .li-flags { font: 12px var(--mono); color: var(--ink-soft); margin-top: .5rem; display: flex; align-items: baseline; gap: .6rem; }
+  .li-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+  .li-price { font: 800 1.64rem/1 var(--mono); color: var(--pine); white-space: nowrap; flex: none; }
+  /* antigüedad a la derecha del precio, mismo gris que el resto (sin color de frescura) */
+  .li-age { font: 600 12.5px var(--mono); color: var(--ink-soft); text-align: right; }
+  /* envío + distancia: una línea centrada bajo el precio */
+  .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: center; margin-top: .4rem; }
   /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
   .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
     font: 700 11px var(--mono); color: var(--ink-soft); background: var(--surface-2); }
@@ -419,7 +420,7 @@
 
   .swipe-card { position: relative; z-index: 1; width: 100%; max-height: 100%; min-height: 0;
     background: var(--surface); border: 1px solid var(--line);
-    border-radius: 18px; padding: 1.6rem 1.5rem; box-shadow: 0 8px 30px rgba(27,33,30,.18);
+    border-radius: 18px; padding: 1.2rem; box-shadow: 0 8px 30px rgba(27,33,30,.18);
     display: flex; flex-direction: column; overflow: hidden;   /* el contenido no se sale de la tarjeta (la descripción ya scrollea sola) */
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
@@ -427,7 +428,9 @@
   /* título largo: máx 2 líneas, luego ellipsis (hereda el clamp de .li-title) */
   .swipe-card .li-title { flex: 0 0 auto; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
-  .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; }   /* tope de alto: deja sitio a flags + descripción en pantallas cortas */
+  /* imagen a sangre: pega a los bordes de la tarjeta (cancela el padding) y redondea solo arriba */
+  .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; width: auto;
+    margin: -1.2rem -1.2rem .7rem; border-radius: 18px 18px 0 0; }
   /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
   .swipe-card .li-desc { flex: 0 1 auto; min-height: 0; max-height: 40vh; overflow-y: auto;
     display: block; -webkit-line-clamp: unset; }   /* min-height 0: en pantallas cortas se colapsa antes de recortar los flags */

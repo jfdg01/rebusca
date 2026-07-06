@@ -91,13 +91,6 @@ const ICON = {
 const ic = n => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = ic(e.dataset.icon));
 
-// firma: hue caliente (hoy) → frío (viejo) segun dias
-function heat(d) {
-  const t = Math.max(0, Math.min(1, d / 30));
-  const h = 14 + (202 - 14) * t;
-  return { fg: `hsl(${h} 44% 36%)`, bg: `hsl(${h} 46% 92%)` };
-}
-
 // "hace 16 días y 19 horas" a partir de los días (float) del CSV
 function humanAge(dias) {
   const total = Math.max(0, Math.round(dias * 24));   // horas totales
@@ -134,17 +127,18 @@ function fillCard(el, r) {
 
   add('li-title', col(r, 'titulo'));
 
+  // precio a la izquierda; antigüedad (sin color de frescura) a la derecha
   const head = document.createElement('div'); head.className = 'li-head';
   const price = document.createElement('span'); price.className = 'li-price';
   price.textContent = precio !== '' ? `${precio} €` : '—'; head.append(price);
+  if (isNum(dias)) { const a = document.createElement('div'); a.className = 'li-age'; a.textContent = humanAge(+dias); head.append(a); }
   el.append(head);
 
-  if (isNum(dias)) add('li-age', humanAge(+dias)).style.color = heat(+dias).fg;
-  // envío a la izquierda, distancia a la derecha (misma línea)
-  const flags = add('li-flags', col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío');
+  // envío + distancia en una sola línea centrada bajo el precio
   let where = km !== '' ? `a ${km} km` : '';
   if (ciudad) where += (where ? ' ' : '') + `(${ciudad})`;
-  if (where) { const w = document.createElement('span'); w.className = 'li-where'; w.textContent = where; flags.append(w); }
+  const envio = col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío';
+  add('li-flags', where ? `${envio}, ${where}` : envio);
   // cuándo se clasificó (solo en papelera/destacados y si hay marca de tiempo)
   if ((view === 'trash' || view === 'fav') && stamp[key(r)])
     add('li-when' + (view === 'fav' ? ' fav' : ''), `${view === 'fav' ? 'Destacado' : 'Descartado'} ${ago(stamp[key(r)])}`);
