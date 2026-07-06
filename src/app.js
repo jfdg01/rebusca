@@ -490,7 +490,9 @@ function afterCsvChange(oldCsv, newCsv) {
   if (curCsv === oldCsv) {
     if (newCsv) { selectQuery(newCsv); if (perfil) localStorage.setItem(lastCsvKey(), newCsv); }
     else { curCsv = null; pick.value = ''; pickSince.hidden = true; qbox.classList.remove('has-since');
-      if (perfil) localStorage.removeItem(lastCsvKey()); }
+      if (perfil) localStorage.removeItem(lastCsvKey());
+      headers = []; data = []; sortKeys = []; view = ''; thead.innerHTML = '';   // sin query activa: nada de stats/rebuscar stale
+      $('#empty').textContent = 'Busca algo primero'; render(); }
   }
 }
 $('#manageSearches').onclick = openManager;
