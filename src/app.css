@@ -179,6 +179,22 @@
   .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
     text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
 
+  /* presets de exclusión: fila de toggles + botón gestionar */
+  .excl-presets { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+  .excl-presets .chips:empty { display: none; }
+  /* toggle: apagado = contorno, encendido = relleno pino (activo en esta búsqueda) */
+  .preset-chip { font: 600 12px var(--mono); padding: .28rem .7rem; min-height: 0;
+    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
+  .preset-chip.on { background: var(--pine); border-color: var(--pine); color: #fff; }
+  .preset-manage { font: 700 11px var(--mono); letter-spacing: .03em; padding: .28rem .7rem;
+    min-height: 0; background: var(--field); border: 1px dashed var(--line); color: var(--pine-ink); }
+  /* editor inline de un preset dentro del gestor */
+  .preset-editor { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: .5rem; }
+  .preset-editor .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .pe-label { font: 700 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+  .pe-word { width: 100%; max-width: none; min-height: 2.15rem; font: 600 13px var(--mono); }
+
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
   .list-head { display: flex; flex-direction: column; gap: .5rem; padding: .1rem 0 .7rem; }
   .list-head-bar { display: flex; align-items: center; gap: .6rem; }
