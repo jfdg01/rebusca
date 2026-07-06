@@ -18,6 +18,7 @@
   body {
     font: 13px/1.45 var(--sans); color: var(--ink); background: var(--paper);
     margin: 0; padding: 0 var(--bleed) 5rem;
+    zoom: .95;   /* encoge toda la UI un 5% de forma uniforme (px+rem+imágenes) */
   }
   /* escritorio ancho: columna de contenido al ~40% (centrada), pero las bandas siguen a sangre completa
      porque --bleed crece hasta el borde real del viewport */
