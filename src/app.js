@@ -393,7 +393,7 @@ function paintStat() {
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
-    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
+    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">descartar</span></span>` : '') +
     `<span><b>${disc}</b> descartados ` +
     (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver rechazados'}</span>` : '') +
     `</span>` +
@@ -492,7 +492,7 @@ function paintSellerBanner() {
     ver.onclick = () => showSellerTrash(c.s);   // papelera filtrada a este vendedor
     info.append(b, ' rechazados · ', ver);
     const btn = document.createElement('button'); btn.className = 'chip sb-block';
-    btn.textContent = `Rechazar siguientes (${c.fresh.length})`;
+    btn.textContent = `Descartar siguientes (${c.fresh.length})`;
     btn.onclick = () => blockSeller(c.s);
     row.append(info, btn); list.append(row);
   }
