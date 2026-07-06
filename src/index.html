@@ -6,15 +6,24 @@
 
 <header>
     <div class="brand">
-        <h1>Rebusca</h1>
-        <img
-            class="logo"
-            src="wallapop-logo.webp"
-            alt="Wallapop"
-            width="40"
-            height="40"
-        />
-        <span class="eyebrow">rebuscador<br />de chollos</span>
+        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">?</button>
+        <div class="brand-title">
+            <h1>Rebusca</h1>
+            <img
+                class="logo"
+                src="wallapop-logo.webp"
+                alt="Wallapop"
+                width="40"
+                height="40"
+            />
+            <span class="eyebrow">rebuscador<br />de chollos</span>
+        </div>
+        <details class="opts" id="perfilOpts">
+            <summary title="opciones" data-icon="settings"></summary>
+            <div class="menu">
+                <button id="perfilChip" class="chip">Cambiar de perfil</button>
+            </div>
+        </details>
     </div>
     <div class="panel">
         <div class="search">
@@ -34,15 +43,6 @@
             <button id="scrape" class="primary">Buscar</button>
         </div>
         <label class="titleonly"><input type="checkbox" id="titleOnly" /> solo en el título</label>
-    </div>
-    <div class="panel picker perfil-band">
-        <span class="hola">Bienvenido, <b id="perfilName">invitado</b></span>
-        <details class="opts" id="perfilOpts">
-            <summary title="opciones" data-icon="settings"></summary>
-            <div class="menu">
-                <button id="perfilChip" class="chip">Cambiar de perfil</button>
-            </div>
-        </details>
     </div>
     <div class="panel picker">
         <span class="panel-label">Búsqueda activa <span class="hint">pulsa para cambiar</span></span>

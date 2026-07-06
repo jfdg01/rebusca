@@ -686,7 +686,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !presetVie
 // ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
 const COLORS = ['#FF6B6B', '#FFA94D', '#FFD43B', '#69DB7C', '#38D9A9', '#4DABF7', '#9775FA', '#F783AC'];
 const chip = $('#perfilChip'), gate = $('#gate');
-const nameEl = $('#perfilName'), opts = $('#perfilOpts');
+const avatarEl = $('#perfilAvatar'), opts = $('#perfilOpts');
 const tiles = $('#tiles'), creator = $('#creator'), swatches = $('#swatches');
 let knownPerfiles = [];            // [{name, color}]
 let pendingColor = COLORS[0];
@@ -703,9 +703,11 @@ const ink = c => {   // texto legible según luminancia del fondo (sirve para pa
 console.assert(ink('#FFD43B') === '#1A1E1B' && ink('#A23B4E') === '#F4F6F2'
   && ink('hsl(200 85% 72%)') === '#1A1E1B', 'ink(): contraste roto');
 
-// pinta el chip: avatar+nombre con perfil, o estado vacío (punteado) si no hay
+// pinta el avatar (inicial + color del perfil) y el texto del menú
 function renderChip() {
-  nameEl.textContent = perfil || 'invitado';
+  avatarEl.textContent = perfil ? initial(perfil) : '?';
+  if (perfil) { avatarEl.style.background = perfilColor; avatarEl.style.color = ink(perfilColor); }
+  else { avatarEl.style.background = ''; avatarEl.style.color = ''; }
   chip.textContent = perfil ? 'Cambiar de perfil' : 'Elegir perfil';
 }
 
@@ -812,6 +814,7 @@ $('#deletePerfil').onclick = () => editing && deletePerfil(editing);
 $('#cancelCreate').onclick = showPicker;
 $('#gateX').onclick = closeGate;
 chip.onclick = () => { opts.open = false; openGate('switch'); };
+avatarEl.onclick = () => openGate('switch');
 gate.onclick = e => { if (e.target === gate && !$('#gateX').hidden) closeGate(); };   // backdrop cierra solo en 'switch'
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gateX').hidden) closeGate(); });
 

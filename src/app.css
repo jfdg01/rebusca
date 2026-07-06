@@ -29,6 +29,7 @@
     /* sangre completa: el fondo tapa las tarjetas que pasan por debajo al hacer scroll */
     margin: 0 calc(-1 * var(--bleed)) .25rem;
     padding: .9rem var(--bleed) .7rem;
+    container-type: inline-size;   /* la marca consulta este ancho para esconder el subtítulo */
   }
   /* panel de búsqueda: agrupa configuración + input + botón en una zona con tarjeta */
   .panel {
@@ -53,14 +54,6 @@
   /* badge del "desde" a la derecha del selector, en pino oscuro */
   .pick-since { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%);
     font: 600 .8rem var(--sans); color: var(--pine-ink); pointer-events: none; }
-  /* tira de perfil: banda fina de acento sólido, saludo a la izq + engranaje a la der */
-  .perfil-band { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-    margin-top: .9rem; padding-top: .22rem; padding-bottom: .22rem; border-bottom: none; }
-  /* saludo pegado a "Búsqueda activa": una sola banda continua */
-  .perfil-band + .picker { margin-top: 0; }
-  .perfil-band .hola { font: 600 .9rem/1.2 var(--sans); color: var(--ink-soft); min-width: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .perfil-band .hola b { color: var(--ink); }
   .opts { position: relative; flex: 0 0 auto; }
   /* iconos SVG inline: cuadrados, heredan color, alineados con el texto */
   .icon { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -.15em; flex: 0 0 auto; }
@@ -73,16 +66,22 @@
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: 0 8px 24px rgba(27,33,30,.18); padding: .4rem; }
   .opts .menu .chip { white-space: nowrap; }
-  /* grupo centrado: los 3 objetos juntos, el hueco se reparte a ambos lados */
-  .brand { display: flex; justify-content: center; align-items: center; gap: .6rem; }
-  .brand .logo { height: 2.4rem; width: auto; border-radius: 8px; display: block; }
+  /* cabecera: avatar a la izq, título centrado, engranaje a la der */
+  .brand { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .brand-title { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+  .avatar { flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none;
+    cursor: pointer; font: 700 1rem var(--mono); background: var(--surface-2); color: var(--ink);
+    display: flex; align-items: center; justify-content: center; padding: 0; }
+  .brand .logo { height: 2.1rem; width: auto; border-radius: 8px; display: block; }
   .brand h1 {
-    font: 800 1.5rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
+    font: 800 1.35rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
   }
   .brand .eyebrow {
-    font: 600 .68rem/1.2 var(--mono); letter-spacing: .26em; text-transform: uppercase;
+    font: 600 .6rem/1.2 var(--mono); letter-spacing: .16em; text-transform: uppercase;
     color: var(--ink-soft); white-space: nowrap; text-align: right;   /* solo parte por el <br> */
   }
+  /* sin sitio para todo: se esconde el subtítulo antes que clipar el engranaje */
+  @container (max-width: 290px) { .brand .eyebrow { display: none; } }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
