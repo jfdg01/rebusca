@@ -29,9 +29,17 @@ python3 src/wallapop.py demo                  # self-check del scraper (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart wallapop
 ```
 
-> **NUNCA matar el servidor del usuario** (`pkill -f servidor.py`, `kill`, etc.).
-> El usuario suele tener uno corriendo y lo está usando. Para verificar cambios,
-> levanta el tuyo en otro puerto (`PORT=8123 python3 src/servidor.py`) y déjalo estar.
+> **NUNCA matar ningún servidor** (`pkill -f servidor.py`, `kill`, etc.).
+> El usuario tiene el suyo corriendo (normalmente en :8000) y lo está usando.
+> **Servidor de pruebas: SIEMPRE el puerto 8123.** Para verificar cambios, comprueba
+> si ya está abierto y reúsalo; si no, ábrelo tú y déjalo estar:
+> ```bash
+> curl -sf -o /dev/null http://127.0.0.1:8123/ || PORT=8123 python3 src/servidor.py &
+> ```
+> Sirve estáticos desde disco en cada petición, así que recoge tus ediciones de `app.css`/`app.js` sin reiniciar.
+>
+> **Perfil de QA:** para probar/capturar usa (o crea) el perfil **`QA`** — busca y trastea con
+> datos dummy ahí (`csv/QA/`, `estados/QA.json`) sin tocar `Javi` ni las demás cuentas reales.
 
 Convención: la lógica no trivial deja un `demo()` con `assert`, invocable por `python3 <fichero>.py demo`.
 

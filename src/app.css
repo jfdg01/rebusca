@@ -11,20 +11,24 @@
     --pine: #13C1AC;       /* acento de marca = teal del logo de Wallapop */
     --pine-ink: #0A736A;   /* teal oscuro: texto/enlaces legibles sobre el papel claro */
     --pine-soft: #D3F1EC;  /* tinte teal para fondos suaves / track del spinner */
+    --bleed: clamp(.75rem, 2vw, 1.5rem);   /* gutter del body; las bandas edge-to-edge lo anulan con margen negativo */
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
   body {
     font: 14px/1.45 var(--sans); color: var(--ink); background: var(--paper);
-    margin: 0; padding: 0 clamp(.75rem, 2vw, 1.5rem) 5rem;
+    margin: 0; padding: 0 var(--bleed) 5rem;
   }
+  /* escritorio ancho: columna de contenido al ~40% (centrada), pero las bandas siguen a sangre completa
+     porque --bleed crece hasta el borde real del viewport */
+  @media (min-width: 1000px) { :root { --bleed: 30vw; } }
 
   /* ── cabecera / mesa de mandos ─────────────────────────── */
   header {
     position: sticky; top: 0; z-index: 20; background: var(--paper);
     /* sangre completa: el fondo tapa las tarjetas que pasan por debajo al hacer scroll */
-    margin: 0 calc(-1 * clamp(.75rem, 2vw, 1.5rem)) .25rem;
-    padding: .9rem clamp(.75rem, 2vw, 1.5rem) .7rem;
+    margin: 0 calc(-1 * var(--bleed)) .25rem;
+    padding: .9rem var(--bleed) .7rem;
   }
   /* panel de búsqueda: agrupa configuración + input + botón en una zona con tarjeta */
   .panel {
@@ -35,12 +39,12 @@
   .panel .menu-row, .panel .search { margin-top: 0; }
   /* card de búsqueda activa a sangre completa: banda edge-to-edge, contenido alineado con las cards */
   .picker {
-    margin-left: calc(-1 * clamp(.75rem, 2vw, 1.5rem));
-    margin-right: calc(-1 * clamp(.75rem, 2vw, 1.5rem));
+    margin-left: calc(-1 * var(--bleed));
+    margin-right: calc(-1 * var(--bleed));
     border-radius: 0; border-left: none; border-right: none;
     box-shadow: none;
-    padding-left: calc(clamp(.75rem, 2vw, 1.5rem) + .8rem);
-    padding-right: calc(clamp(.75rem, 2vw, 1.5rem) + .8rem);
+    padding-left: calc(var(--bleed) + .8rem);
+    padding-right: calc(var(--bleed) + .8rem);
   }
   .panel-label { display: flex; justify-content: space-between; align-items: baseline;
     font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
@@ -82,7 +86,7 @@
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
-  .qbox .query { width: 100%; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
+  .qbox .query { width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   .qbox.has-since .query { padding-right: 7rem; }
   .qbox .query:hover { border-color: var(--pine); }
   /* lista desplegable: flota sobre el contenido, scroll propio, filas kw + ventana temporal */
@@ -136,8 +140,8 @@
     font: 12.5px/1.3 var(--mono); color: var(--ink-soft);
     display: flex; flex-direction: column; gap: .5rem;
     /* sangre completa: laterales anulan el padding del body, como las tarjetas de la lista */
-    margin: .7rem calc(-1 * clamp(.75rem, 2vw, 1.5rem)) 0;
-    padding: .75rem calc(clamp(.75rem, 2vw, 1.5rem) + .9rem);
+    margin: .7rem calc(-1 * var(--bleed)) 0;
+    padding: .75rem calc(var(--bleed) + .9rem);
     border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
     background: var(--surface-2);
   }
@@ -145,8 +149,8 @@
   /* dentro de la card de búsqueda activa: sin sangre completa, solo divisoria arriba */
   /* contadores = rectángulo inferior "por debajo": más oscuro + sombra interior arriba */
   .picker .stat {
-    margin: .8rem calc(-1 * (clamp(.75rem, 2vw, 1.5rem) + .8rem)) -.9rem;
-    padding: .8rem calc(clamp(.75rem, 2vw, 1.5rem) + .8rem);
+    margin: .8rem calc(-1 * (var(--bleed) + .8rem)) -.9rem;
+    padding: .8rem calc(var(--bleed) + .8rem);
     background: var(--surface-2); border-bottom: none;
     box-shadow: inset 0 5px 7px -5px rgba(27,33,30,.28);
   }
@@ -162,7 +166,9 @@
   .excl .chips:empty { display: none; }
   .excl-chip { font: 600 12px var(--mono); padding: .28rem .6rem; min-height: 0;
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
-  .excl #exclAdd { width: 100%; min-height: 2.15rem; font: 600 13px var(--mono); }
+  /* flex/max-width: mismo caso que #listFilter — en la columna flex .excl, el flex:1 1 180px de
+     input[type=search] se volvía ALTURA y el max-width:320px capaba el ancho (caja alta y estrecha) */
+  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font: 600 13px var(--mono); }
 
   .cats { margin-top: .8rem; }
   .cats summary { cursor: pointer; font: 700 12px var(--mono); letter-spacing: .04em;
@@ -179,31 +185,26 @@
   .list-head button { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; font: 400 1.3rem/1 var(--mono); }
   .list-head h2 { margin: 0; font: 800 1.2rem var(--mono); letter-spacing: .04em; text-transform: uppercase; }
-  .list-head #listFilter { width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
+  /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
+  .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   .list-head #exportFav { margin-left: auto; width: auto; height: auto; border-radius: 999px; font: 700 12px var(--mono); }
 
-  /* ── tabla ─────────────────────────────────────────────── */
-  table { border-collapse: collapse; width: 100%; }
-  th, td { padding: .35rem .5rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-  thead th {
-    position: sticky; top: 92px; z-index: 10; background: var(--surface-2);
-    font: 700 11px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase;
-    color: var(--ink-soft); cursor: pointer; white-space: nowrap; user-select: none;
-    border-bottom: 2px solid var(--ink);
+  /* ── lista compuesta (Destacados / Papelera): SIEMPRE pila de tarjetas ──
+     cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas
+     del CSV, que no aplican a una tarjeta compuesta → se oculta en cualquier anchura.
+     En desktop el ancho lo marca --bleed (columna centrada), como el resto del contenido. */
+  table, tbody, tbody tr, tbody td { display: block; }
+  thead { display: none; }
+  /* fila a sangre completa: banda de ancho total separada por un hueco de papel */
+  tbody tr {
+    background: var(--surface);
+    padding: 1rem var(--bleed);
+    margin: 0 calc(-1 * var(--bleed)) .55rem;   /* laterales anulan el padding del body; abajo = separación */
   }
-  thead th.sorted { color: var(--ink); }
-  thead th.sorted::after { content: attr(data-dir); margin-left: .3rem; color: var(--pine); }
-  thead th.act { cursor: default; }
+  tbody td { border: none; padding: .2rem 0; }
 
-  tbody td { background: var(--surface); }
-  tbody tr:nth-child(even) td { background: var(--surface-2); }
-  /* columnas de datos numericos → mono, tabulares, a la derecha */
-  td.num { font: 13px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-  td.desc { font-size: 12.5px; color: var(--ink-soft); max-width: 34rem; overflow-wrap: anywhere; }
-  td.titulo { font-weight: 600; max-width: 22rem; overflow-wrap: anywhere; }
-
-  /* celda de acciones: Ver + Quitar, grandes y juntos */
-  td.act { width: 1%; white-space: nowrap; padding: .4rem .5rem; }
+  /* celda de acciones: Ver + Quitar/Restaurar, fila de botones al pie de la tarjeta */
+  td.act { display: flex; gap: .5rem; white-space: normal; padding: 0 0 .7rem; }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
     font: 700 13px var(--mono); padding: .5rem 1rem; margin-right: .4rem;
@@ -224,9 +225,6 @@
   .btn.quitar { color: var(--ink-soft); }
   .btn.quitar:hover { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
-
-  /* firma: temperatura de frescura en la columna dias */
-  td.heat { font: 700 13px var(--mono); text-align: right; border-radius: 4px; }
 
   /* item de lista compuesto (Destacados / Papelera) */
   .li-title { font: 700 1.15rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem; }
@@ -263,51 +261,15 @@
   .snack button:hover { background: #2b322e; }
   @media (prefers-reduced-motion: no-preference) { .snack { transition: transform .22s ease; } }
 
-  /* ── móvil: la tabla ancha se vuelve una pila de tarjetas legibles ── */
+  /* ── móvil: controles dedo-friendly ── */
   @media (max-width: 640px) {
     body { padding-bottom: 6rem; }
     /* controles con texto de 16px: dedo-friendly y sin auto-zoom en iOS */
     select, input[type=search], input[type=number], button, input[type=file], .btn { font-size: 16px; }
     input[type=search] { max-width: none; flex: 1 1 100%; }
     .flt { flex-wrap: wrap; }   /* el grupo buscar (input+select+botón) no cabe en una línea → que envuelva */
-
-    thead { display: none; }              /* las cabeceras viajan a cada tarjeta vía data-label */
-    table, tbody, tbody tr, tbody td { display: block; }
-    /* lista a sangre completa: bandas de ancho total separadas por un hueco de papel */
-    tbody tr {
-      background: var(--surface);
-      padding: 1rem clamp(.75rem, 2vw, 1.5rem);
-      margin: 0 calc(-1 * clamp(.75rem, 2vw, 1.5rem)) .55rem;   /* laterales anulan el padding del body; abajo = separación */
-    }
-    tbody tr:nth-child(even) td { background: none; }
-    tbody td { background: none; border: none; padding: .2rem 0; }
-
-    /* pares etiqueta/valor para los campos sueltos (ciudad, km, envío, reservado) */
-    tbody td[data-label] {
-      display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-      font-size: 15px; text-align: right;
-    }
-    tbody td[data-label]::before {
-      content: attr(data-label); text-align: left; flex: none;
-      font: 600 11px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft);
-    }
-
-    /* título grande, sin etiqueta, abre la tarjeta (tbody-prefijo: gana a td[data-label]) */
-    tbody td.titulo { display: block; text-align: left; max-width: none; font-size: 1.15rem; line-height: 1.25; margin-bottom: .1rem; }
-    tbody td.titulo::before { display: none; }
-    /* precio destacado en pino */
-    tbody td[data-label="precio"] { font: 700 1.3rem var(--mono); color: var(--pine); }
-    tbody td[data-label="precio"]::before { align-self: center; }
-    /* días conserva su color de frescura, alineado a la derecha como chip */
-    tbody td.heat { display: flex; justify-content: space-between; align-items: center; text-align: right; }
-    /* descripción a ancho completo, sin corte */
-    tbody td.desc { display: block; text-align: left; max-width: none; font-size: 14px; line-height: 1.45; margin-top: .3rem; }
-    tbody td.desc::before { display: none; }
-
-    /* acciones: fila de botones grandes al pie de la tarjeta */
-    td.act { display: flex; gap: .5rem; width: auto; white-space: normal; padding: 0 0 .7rem; }
-    td.act::before { display: none; }
-    .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; font-size: 15px; border-radius: 12px; }
+    /* botones de acción de la tarjeta a lo ancho, grandes para el pulgar */
+    td.act .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; border-radius: 12px; }
   }
 
   /* perfil: chip en cabecera con avatar del color de la persona */
@@ -380,9 +342,12 @@
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
     touch-action: pan-y; }   /* arrastre horizontal desde cualquier hueco de la vista, no solo la tarjeta */
   /* cerrar: hereda el botón claro global, solo redondo arriba-izq */
-  .swipe-x { position: absolute; top: 1rem; left: 1rem; width: 2.6rem; height: 2.6rem;
+  /* X alineada al borde izq de la columna centrada (min(440px,100%)), como la main view; 1rem en móvil */
+  .swipe-x { position: absolute; top: 1rem; left: max(1rem, calc(50% - 220px)); width: 2.6rem; height: 2.6rem;
     border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
-  .swipe-sort { display: flex; gap: .4rem; margin: 3rem 0 .2rem; }   /* baja para no chocar con la X flotante */
+  .swipe-sort-label { margin: 3rem 0 .5rem; font: 400 .72rem/1 var(--mono); letter-spacing: .01em;
+    color: var(--ink-soft); }   /* baja para no chocar con la X flotante */
+  .swipe-sort { display: flex; gap: .4rem; margin: 0 0 .2rem; }
   .swipe-sort button { padding: .35rem .8rem; border-radius: 999px; background: var(--surface);
     border: 1px solid var(--line); color: var(--ink-soft); font: 700 12px var(--mono); }
   .swipe-sort button.on { background: var(--pine); border-color: var(--pine); color: #fff; }
@@ -425,7 +390,7 @@
   .icon-btn .icon { width: 1.25rem; height: 1.25rem; }
 
   .searches { position: fixed; inset: 0; z-index: 45; background: var(--paper);
-    display: flex; flex-direction: column; padding: 1rem clamp(.75rem, 2vw, 1.5rem) 2rem;
+    display: flex; flex-direction: column; padding: 1rem var(--bleed) 2rem;
     overflow-y: auto; }
   .searches-bar { display: flex; align-items: center; gap: .6rem; margin-bottom: 1rem; }
   .searches-bar .swipe-x { position: static; width: 2.6rem; height: 2.6rem; }
