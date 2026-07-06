@@ -212,7 +212,7 @@ const isExcluded = r => {   // vetada por la query activa: categoría exacta o p
   const t = norm(r[iTitulo] || '');
   return exclTerms().some(w => t.includes(w));
 };
-// "lejos sin envío": a más de N km y sin envío, inalcanzable en la práctica. Nunca entran al mazo.
+// "lejos sin envío": a más de N km y sin envío, difícil en la práctica. Entran al mazo como cualquiera; su línea en el stat es un atajo para rechazarlos en bloque (o auto-rechazo con el ajuste).
 let lejosKm = +localStorage.getItem('wp_lejoskm') || 10;   // umbral configurable (Ajustes)
 const isLejos = r => { const km = col(r, 'km'); return km !== '' && +km > lejosKm && col(r, 'envio') !== 'True'; };
 let autoExclLejos = localStorage.getItem('wp_autoexcllejos') === '1';   // si activo, los lejos-sin-envío van solos a la papelera (Ajustes)
@@ -245,7 +245,7 @@ function filteredRows() {
     if (view === 'trash' && listSeller && col(r, 'vendedor') !== listSeller) return false;
     if (view === 'trash') return trash.has(k);
     if (view === 'fav') return fav.has(k);
-    return !fav.has(k) && !trash.has(k) && !isExcluded(r) && !isLejos(r);   // mazo: sin clasificar, sin vetar, sin lejos-sin-envío
+    return !fav.has(k) && !trash.has(k) && !isExcluded(r);   // mazo: sin clasificar y sin vetar (los lejos-sin-envío también entran)
   });
   if (listView) sortList(rows);   // las listas ordenan con su barra (#listSort)
   else if (sortKeys.length) rows.sort((a, b) => {   // mazo/swipe: orden multinivel
@@ -389,11 +389,11 @@ function paintStat() {
   const hasExcl = exclTerms().length || catExclTerms().length;   // ad-hoc: palabra en título o categoría
   const vetados = hasExcl ? data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && isExcluded(r)).length : 0;
   const lejos = data.filter(r => !fav.has(key(r)) && !trash.has(key(r)) && !isExcluded(r) && isLejos(r)).length;
-  const sinVer = data.length - favs - disc - vetados - lejos;   // "vistos" = favs + disc; vetados y lejos (nunca en mazo) salen aparte
+  const sinVer = data.length - favs - disc - vetados;   // "vistos" = favs + disc; vetados salen aparte. Los lejos SÍ cuentan (están en el mazo); su línea es solo atajo para rechazarlos en bloque
   $('#stat').innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados ? `<span><b>${vetados}</b> excluidos · <span class="link" id="trashExcl">mandar a rechazados</span></span>` : '') +
-    (lejos ? `<span><b>${lejos}</b> lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
+    (lejos ? `<span><b>${lejos}</b> de ellos lejos y sin envío · <span class="link" id="trashLejos">rechazar</span></span>` : '') +
     `<span><b>${disc}</b> rechazados ` +
     (disc || view === 'trash' ? `· <span class="link" id="toggleTrash">${view === 'trash' ? 'volver' : 'ver rechazados'}</span>` : '') +
     `</span>` +
