@@ -348,6 +348,7 @@ function renderCats() {
     };
     chips.append(b);
   }
+  $('#catCount').textContent = excl.length ? ` (${excl.length})` : '';   // nº de categorías excluidas, nada si 0
   const clr = $('#catClear');   // limpiar (en el summary): reactiva todas las categorías vetadas
   clr.hidden = !excl.length;
   clr.onclick = e => { e.preventDefault(); e.stopPropagation(); delete catExclMap[curCsv]; saveCatExcl(); render(); };
