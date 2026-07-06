@@ -97,7 +97,7 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
 
 
 FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-          "reservado", "envio", "url", "descripcion"]  # id inmutable primero, descripcion al final
+          "reservado", "envio", "url", "vendedor", "imagen", "descripcion"]  # id inmutable primero, descripcion al final
 
 
 def row(it, origin):
@@ -120,6 +120,8 @@ def row(it, origin):
         "reservado": it.get("reserved", {}).get("flag", False),
         "envio": it.get("shipping", {}).get("user_allows_shipping", False),
         "url": "https://es.wallapop.com/item/" + it.get("web_slug", ""),
+        "vendedor": it.get("user_id", ""),   # id opaco del vendedor: estable, sirve de key para bloquear
+        "imagen": ((it.get("images") or [{}])[0].get("urls") or {}).get("small", ""),  # thumb W320
     }
 
 
@@ -194,8 +196,13 @@ def _sort_by_km(path):
 def demo():
     # ponytail: check runnable sin red — haversine e id inmutable como clave de estado
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
-    it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}}
-    assert row(it, (0, 0))["id"] == "abc123", "id no capturado"
+    it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {},
+          "user_id": "sel1", "images": [{"urls": {"small": "http://x/i.jpg"}}]}
+    r = row(it, (0, 0))
+    assert r["id"] == "abc123", "id no capturado"
+    assert r["vendedor"] == "sel1", "vendedor (user_id) no capturado"
+    assert r["imagen"] == "http://x/i.jpg", "imagen (thumb) no capturada"
+    assert row({"id": "y", "title": "x", "price": {"amount": 1}, "location": {}}, (0, 0))["imagen"] == "", "imagen sin fotos debe ser ''"
     assert title_matches("iPhone 12 azul", "iphone azul"), "title_matches: acentos/orden"
     assert not title_matches("Funda para móvil", "iphone"), "title_matches: no debería casar"
     print("ok")

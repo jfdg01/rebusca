@@ -155,6 +155,23 @@
   .stat > span b:first-child { min-width: 2.1rem; text-align: right; }
   .stat b { color: var(--ink); font-weight: 700; font-size: 1.15em; }
   .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; }
+
+  /* banner de auto-rechazo por vendedor: sangre completa como .stat, tinte ámbar (es una oferta) */
+  .seller-banner {
+    margin: 0 calc(-1 * (var(--bleed) + .8rem));
+    padding: .7rem calc(var(--bleed) + .9rem);
+    background: #FBF1DC; border-bottom: 1px solid var(--line);
+    font: 13px/1.35 var(--sans); color: var(--ink);
+  }
+  .seller-banner[hidden] { display: none; }
+  .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+  .sb-head .link { color: #9a6a12; cursor: pointer; text-decoration: underline; white-space: nowrap; }
+  .sb-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; }
+  .sb-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+  .sb-info { min-width: 0; overflow-wrap: anywhere; color: var(--ink-soft); }
+  .sb-info b { color: var(--ink); }
+  .sb-block { flex: 0 0 auto; color: #b03024; border-color: #d0a59f; background: var(--field); }
+  .sb-block:hover { color: #fff; background: #b03024; border-color: #b03024; }
   .stat .link[hidden] { display: none; }
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
@@ -226,6 +243,7 @@
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
 
   /* item de lista compuesto (Destacados / Papelera) */
+  .li-img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; margin-bottom: .7rem; background: var(--paper-2, #0002); }
   .li-title { font: 700 1.15rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem; }
   .li-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: .15rem .6rem; }
   .li-price { font: 800 1.7rem/1 var(--mono); color: var(--pine); }
@@ -369,6 +387,7 @@
   .swipe-card .li-title { flex: 0 0 auto; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
+  .swipe-card .li-img { flex: 0 0 auto; }
   /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
   .swipe-card .li-desc { flex: 0 1 auto; min-height: 3rem; max-height: 40vh; overflow-y: auto;
     display: block; -webkit-line-clamp: unset; }

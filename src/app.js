@@ -20,6 +20,8 @@ function parseCSV(text) {
 const load = k => new Set(JSON.parse(localStorage.getItem(k) || '[]'));
 const save = (k, set) => { localStorage.setItem(k, JSON.stringify([...set])); pushEstado(); };
 const trash = load('wp_discarded'), fav = load('wp_fav');   // 2 cubos exclusivos; "sin ver" = ni fav ni trash
+const blockSel = load('wp_blocksel');   // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
+const saveBlockSel = () => { localStorage.setItem('wp_blocksel', JSON.stringify([...blockSel])); pushEstado(); };
 let stamp = JSON.parse(localStorage.getItem('wp_stamp') || '{}');   // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
 const stampNow = k => { stamp[k] = Date.now(); localStorage.setItem('wp_stamp', JSON.stringify(stamp)); };
 const unstamp = k => { if (k in stamp) { delete stamp[k]; localStorage.setItem('wp_stamp', JSON.stringify(stamp)); } };
@@ -37,7 +39,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], excl: exclMap, catExcl: catExclMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], blockSel: [...blockSel], excl: exclMap, catExcl: catExclMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -46,6 +48,8 @@ function hydrateEstado() {
       set.clear(); (arr || []).forEach(x => set.add(x));
     }
     for (const k of fav) if (trash.has(k)) fav.delete(k);   // cubos exclusivos: limpia solapes heredados (gana papelera)
+    blockSel.clear(); (e.blockSel || []).forEach(x => blockSel.add(x));
+    localStorage.setItem('wp_blocksel', JSON.stringify([...blockSel]));
     exclMap = (e.excl && typeof e.excl === 'object' && !Array.isArray(e.excl)) ? e.excl : {};   // {csv:[palabras]}; ignora formatos viejos
     catExclMap = (e.catExcl && typeof e.catExcl === 'object' && !Array.isArray(e.catExcl)) ? e.catExcl : {};   // {csv:[categorias]}
     stamp = (e.stamp && typeof e.stamp === 'object' && !Array.isArray(e.stamp)) ? e.stamp : {};   // {key:epochMs} cuándo se clasificó
@@ -58,7 +62,7 @@ function hydrateEstado() {
   }).catch(() => {});   // offline: nos quedamos con lo de localStorage
 }
 
-const HIDE = new Set(['id', 'cp', 'url']);   // no se muestran como columna (url va en el boton Ver)
+const HIDE = new Set(['id', 'cp', 'url', 'vendedor', 'imagen']);   // no se muestran como columna (url va en el boton Ver; vendedor/imagen se usan en la tarjeta)
 let headers = [], data = [], sortKeys = [], view = '';  // view: '' mazo | 'trash' papelera | 'fav' interesantes
 let iId = -1, iUrl = -1, iTitulo = -1, iPrecio = -1;
 const isNum = v => v !== '' && !isNaN(v);
@@ -119,6 +123,9 @@ console.assert(ago(Date.now() - 3 * 60000) === 'hace 3 min' && ago(Date.now() - 
 function fillCard(el, r) {
   const add = (cls, txt) => { const e = document.createElement('div'); e.className = cls; e.textContent = txt; el.append(e); return e; };
   const precio = col(r, 'precio'), km = col(r, 'km'), ciudad = col(r, 'ciudad'), dias = col(r, 'dias');
+
+  const img = col(r, 'imagen');
+  if (img) { const im = document.createElement('img'); im.className = 'li-img'; im.loading = 'lazy'; im.src = img; im.onerror = () => im.remove(); el.append(im); }
 
   add('li-title', col(r, 'titulo'));
 
@@ -222,6 +229,7 @@ function filteredRows() {
 }
 
 function render() {
+  enforceBlocks();   // vendedores bloqueados a la papelera antes de filtrar
   const rows = filteredRows();
   tbody.innerHTML = '';
   const frag = document.createDocumentFragment();
@@ -262,6 +270,7 @@ function render() {
       : view === 'trash' ? 'La papelera está vacía.'
       : view === 'fav' ? 'Sin interesantes todavía.' : 'Nada que revisar.';
   paintStat();
+  paintSellerBanner();
   paintListSort();
   renderExcl();
   renderCats();
@@ -348,6 +357,72 @@ function trashExcluded() {
   snack(`${ks.length} excluido${ks.length === 1 ? '' : 's'} a la papelera`, () => {
     ks.forEach(k => { trash.delete(k); unstamp(k); }); save('wp_discarded', trash); render();
   });
+}
+
+// ── auto-rechazo por vendedor ──
+// vendedores bloqueados: sus items del CSV actual van a la papelera solos (idempotente, sin snack)
+function enforceBlocks() {
+  if (!blockSel.size || !headers.includes('vendedor')) return;
+  let changed = false;
+  for (const r of data) {
+    const s = col(r, 'vendedor'); if (!s || !blockSel.has(s)) continue;
+    const k = key(r);
+    if (!trash.has(k)) { fav.delete(k); trash.add(k); stampNow(k); changed = true; }
+  }
+  if (changed) { save('wp_fav', fav); save('wp_discarded', trash); }
+}
+// candidatos a bloqueo: vendedor con ≥2 rechazados y ≥1 anuncio fresco en el CSV actual, no bloqueado aún
+function sellerCandidates() {
+  if (!headers.includes('vendedor')) return [];
+  const rej = {}, fresh = {};
+  for (const r of data) {
+    const s = col(r, 'vendedor'); if (!s) continue;
+    const k = key(r);
+    if (trash.has(k)) rej[s] = (rej[s] || 0) + 1;
+    else if (!fav.has(k) && !isExcluded(r) && !(hideLejos && isLejos(r))) (fresh[s] = fresh[s] || []).push(r);
+  }
+  return Object.keys(rej).filter(s => rej[s] >= 2 && fresh[s] && !blockSel.has(s))
+    .map(s => ({ s, rejected: rej[s], fresh: fresh[s] }))
+    .sort((a, b) => b.rejected - a.rejected);
+}
+// bloquear vendedor: manda sus frescos a la papelera; deshacer = desbloquear + restaurar esos
+function blockSeller(s) {
+  const newly = data.filter(r => col(r, 'vendedor') === s && !trash.has(key(r))).map(key);
+  blockSel.add(s); saveBlockSel();
+  newly.forEach(k => { fav.delete(k); trash.add(k); stampNow(k); });
+  save('wp_fav', fav); save('wp_discarded', trash); render();
+  snack(`Vendedor bloqueado · ${newly.length} a la papelera`, () => {
+    blockSel.delete(s); saveBlockSel();
+    newly.forEach(k => { trash.delete(k); unstamp(k); });
+    save('wp_discarded', trash); render();
+  });
+}
+let sellerBannerOpen = false;
+function paintSellerBanner() {
+  const box = $('#sellerBanner'); if (!box) return;
+  const cands = view === '' && headers.length ? sellerCandidates() : [];
+  box.hidden = !cands.length; box.innerHTML = '';
+  if (!cands.length) { sellerBannerOpen = false; return; }
+  const head = document.createElement('div'); head.className = 'sb-head';
+  const lbl = document.createElement('span');
+  lbl.innerHTML = `<b>${cands.length}</b> vendedor${cands.length === 1 ? '' : 'es'} con 2+ rechazos y anuncios nuevos`;
+  const tog = document.createElement('span'); tog.className = 'link';
+  tog.textContent = sellerBannerOpen ? 'ocultar' : 'gestionar';
+  tog.onclick = () => { sellerBannerOpen = !sellerBannerOpen; paintSellerBanner(); };
+  head.append(lbl, tog); box.append(head);
+  if (!sellerBannerOpen) return;
+  const list = document.createElement('div'); list.className = 'sb-list';
+  for (const c of cands) {
+    const row = document.createElement('div'); row.className = 'sb-row';
+    const info = document.createElement('span'); info.className = 'sb-info';
+    const b = document.createElement('b'); b.textContent = c.rejected;
+    info.append(b, ` rechazados · nuevo: “${c.fresh[0][iTitulo]}”` + (c.fresh.length > 1 ? ` (+${c.fresh.length - 1})` : ''));
+    const btn = document.createElement('button'); btn.className = 'chip sb-block';
+    btn.textContent = `Rechazar todos (${c.fresh.length})`;
+    btn.onclick = () => blockSeller(c.s);
+    row.append(info, btn); list.append(row);
+  }
+  box.append(list);
 }
 
 // ── descartar / restaurar con deshacer claro ──
