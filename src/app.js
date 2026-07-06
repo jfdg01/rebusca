@@ -322,6 +322,7 @@ function render() {
   paintListSort();
   renderExcl();
   renderCats();
+  reconcileBack();
 }
 
 // chips de categorías presentes en la query (con nº de cartas); clic veta/reactiva la categoría
@@ -681,8 +682,9 @@ function openManager() {
   searchesView.hidden = false; document.body.style.overflow = 'hidden';
   searchesQ = ''; $('#searchesFilter').value = '';
   renderSearches();
+  reconcileBack();
 }
-function closeManager() { searchesView.hidden = true; document.body.style.overflow = ''; }
+function closeManager() { searchesView.hidden = true; document.body.style.overflow = ''; reconcileBack(); }
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;   // "última semana" → "Última semana"
 function renderSearches() {   // relee del servidor y repinta con el filtro actual
   searchesList.innerHTML = '<div class="qempty">cargando…</div>';
@@ -838,8 +840,9 @@ function openGate(mode) {          // 'first' (obligatorio) | 'switch' (se puede
   $('#gateX').hidden = mode !== 'switch';
   gate.classList.add('show');
   knownPerfiles.length ? showPicker() : showCreator();   // sin perfiles -> directo a crear
+  reconcileBack();
 }
-function closeGate() { gate.classList.remove('show'); }
+function closeGate() { gate.classList.remove('show'); reconcileBack(); }
 
 $('#creator').onsubmit = e => {
   e.preventDefault();
@@ -901,6 +904,7 @@ function openSwipe() {
   if (!deck.length) return snack('No hay nada que revisar con estos filtros.', null);
   swipeView.hidden = false; document.body.style.overflow = 'hidden';
   renderSwExcl(); nextCard();
+  reconcileBack();
 }
 function rebuildDeck() { deck = filteredRows(); di = 0; undoStack = []; nextCard(); }   // re-baraja desde el principio (ya excluye clasificados/vetados); el historial de deshacer deja de ser válido
 // chips sutiles de palabras vetadas dentro del swipe; añadir/quitar re-baraja el mazo en vivo
@@ -1012,16 +1016,7 @@ $('#listBack').onclick = e => {
   if (sellerReturn) { sellerReturn = false; listSeller = ''; openSwipe(); swipeMenu.hidden = false; e.stopPropagation(); return; }   // volver justo a donde vino: swipe + ajustes abiertos (frena el "cerrar al tocar fuera")
   render();
 };
-$('#exportFav').onclick = () => {   // copia los destacados a la vista (título — precio) para pegar en una IA
-  const txt = filteredRows().map(r => {
-    const p = col(r, 'precio');
-    return col(r, 'titulo') + (p ? ` — ${p}€` : '');
-  }).join('\n');
-  if (!txt) return;
-  navigator.clipboard.writeText(txt)
-    .then(() => snack(`Copiados ${filteredRows().length} al portapapeles`, null))
-    .catch(() => snack('No se pudo copiar', null));
-};
+$('#exportFav').onclick = e => copyFavs(e.currentTarget);   // misma ficha para la IA que el botón del mazo vacío
 // precio a copiar/mostrar: final estimado al comprador si lleva envío (con '(aprox)' si no hay peso real), si no el del anuncio
 function priceLabel(r) {
   const precio = col(r, 'precio');
@@ -1152,4 +1147,28 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeSwipe();
   else if (e.key === 'ArrowLeft') card && fling(-1);
   else if (e.key === 'ArrowRight') card && fling(1);
+});
+
+// ── botón atrás del móvil: cierra la superficie abierta (lista/gestor/swipe/perfil) en vez de salir de la página ──
+// 1 sola entrada de historial sintética "hay algo abierto"; se arma al abrir y se retira al cerrar por UI.
+// ponytail: no es una pila; con superficies anidadas hace falta una pulsación de atrás por capa (basta para los flujos de un nivel).
+let rbArmed = false;
+function gateOpen() { return gate.classList.contains('show') && !$('#gateX').hidden; }   // 'first' (obligatorio) no se cierra con atrás
+function anyOpen() { return view !== '' || !searchesView.hidden || !swipeView.hidden || gateOpen(); }
+function closeTop() {   // cierra la superficie superior; true si cerró algo
+  if (gateOpen()) { closeGate(); return true; }
+  if (!searchesView.hidden) { closeManager(); return true; }
+  if (!swipeView.hidden) { closeSwipe(); return true; }
+  if (view !== '') { $('#listBack').click(); return true; }   // reusa "volver" (incluye el retorno a swipe del vendedor)
+  return false;
+}
+function reconcileBack() {   // sincroniza la entrada sintética con "hay algo abierto"
+  const open = anyOpen();
+  if (open === rbArmed) return;
+  if (open) { rbArmed = true; history.pushState({ rb: 1 }, ''); }
+  else { rbArmed = false; history.back(); }   // retira la entrada al cerrar por UI (dispara popstate, que ya no cierra nada)
+}
+window.addEventListener('popstate', () => {
+  const wasArmed = rbArmed; rbArmed = false;
+  if (wasArmed && closeTop()) reconcileBack();   // cierra una capa; re-arma si aún queda otra
 });
