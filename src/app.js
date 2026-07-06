@@ -645,31 +645,16 @@ function paintSearches() {
       `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? '' : 's'} · ${age}</div>` +
       `<div class="sc-btns">` +
       `<button class="ghost sc-run">${ic('search')} Repetir</button>` +
-      `<button class="ghost sc-ren">${ic('pencil')} Renombrar</button>` +
-      `<button class="ghost danger sc-del">${ic('trash')} Borrar</button></div>`;
+      `<button class="danger sc-del">${ic('trash')} Borrar</button></div>`;
     card.querySelector('.sc-kw').textContent = kw;   // textContent: a prueba de < & en el término
     card.querySelector('.sc-run').onclick = () => relaunch(kw, since);
-    card.querySelector('.sc-ren').onclick = () => renameSearch(s.csv, kw, since);
     card.querySelector('.sc-del').onclick = () => deleteSearch(s.csv, kw);
     searchesList.appendChild(card);
   }
 }
-function relaunch(kw, since) {   // re-scrapea reusando el flujo del buscador
+function relaunch(kw, since) {   // rellena el buscador principal; el usuario decide cuándo lanzar
   $('#kw').value = kw; $('#since').value = since || '';
-  closeManager(); $('#scrape').click();
-}
-function renameSearch(csv, kw, since) {
-  const nuevo = prompt('Nuevo nombre de la búsqueda:', kw);
-  if (nuevo === null) return;
-  const name = nuevo.trim();
-  if (!name || name === kw) return;
-  fetch('/csv' + qsPerfil() + '&csv=' + encodeURIComponent(csv), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nuevo: csvNameOf(name, since) }) })
-    .then(r => r.json()).then(res => {
-      if (res.error) return snack(res.error, null);
-      afterCsvChange(csv, res.csv); renderSearches();
-    }).catch(() => snack('No se pudo renombrar', null));
+  closeManager(); $('#kw').focus();
 }
 function deleteSearch(csv, kw) {
   if (!confirm(`¿Borrar la búsqueda "${kw}"? Se pierde el CSV (el estado por perfil se conserva).`)) return;

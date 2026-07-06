@@ -127,11 +127,11 @@
   button:hover { background: var(--surface-2); border-color: #9CA298;
     box-shadow: 0 2px 5px rgba(27,33,30,.16), inset 0 1px 0 rgba(255,255,255,.6); }
   button:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(27,33,30,.18); }
-  button.primary { background: var(--pine); border-color: #0FAE9B; color: #fff; font-weight: 700;
-    box-shadow: 0 1px 3px rgba(10,115,106,.35), inset 0 1px 0 rgba(255,255,255,.25); }
-  button.primary:hover { background: #10A896; border-color: #0C8E80;
-    box-shadow: 0 3px 8px rgba(10,115,106,.4), inset 0 1px 0 rgba(255,255,255,.25); }
-  button.primary:active { box-shadow: inset 0 1px 3px rgba(10,60,55,.4); }
+  /* botones de acento (pino): sólidos, sin borde ni sombras, redondeados */
+  button.primary { background: var(--pine); border: 1px solid var(--pine); border-radius: 9px;
+    color: #fff; font-weight: 700; box-shadow: none; }
+  button.primary:hover { background: #10A896; border-color: #10A896; box-shadow: none; }
+  button.primary:active { box-shadow: none; }
   :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 
   /* resumen: contadores en su propia zona con caja separadora */
@@ -245,9 +245,9 @@
   .btn:last-child { margin-right: 0; }
   .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(27,33,30,.16); }
   /* Ver = acción principal: teal relleno */
-  .btn.ver { background: var(--pine); border-color: var(--pine); color: #fff;
-    box-shadow: 0 2px 6px rgba(10,115,106,.28), inset 0 1px 0 rgba(255,255,255,.22); }
+  .btn.ver { background: var(--pine); border: 1px solid var(--pine); border-radius: 12px; color: #fff; box-shadow: none; }
   .btn.ver:hover { background: #10A896; border-color: #10A896; }
+  .btn.ver:active { box-shadow: none; }
   .btn.ver[aria-disabled] { background: var(--surface-2); border-color: var(--line);
     color: var(--ink-soft); box-shadow: none; opacity: .55; pointer-events: none; }
   /* Quitar/Restaurar = fantasma neutro, toma el rojo al pulsar */
@@ -367,9 +367,10 @@
   .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
 
   #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
-    padding: 1rem; border-radius: 12px; background: var(--pine); border-color: var(--pine);
-    color: #fff; font: 700 1.05rem var(--mono); letter-spacing: .02em; }
-  #swipeFab:hover { background: #10A896; border-color: #10A896; }
+    padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
+    box-shadow: none; color: #fff; font: 700 1.05rem var(--mono); letter-spacing: .02em; }
+  #swipeFab:hover { background: #10A896; border-color: #10A896; box-shadow: none; }
+  #swipeFab:active { box-shadow: none; }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
@@ -452,13 +453,14 @@
     font-weight: 600; color: var(--ink); flex: 0 0 auto; }
   .searches-list { display: flex; flex-direction: column; gap: .7rem; width: min(560px, 100%); margin: 0 auto; }
   .search-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: .9rem 1rem; box-shadow: 0 1px 2px rgba(27,33,30,.06); }
+    padding: .7rem .8rem; box-shadow: 0 1px 2px rgba(27,33,30,.06); }
   .sc-top { display: flex; align-items: baseline; gap: .6rem; }
   .sc-kw { font: 700 1.05rem var(--sans); color: var(--ink); overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
   .sc-since { flex: 0 0 auto; font: 600 11px var(--mono); letter-spacing: .04em;
     color: var(--pine-ink); white-space: nowrap; }
-  .sc-meta { font: 12.5px var(--mono); color: var(--ink-soft); margin-top: .25rem; }
-  .sc-btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
-  .sc-btns button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }
-  .sc-btns .danger { color: #b03024; border-color: #d0a59f; }
-  .sc-btns .danger:hover { color: #fff; background: #b03024; border-color: #b03024; }
+  .sc-meta { font: 12.5px var(--mono); color: var(--ink-soft); margin-top: .2rem; }
+  .sc-btns { display: flex; flex-wrap: nowrap; gap: .5rem; margin-top: .55rem; }
+  .sc-btns button { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }
+  .sc-btns .danger { color: #fff; background: #b03024; border-color: #b03024;
+    box-shadow: 0 1px 3px rgba(176,48,36,.35), inset 0 1px 0 rgba(255,255,255,.2); }
+  .sc-btns .danger:hover { background: #c0392b; border-color: #c0392b; }
