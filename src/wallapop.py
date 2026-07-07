@@ -5,7 +5,7 @@ Uso:
     python3 wallapop.py "deshumidificador" --lat 37.7796 --lon -3.7849 -o jaen.csv
     python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a wallapop.csv
 """
-import argparse, csv, json, random, sys, time, unicodedata, urllib.parse, urllib.request, urllib.error
+import argparse, csv, json, random, re, sys, time, unicodedata, urllib.parse, urllib.request, urllib.error
 from math import radians, sin, cos, asin, sqrt
 from pathlib import Path
 
@@ -18,6 +18,15 @@ def _norm(s):   # minúsculas sin acentos, para comparar título ~ términos
 def title_matches(title, keywords):   # todas las palabras del término aparecen en el título
     t = _norm(title)
     return all(tok in t for tok in _norm(keywords).split())
+
+
+def branches(keywords):
+    """Ramas OR: 'corsair fuente OR seasonic' -> ['corsair fuente', 'seasonic'].
+    Wallapop no sabe hacer OR en una query, así que cada rama es una búsqueda propia
+    (el AND ya lo hace Wallapop dentro de cada rama). Separador: la palabra OR (o |)
+    suelta entre espacios, sin distinguir may/min."""
+    parts = [p.strip() for p in re.split(r"\s+(?:OR|\|)\s+", keywords, flags=re.I)]
+    return [p for p in parts if p] or [keywords.strip()]
 
 API = "https://api.wallapop.com/api/v3/search"
 HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json",
@@ -146,6 +155,10 @@ def main():
     time_filter = {"hora": "today", "dia": "today", "semana": "lastWeek", "mes": "lastMonth"}.get(a.since)
     order_by = "newest" if a.since else None   # sin --since dejamos el orden por defecto (luego ordena por km)
     origin = (a.lat, a.lon)
+    brs = branches(a.keywords)   # una o varias ramas OR; cada una es una búsqueda de Wallapop
+    if len(brs) > 1:
+        print(f"búsqueda OR: {len(brs)} ramas -> {brs}", file=sys.stderr)
+    seen = set()   # ids ya escritos: dedup al unir las ramas (un anuncio puede salir en varias)
     n = 0
     prog = Path(str(a.out) + ".progress")   # sidecar con el contador de encontrados; el server lo lee en vivo
     # Escritura incremental: cada pagina se vuelca y flushea. Si crashea a mitad,
@@ -154,26 +167,34 @@ def main():
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         try:
-            for page in search(a.keywords, a.lat, a.lon, order_by, time_filter):
-                for it in page:
-                    r = row(it, origin)
-                    if a.title_only and not title_matches(r["titulo"], a.keywords):
-                        continue
-                    # nota: los "lejos sin envío" (km>10 && !envio) ya NO se descartan aquí;
-                    # se guardan en el CSV y el frontend los oculta por defecto con un toggle.
-                    if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
-                        continue
-                    if max_dias is not None:
-                        if r["dias"] == "":
-                            continue                  # sin fecha: no sabemos si entra
-                        if r["dias"] > max_dias:      # newest-first (--since => order_by=newest):
-                            raise StopIteration       # este y los siguientes son mas viejos -> paramos
-                    w.writerow(r)
-                    n += 1
-                    if a.limit and n >= a.limit:
-                        raise StopIteration
-                f.flush()             # a disco al cerrar cada pagina
-                prog.write_text(str(n))
+            for kw in brs:
+                for page in search(kw, a.lat, a.lon, order_by, time_filter):
+                    old = False
+                    for it in page:
+                        r = row(it, origin)
+                        if r["id"] in seen:
+                            continue                  # ya lo trajo otra rama
+                        if a.title_only and not title_matches(r["titulo"], kw):
+                            continue
+                        # nota: los "lejos sin envío" (km>10 && !envio) ya NO se descartan aquí;
+                        # se guardan en el CSV y el frontend los oculta por defecto con un toggle.
+                        if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
+                            continue
+                        if max_dias is not None:
+                            if r["dias"] == "":
+                                continue              # sin fecha: no sabemos si entra
+                            if r["dias"] > max_dias:  # newest-first (--since => order_by=newest):
+                                old = True             # esta rama ya da anuncios viejos -> a la siguiente
+                                break
+                        seen.add(r["id"])
+                        w.writerow(r)
+                        n += 1
+                        if a.limit and n >= a.limit:
+                            raise StopIteration
+                    f.flush()             # a disco al cerrar cada pagina
+                    prog.write_text(str(n))
+                    if old:
+                        break             # corta esta rama, sigue con la siguiente
         except (StopIteration, KeyboardInterrupt):
             pass                      # corte limpio: lo escrito queda intacto
     prog.unlink(missing_ok=True)      # busqueda acabada: fuera el sidecar
@@ -205,6 +226,11 @@ def demo():
     assert row({"id": "y", "title": "x", "price": {"amount": 1}, "location": {}}, (0, 0))["imagen"] == "", "imagen sin fotos debe ser ''"
     assert title_matches("iPhone 12 azul", "iphone azul"), "title_matches: acentos/orden"
     assert not title_matches("Funda para móvil", "iphone"), "title_matches: no debería casar"
+    assert branches("corsair fuente OR seasonic") == ["corsair fuente", "seasonic"], "branches: OR palabra"
+    assert branches("a | b | c") == ["a", "b", "c"], "branches: pipe"
+    assert branches("deshumidificador") == ["deshumidificador"], "branches: sin OR -> 1 rama"
+    assert branches("corsair or seasonic") == ["corsair", "seasonic"], "branches: OR minúscula"
+    assert branches("record player OR tocadiscos") == ["record player", "tocadiscos"], "branches: solo OR entre espacios (no dentro de palabra)"
     print("ok")
 
 
