@@ -55,17 +55,21 @@
     </div>
     <div class="panel">
         <details class="help">
-            <summary class="help-i" title="cómo buscar" aria-label="cómo buscar">i</summary>
+            <summary class="help-i" title="cómo buscar" aria-label="cómo buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
             <div class="help-pop">
-                <b>OR y grupos</b>
-                <p>El <b>espacio</b> es Y (todas las palabras). <b>OR</b> (o <code>|</code>) da alternativas y <b>(&nbsp;)</b> agrupa y se reparte:</p>
+                <b>Cómo escribir tu búsqueda</b>
+                <p>Puedes lanzar varias búsquedas de Wallapop a la vez con tres reglas. Se combinan entre sí:</p>
                 <ul>
-                    <li><code>corsair OR seasonic</code> → dos búsquedas, unidas.</li>
-                    <li><code>(corsair OR seasonic) gold</code> → <code>corsair gold</code> y <code>seasonic gold</code>.</li>
-                    <li><code>(corsair OR seasonic) (gold OR platinum)</code> → las 4 combinaciones.</li>
-                    <li><code>"be quiet"</code> → frase exacta (con comillas).</li>
+                    <li><b>Espacio = «y».</b> Pide todas las palabras juntas.<br>
+                        <code>corsair gold</code> → anuncios que digan <em>corsair</em> <b>y</b> <em>gold</em>.</li>
+                    <li><b>OR (o <code>|</code>) = «o».</b> Prueba cada alternativa por separado.<br>
+                        <code>corsair OR seasonic</code> → dos búsquedas, sus resultados juntos.</li>
+                    <li><b>(&nbsp;) = grupo.</b> Lo de fuera se reparte a cada opción de dentro.<br>
+                        <code>(corsair OR seasonic) gold</code> → busca <code>corsair gold</code> <b>y</b> <code>seasonic gold</code>.</li>
+                    <li><b>"comillas" = frase exacta.</b><br>
+                        <code>"be quiet"</code> → esas dos palabras seguidas, en ese orden.</li>
                 </ul>
-                <p>Cada rama es una búsqueda de Wallapop; los resultados se juntan sin repetir.</p>
+                <p>Puedes mezclarlo todo: <code>(corsair OR seasonic) (gold OR platinum)</code> lanza las 4 combinaciones. Los resultados se juntan sin repetir anuncios.</p>
             </div>
         </details>
         <div class="search">

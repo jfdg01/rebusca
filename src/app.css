@@ -401,12 +401,12 @@
 
   /* ayuda de búsqueda: "i" en la esquina inferior derecha de la tarjeta -> popover (nativo <details>) */
   .panel { position: relative; }
-  .help { position: absolute; right: .6rem; bottom: .55rem; z-index: 15; }
-  .help-i { list-style: none; cursor: pointer; width: 1.4rem; height: 1.4rem; border-radius: 999px;
-    display: grid; place-items: center; font: italic 700 .85rem var(--sans);
-    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
+  .help { position: absolute; right: .8rem; bottom: .7rem; z-index: 15; }
+  .help-i { list-style: none; cursor: pointer; display: grid; place-items: center;
+    color: var(--ink-soft); }
+  .help-i svg { width: 1.4rem; height: 1.4rem; }
   .help-i::-webkit-details-marker { display: none; }
-  .help[open] .help-i { background: var(--pine); border-color: var(--pine); color: #fff; }
+  .help[open] .help-i { color: var(--pine); }
   .help-pop { position: absolute; right: 0; top: 1.9rem; width: min(19rem, 82vw);
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     padding: .7rem .8rem; box-shadow: 0 6px 20px rgba(27,33,30,.18); color: var(--ink);
