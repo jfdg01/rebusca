@@ -1122,13 +1122,11 @@ $('#swVer').onclick = () => {
   if (!url) return;
   window.open(url, '_blank');
 };
-// texto plano de la tarjeta actual (título, precio, antigüedad, flags, url, descripción)
+// texto plano de la tarjeta actual (título, precio, url, descripción).
+// Sin antigüedad ni línea de envío; el "(con envío[, aprox])" ya va dentro del precio.
 function cardText(r) {
-  const dias = col(r, 'dias');
   const lines = [stripEmoji(col(r, 'titulo'))];
   lines.push(priceLabel(r));
-  if (isNum(dias)) lines.push(humanAge(+dias));
-  lines.push(col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío');
   const url = col(r, 'url'); if (url) lines.push(url);
   const desc = col(r, 'descripcion'); if (desc) lines.push('', stripEmoji(desc));
   return lines.join('\n');
