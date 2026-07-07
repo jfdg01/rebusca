@@ -1302,7 +1302,7 @@ function marquee(kw) {
     if (document.activeElement !== kw && over > 4) {
       if (hold > 0) hold--;
       else {
-        kw.scrollLeft += dir * 0.4; // más lento = menos ruidoso
+        kw.scrollLeft += dir * 0.6; // más lento = menos ruidoso
         if (kw.scrollLeft >= over) {
           kw.scrollLeft = over;
           dir = -1;
