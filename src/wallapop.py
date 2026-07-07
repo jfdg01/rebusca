@@ -20,13 +20,54 @@ def title_matches(title, keywords):   # todas las palabras del término aparecen
     return all(tok in t for tok in _norm(keywords).split())
 
 
+_TOK = re.compile(r'\(|\)|"[^"]*"|[^\s()]+')
+
+
 def branches(keywords):
-    """Ramas OR: 'corsair fuente OR seasonic' -> ['corsair fuente', 'seasonic'].
-    Wallapop no sabe hacer OR en una query, así que cada rama es una búsqueda propia
-    (el AND ya lo hace Wallapop dentro de cada rama). Separador: la palabra OR (o |)
-    suelta entre espacios, sin distinguir may/min."""
-    parts = [p.strip() for p in re.split(r"\s+(?:OR|\|)\s+", keywords, flags=re.I)]
-    return [p for p in parts if p] or [keywords.strip()]
+    """Expande una búsqueda booleana a la lista de ramas (queries) que mandar a la API.
+
+    Wallapop no sabe hacer OR, así que cada rama es una búsqueda propia y luego se unen.
+    Gramática (el espacio es AND; 'OR'/'|' separa; 'AND'/'&' es opcional; ()  agrupa):
+        corsair OR seasonic            -> ['corsair', 'seasonic']
+        (corsair OR seasonic) gold     -> ['corsair gold', 'seasonic gold']
+        (a OR b) (c OR d)              -> ['a c', 'a d', 'b c', 'b d']   (producto)
+        "be quiet" OR corsair          -> ['be quiet', 'corsair']       (frase entre comillas)
+    El OR liga más flojo que el espacio: 'corsair OR seasonic gold' = corsair OR (seasonic gold).
+    """
+    toks, i = _TOK.findall(keywords), [0]
+    peek = lambda: toks[i[0]] if i[0] < len(toks) else None
+    def nxt(): t = peek(); i[0] += 1; return t
+    is_or = lambda t: t == "|" or (t is not None and t.lower() == "or")
+    is_and = lambda t: t == "&" or (t is not None and t.lower() == "and")
+
+    def p_expr():                 # OR de and-terms -> unión de ramas
+        out = p_and()
+        while is_or(peek()):
+            nxt(); out += p_and()
+        return out
+
+    def p_and():                  # secuencia de factores (AND) -> producto cartesiano
+        combos = [""]
+        while (t := peek()) is not None and not is_or(t) and t != ")":
+            if is_and(t):
+                nxt(); continue   # AND explícito: opcional, se ignora (el espacio ya es AND)
+            alts = p_factor()     # una sola vez: dentro del comprehension consumiría tokens de más
+            combos = [(c + " " + a).strip() for c in combos for a in alts]
+        return combos
+
+    def p_factor():               # '(' expr ')' | "frase" | palabra  -> lista de alternativas
+        t = nxt()
+        if t == "(":
+            inner = p_expr()
+            if peek() == ")":
+                nxt()
+            return inner
+        if t and len(t) >= 2 and t[0] == '"' == t[-1]:
+            return [t[1:-1].strip()]
+        return [t]
+
+    res = [b.strip() for b in p_expr() if b.strip()]
+    return (res or [keywords.strip()])[:32]   # ponytail: tope anti-explosión del producto cartesiano
 
 API = "https://api.wallapop.com/api/v3/search"
 HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json",
@@ -231,6 +272,11 @@ def demo():
     assert branches("deshumidificador") == ["deshumidificador"], "branches: sin OR -> 1 rama"
     assert branches("corsair or seasonic") == ["corsair", "seasonic"], "branches: OR minúscula"
     assert branches("record player OR tocadiscos") == ["record player", "tocadiscos"], "branches: solo OR entre espacios (no dentro de palabra)"
+    assert branches("(corsair OR seasonic) gold") == ["corsair gold", "seasonic gold"], "branches: distribuye el grupo"
+    assert branches("(corsair OR seasonic) AND gold") == ["corsair gold", "seasonic gold"], "branches: AND opcional"
+    assert branches("(a OR b) (c OR d)") == ["a c", "a d", "b c", "b d"], "branches: producto de dos grupos"
+    assert branches('"be quiet" OR corsair') == ["be quiet", "corsair"], "branches: frase entre comillas"
+    assert branches("corsair OR seasonic gold") == ["corsair", "seasonic gold"], "branches: OR liga más flojo que el espacio"
     print("ok")
 
 
