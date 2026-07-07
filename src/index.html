@@ -51,6 +51,20 @@
         </button>
     </div>
     <div class="panel">
+        <details class="help">
+            <summary class="help-i" title="cómo buscar" aria-label="cómo buscar">i</summary>
+            <div class="help-pop">
+                <b>OR y grupos</b>
+                <p>El <b>espacio</b> es Y (todas las palabras). <b>OR</b> (o <code>|</code>) da alternativas y <b>(&nbsp;)</b> agrupa y se reparte:</p>
+                <ul>
+                    <li><code>corsair OR seasonic</code> → dos búsquedas, unidas.</li>
+                    <li><code>(corsair OR seasonic) gold</code> → <code>corsair gold</code> y <code>seasonic gold</code>.</li>
+                    <li><code>(corsair OR seasonic) (gold OR platinum)</code> → las 4 combinaciones.</li>
+                    <li><code>"be quiet"</code> → frase exacta (con comillas).</li>
+                </ul>
+                <p>Cada rama es una búsqueda de Wallapop; los resultados se juntan sin repetir.</p>
+            </div>
+        </details>
         <div class="search">
             <input
                 type="search"

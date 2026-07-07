@@ -392,6 +392,25 @@
     font: 600 12px var(--sans); color: var(--ink-soft); cursor: pointer; }
   .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
 
+  /* ayuda de búsqueda: "i" en la esquina inferior derecha de la tarjeta -> popover (nativo <details>) */
+  .panel { position: relative; }
+  .help { position: absolute; right: .6rem; bottom: .55rem; z-index: 15; }
+  .help-i { list-style: none; cursor: pointer; width: 1.4rem; height: 1.4rem; border-radius: 999px;
+    display: grid; place-items: center; font: italic 700 .85rem var(--sans);
+    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
+  .help-i::-webkit-details-marker { display: none; }
+  .help[open] .help-i { background: var(--pine); border-color: var(--pine); color: #fff; }
+  .help-pop { position: absolute; right: 0; top: 1.9rem; width: min(19rem, 82vw);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: .7rem .8rem; box-shadow: 0 6px 20px rgba(27,33,30,.18); color: var(--ink);
+    font: 12px/1.45 var(--sans); }
+  .help-pop b { color: var(--ink); }
+  .help-pop p { margin: .35rem 0 0; }
+  .help-pop ul { margin: .4rem 0 0; padding-left: 1.05rem; }
+  .help-pop li { margin: .2rem 0; }
+  .help-pop code { font: 11px var(--mono); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
+
   #swipeFab, #copyFav { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: none; color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }

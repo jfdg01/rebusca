@@ -553,6 +553,14 @@ const lastCsvKey = () => 'wp_lastcsv_' + (perfil || 'casa');   // último datase
 function loadQuery(csv) {   // carga el CSV (scopeado al perfil) y lo recuerda como el último de la persona
   fetch('/csvfile' + qsPerfil() + '&csv=' + encodeURIComponent(csv)).then(r => r.text()).then(t => loadCSV(t, csv));
   if (perfil) localStorage.setItem(lastCsvKey(), csv);
+  stampSeen(csv);
+}
+// "última vez que abrí esta búsqueda" por perfil: ordena la vista de gestión por interacción reciente
+const lastSeenKey = () => 'wp_lastseen_' + (perfil || 'casa');
+function stampSeen(csv) {
+  if (!perfil || !csv) return;
+  const m = JSON.parse(localStorage.getItem(lastSeenKey()) || '{}');
+  m[csv] = Date.now(); localStorage.setItem(lastSeenKey(), JSON.stringify(m));
 }
 function selectQuery(csv) {   // input = solo el kw; el "desde" va como badge pino a la derecha
   const { kw, since } = queryParts(csv);
@@ -572,6 +580,7 @@ function renderQlist(term) {
   for (const q of hits) {
     const row = document.createElement('button');
     row.type = 'button'; row.className = 'qrow' + (q.csv === curCsv ? ' cur' : '');
+    row.title = q.kw;   // la fila trunca con … si es larga; el title deja leerla entera
     row.innerHTML = `<span class="qrow-kw"></span><span class="qrow-since">${SINCE_SHORT[q.since]}</span>`;
     row.querySelector('.qrow-kw').textContent = q.kw;   // textContent: a prueba de < & en el término
     row.onclick = () => chooseQuery(q.csv);
@@ -695,6 +704,9 @@ function renderSearches() {   // relee del servidor y repinta con el filtro actu
 function paintSearches() {
   const q = norm(searchesQ);
   const hits = allSearches.filter(s => norm(queryParts(s.csv).kw).includes(q));
+  const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || '{}');
+  const touched = s => Math.max(seen[s.csv] || 0, s.mtime * 1000);   // abierta o rescrapeada: lo más reciente manda
+  hits.sort((a, b) => touched(b) - touched(a));   // última interacción primero
   searchesList.innerHTML = '';
   if (!allSearches.length) { searchesList.innerHTML = '<div class="qempty">no hay búsquedas guardadas</div>'; return; }
   if (!hits.length) { searchesList.innerHTML = '<div class="qempty">nada coincide con el filtro</div>'; return; }
@@ -1026,12 +1038,17 @@ function priceLabel(r) {
   }
   return precio !== '' ? `${precio} €` : '—';
 }
+// quita emojis (y sus modificadores/uniones) del texto a copiar: fichas limpias para la IA y notas
+const EMOJI_RE = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u200D\uFE0F\u20E3]/gu;
+const stripEmoji = s => (s || '').replace(EMOJI_RE, '').replace(/ {2,}/g, ' ').replace(/ +$/gm, '').trim();
+console.assert(stripEmoji('PS4 🎮 slim ✅') === 'PS4 slim' && stripEmoji('👍🏽 gama alta 🇪🇸') === 'gama alta', 'stripEmoji roto');
+
 // mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
 function favText(rows) {
   const items = rows.map((r, i) => {
-    const lines = [`${i + 1}. ${col(r, 'titulo')} — ${priceLabel(r)}`];
+    const lines = [`${i + 1}. ${stripEmoji(col(r, 'titulo'))} — ${priceLabel(r)}`];
     const url = col(r, 'url'); if (url) lines.push('   ' + url);
-    const desc = col(r, 'descripcion'); if (desc) lines.push('   ' + desc.replace(/\s*\n\s*/g, ' '));
+    const desc = col(r, 'descripcion'); if (desc) lines.push('   ' + stripEmoji(desc.replace(/\s*\n\s*/g, ' ')));
     return lines.join('\n');
   }).join('\n\n');
   return 'Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. ' +
@@ -1108,12 +1125,12 @@ $('#swVer').onclick = () => {
 // texto plano de la tarjeta actual (título, precio, antigüedad, flags, url, descripción)
 function cardText(r) {
   const dias = col(r, 'dias');
-  const lines = [col(r, 'titulo')];
+  const lines = [stripEmoji(col(r, 'titulo'))];
   lines.push(priceLabel(r));
   if (isNum(dias)) lines.push(humanAge(+dias));
   lines.push(col(r, 'envio') === 'True' ? 'Con envío' : 'Sin envío');
   const url = col(r, 'url'); if (url) lines.push(url);
-  const desc = col(r, 'descripcion'); if (desc) lines.push('', desc);
+  const desc = col(r, 'descripcion'); if (desc) lines.push('', stripEmoji(desc));
   return lines.join('\n');
 }
 $('#swCopy').onclick = () => {
@@ -1169,3 +1186,4 @@ window.addEventListener('popstate', () => {
   const wasArmed = rbArmed; rbArmed = false;
   if (wasArmed && closeTop()) reconcileBack();   // cierra una capa; re-arma si aún queda otra
 });
+

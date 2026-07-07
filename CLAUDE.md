@@ -88,6 +88,34 @@ Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
    del CSS (p. ej. el padding del `body`, la cabecera sticky, las tarjetas a sangre completa)
    y da falsos verdes.
 
+### Cómo sacar el screenshot (probado en este entorno)
+
+**CDP interactivo NO funciona aquí:** un Chrome con `--remote-debugging-port` muere con
+exit 144 (lo mata el sandbox), lo lances como lo lances (`&`, `setsid`, background del tool,
+`dangerouslyDisableSandbox`). No pierdas tiempo con websockets/CDP. Lo que **sí** funciona es
+el one-shot `--screenshot` (arranca, pinta, sale):
+
+```bash
+google-chrome --headless=new --disable-gpu --hide-scrollbars \
+  --force-device-scale-factor=2 --window-size=320,632 \
+  --virtual-time-budget=3500 \
+  --screenshot=/ruta/salida.png "http://127.0.0.1:8123/"
+```
+
+`--force-device-scale-factor=2 --window-size=320,632` = el setup del usuario (DPR2, 320×632).
+El one-shot **no ejecuta clics ni JS**, así que para llegar al estado real se **edita temporalmente
+el disco** (el server de :8123 sirve de disco en cada request) y se **revierte tras la foto**:
+
+- **Saltar el selector de perfil:** `sed` en `app.js` para que `perfil` arranque en `'QA'`
+  (`localStorage.getItem('wp_perfil') || 'QA'`). Crea antes `estados/QA.json` y CSVs dummy en `csv/QA/`.
+- **Abrir un `<details>`/popover:** añade el atributo `open` en el HTML.
+- **Abrir una vista que necesita clic** (p. ej. gestión de búsquedas): añade al final de `app.js`
+  un `setTimeout(() => openManager(), 1200)` y sube `--virtual-time-budget` para que dé tiempo.
+- **Revertir SIEMPRE:** deshaz los `sed`/append y borra `csv/QA` + `estados/QA.json`. Comprueba
+  con `grep` que no quedan restos antes de commitear.
+
+Sigue siendo validación real (mismo CSS/markup/flujo), solo se fuerza el estado que un tap daría.
+
 ## Estilo
 
 - Ponytail/YAGNI: la solución más corta que funciona. stdlib y features nativas antes que código.
