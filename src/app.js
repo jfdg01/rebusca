@@ -217,22 +217,22 @@ document
   .querySelectorAll("[data-icon]")
   .forEach((e) => (e.innerHTML = ic(e.dataset.icon)));
 
-// "hace 16 días y 19 horas" a partir de los días (float) del CSV
+// "hace X" a partir de los días (float) del CSV: una sola unidad (min→h→día), <1 minuto por debajo
 function humanAge(dias) {
-  const total = Math.max(0, Math.round(dias * 24)); // horas totales
-  const d = Math.floor(total / 24),
-    h = total % 24;
-  if (!d && !h) return "recién puesto";
-  const parts = [];
-  if (d) parts.push(d + (d === 1 ? " día" : " días"));
-  if (h) parts.push(h + (h === 1 ? " hora" : " horas"));
-  return "hace " + parts.join(" y ");
+  const min = Math.max(0, Math.floor(dias * 1440));
+  if (min < 1) return "hace <1 minuto";
+  if (min < 60) return `hace ${min} ${min === 1 ? "minuto" : "minutos"}`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} ${h === 1 ? "hora" : "horas"}`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} ${d === 1 ? "día" : "días"}`;
 }
 console.assert(
-  humanAge(16.8) === "hace 16 días y 19 horas" &&
+  humanAge(16.8) === "hace 16 días" &&
     humanAge(1) === "hace 1 día" &&
     humanAge(0.05) === "hace 1 hora" &&
-    humanAge(0) === "recién puesto",
+    humanAge(21 / 1440) === "hace 21 minutos" &&
+    humanAge(0) === "hace <1 minuto",
   "humanAge() roto",
 );
 
