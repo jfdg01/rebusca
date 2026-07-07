@@ -78,6 +78,9 @@ Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
 
 `main` es siempre desplegable y es lo que corre el VPS. Desplegar tras cerrar: `./deploy.sh`.
 
+> **`fc` = "full cycle":** ejecuta el ciclo entero de una (rama → commits → cerrar sobre
+> `main` → push + borrar rama), sin ir preguntando entre pasos.
+
 ## Cambios de diseño (obligatorio)
 
 1. **Esperar feedback del usuario** antes de commitear o dar por terminado un cambio de diseño.
