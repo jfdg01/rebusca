@@ -5,7 +5,8 @@ Uso:
     python3 wallapop.py "deshumidificador" --lat 37.7796 --lon -3.7849 -o jaen.csv
     python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a wallapop.csv
 """
-import argparse, csv, json, random, re, sys, time, unicodedata, urllib.parse, urllib.request, urllib.error
+import argparse, csv, json, random, re, sys, threading, time, unicodedata, urllib.parse, urllib.request, urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from math import radians, sin, cos, asin, sqrt
 from pathlib import Path
 
@@ -200,17 +201,22 @@ def main():
     if len(brs) > 1:
         print(f"búsqueda OR: {len(brs)} ramas -> {brs}", file=sys.stderr)
     seen = set()   # ids ya escritos: dedup al unir las ramas (un anuncio puede salir en varias)
-    n = 0
+    state = {"n": 0}
+    lock = threading.Lock()   # protege writer, seen, contador y prog (la red va fuera del lock)
+    stop = threading.Event()  # límite alcanzado o Ctrl-C -> todas las ramas paran
     prog = Path(str(a.out) + ".progress")   # sidecar con el contador de encontrados; el server lo lee en vivo
     # Escritura incremental: cada pagina se vuelca y flushea. Si crashea a mitad,
     # el CSV conserva todo lo escrito hasta ese punto.
     with open(a.out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
-        try:
-            for kw in brs:
-                for page in search(kw, a.lat, a.lon, order_by, time_filter):
-                    old = False
+
+        def scrape_branch(kw):        # una rama OR: se pagina secuencial (cursor), pero varias ramas van en paralelo
+            for page in search(kw, a.lat, a.lon, order_by, time_filter):
+                if stop.is_set():
+                    return
+                old = False
+                with lock:            # el fetch (search) fue fuera del lock; aquí solo escritura rápida
                     for it in page:
                         r = row(it, origin)
                         if r["id"] in seen:
@@ -225,21 +231,27 @@ def main():
                             if r["dias"] == "":
                                 continue              # sin fecha: no sabemos si entra
                             if r["dias"] > max_dias:  # newest-first (--since => order_by=newest):
-                                old = True             # esta rama ya da anuncios viejos -> a la siguiente
+                                old = True             # esta rama ya da anuncios viejos -> paramos esta rama
                                 break
                         seen.add(r["id"])
                         w.writerow(r)
-                        n += 1
-                        if a.limit and n >= a.limit:
-                            raise StopIteration
+                        state["n"] += 1
+                        if a.limit and state["n"] >= a.limit:
+                            stop.set()
+                            break
                     f.flush()             # a disco al cerrar cada pagina
-                    prog.write_text(str(n))
-                    if old:
-                        break             # corta esta rama, sigue con la siguiente
-        except (StopIteration, KeyboardInterrupt):
-            pass                      # corte limpio: lo escrito queda intacto
+                    prog.write_text(str(state["n"]))
+                if old or stop.is_set():
+                    return                # corta esta rama
+
+        try:
+            # ponytail: tope de 4 workers -> no abrir 32 conexiones a la vez y comerse un 403 DataDome
+            with ThreadPoolExecutor(max_workers=min(len(brs), 4)) as ex:
+                list(ex.map(scrape_branch, brs))
+        except KeyboardInterrupt:
+            stop.set()                # corte limpio: lo ya flusheado queda intacto
     prog.unlink(missing_ok=True)      # busqueda acabada: fuera el sidecar
-    print(f"{n} resultados -> {a.out}")
+    print(f"{state['n']} resultados -> {a.out}")
     if a.max_km is None:             # ordenar por cercania solo si no filtramos ya
         _sort_by_km(a.out)
 
