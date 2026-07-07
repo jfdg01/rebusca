@@ -1056,7 +1056,8 @@ function favText(rows) {
     'Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
     'y dime cuál es el mejor calidad/precio. Responde con el ganador primero y el porqué en detalle, ' +
     'y luego una valoración breve del resto ordenados de mejor a peor. ' +
-    'Además, para cada uno dime si debería intentar regatear el precio y, si es así, a qué precio propondrías:\n\n' + items;
+    'Además, para cada uno dime si debería intentar regatear el precio y, si es así, a qué precio propondrías, ' +
+    'y si lo ves necesario dime qué preguntar al vendedor:\n\n' + items;
 }
 // copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
 function copyAsync(makeText) {
@@ -1133,7 +1134,8 @@ function cardText(r) {
   return 'Este es un artículo de segunda mano de Wallapop que estoy pensando en comprar. ' +
     'Investígalo a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
     'y dime si es buena compra por ese precio. ' +
-    'Además dime si debería intentar regatear el precio y, si es así, a qué precio propondrías:\n\n' + lines.join('\n');
+    'Además dime si debería intentar regatear el precio y, si es así, a qué precio propondrías, ' +
+    'y si lo ves necesario dime qué preguntar al vendedor:\n\n' + lines.join('\n');
 }
 $('#swCopy').onclick = () => {
   if (di >= deck.length) return;
