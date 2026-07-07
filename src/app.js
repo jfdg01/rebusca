@@ -31,6 +31,8 @@ const saveExcl = () => { localStorage.setItem('wp_excl', JSON.stringify(exclMap)
 let catExclMap = JSON.parse(localStorage.getItem('wp_catexcl') || '{}');   // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
 const catExclTerms = () => (curCsv && catExclMap[curCsv]) || [];
 const saveCatExcl = () => { localStorage.setItem('wp_catexcl', JSON.stringify(catExclMap)); pushEstado(); };
+let aliasMap = JSON.parse(localStorage.getItem('wp_alias') || '{}');   // {csv: "apodo"}: nombre legible por búsqueda; NO toca el CSV ni los keywords reales
+const saveAlias = () => { localStorage.setItem('wp_alias', JSON.stringify(aliasMap)); pushEstado(); };
 let perfil = localStorage.getItem('wp_perfil') || '';   // quién soy (por dispositivo)
 let perfilColor = '';   // color elegido; se guarda en el JSON para el selector
 const qsPerfil = () => '?perfil=' + encodeURIComponent(perfil || 'casa');
@@ -39,7 +41,7 @@ function pushEstado() {
   if (!perfil) return;
   clearTimeout(_push);
   _push = setTimeout(() => fetch('/estado' + qsPerfil(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trash: [...trash], fav: [...fav], blockSel: [...blockSel], excl: exclMap, catExcl: catExclMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
+    body: JSON.stringify({ trash: [...trash], fav: [...fav], blockSel: [...blockSel], excl: exclMap, catExcl: catExclMap, alias: aliasMap, color: perfilColor, stamp }) }).catch(() => {}), 400);
 }
 // carga el estado del perfil actual desde el servidor (fuente de verdad, last-writer-wins)
 function hydrateEstado() {
@@ -52,6 +54,8 @@ function hydrateEstado() {
     localStorage.setItem('wp_blocksel', JSON.stringify([...blockSel]));
     exclMap = (e.excl && typeof e.excl === 'object' && !Array.isArray(e.excl)) ? e.excl : {};   // {csv:[palabras]}; ignora formatos viejos
     catExclMap = (e.catExcl && typeof e.catExcl === 'object' && !Array.isArray(e.catExcl)) ? e.catExcl : {};   // {csv:[categorias]}
+    aliasMap = (e.alias && typeof e.alias === 'object' && !Array.isArray(e.alias)) ? e.alias : {};   // {csv:"apodo"}
+    localStorage.setItem('wp_alias', JSON.stringify(aliasMap));
     stamp = (e.stamp && typeof e.stamp === 'object' && !Array.isArray(e.stamp)) ? e.stamp : {};   // {key:epochMs} cuándo se clasificó
     localStorage.setItem('wp_stamp', JSON.stringify(stamp));
     localStorage.setItem('wp_discarded', JSON.stringify([...trash]));   // espejo offline
@@ -685,6 +689,23 @@ $('#scrape').onclick = async () => {
   finally { clearInterval(poll); clearInterval(_timer); setLoading(false); btn.disabled = false; btn.textContent = txt; }
 };
 $('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape').click(); });
+// auto-scroll del término largo cuando el input no tiene foco: ping-pong para poder leerlo entero
+(function kwMarquee() {
+  const kw = $('#kw'); let dir = 1, hold = 0;
+  const tick = () => {
+    const over = kw.scrollWidth - kw.clientWidth;
+    if (document.activeElement !== kw && over > 4) {
+      if (hold > 0) hold--;
+      else { kw.scrollLeft += dir * 0.6;
+        if (kw.scrollLeft >= over) { kw.scrollLeft = over; dir = -1; hold = 90; }
+        else if (kw.scrollLeft <= 0) { kw.scrollLeft = 0; dir = 1; hold = 90; }
+      }
+    }
+    requestAnimationFrame(tick);
+  };
+  kw.addEventListener('focus', () => { kw.scrollLeft = 0; dir = 1; hold = 60; });
+  requestAnimationFrame(tick);
+})();
 
 // ── gestor de búsquedas: vista CRUD sobre los CSV del servidor ──
 const searchesView = $('#searchesView'), searchesList = $('#searchesList');
@@ -705,7 +726,7 @@ function renderSearches() {   // relee del servidor y repinta con el filtro actu
 }
 function paintSearches() {
   const q = norm(searchesQ);
-  const hits = allSearches.filter(s => norm(queryParts(s.csv).kw).includes(q));
+  const hits = allSearches.filter(s => norm((aliasMap[s.csv] || '') + ' ' + queryParts(s.csv).kw).includes(q));
   const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || '{}');
   const touched = s => Math.max(seen[s.csv] || 0, s.mtime * 1000);   // abierta o rescrapeada: lo más reciente manda
   hits.sort((a, b) => touched(b) - touched(a));   // última interacción primero
@@ -715,16 +736,23 @@ function paintSearches() {
   const nowDays = Date.now() / 86400000;   // para "hace X" a partir del mtime
   for (const s of hits) {
     const { kw, since } = queryParts(s.csv);
+    const alias = aliasMap[s.csv];   // apodo opcional; si existe manda como título y el kw real va debajo
     const card = document.createElement('div'); card.className = 'search-card';
     const age = humanAge(Math.max(0, nowDays - s.mtime / 86400));
     card.innerHTML =
       `<div class="sc-top"><span class="sc-kw"></span>` +
       (since ? `<span class="sc-since">${cap(SINCE_LABEL[since])}</span>` : '') + `</div>` +
+      (alias ? `<div class="sc-realkw"></div>` : '') +
       `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? '' : 's'} · ${age}</div>` +
       `<div class="sc-btns">` +
+      `<button class="ghost sc-pick">${ic('search')} Seleccionar</button>` +
+      `<button class="ghost sc-ren">${ic('pencil')} Renombrar</button>` +
       `<button class="ghost sc-run">${ic('search')} Repetir</button>` +
       `<button class="danger sc-del">${ic('trash')} Borrar</button></div>`;
-    card.querySelector('.sc-kw').textContent = kw;   // textContent: a prueba de < & en el término
+    card.querySelector('.sc-kw').textContent = alias || kw;   // textContent: a prueba de < & en el término
+    if (alias) card.querySelector('.sc-realkw').textContent = kw;
+    card.querySelector('.sc-pick').onclick = () => { selectQuery(s.csv); closeManager(); };   // carga el CSV ya guardado, sin re-scrapear
+    card.querySelector('.sc-ren').onclick = () => renameSearch(s.csv, alias || '');
     card.querySelector('.sc-run').onclick = () => relaunch(kw, since);
     card.querySelector('.sc-del').onclick = () => deleteSearch(s.csv, kw);
     searchesList.appendChild(card);
@@ -733,6 +761,13 @@ function paintSearches() {
 function relaunch(kw, since) {   // rellena el buscador principal; el usuario decide cuándo lanzar
   $('#kw').value = kw; $('#since').value = since || '';
   closeManager(); $('#kw').focus();
+}
+function renameSearch(csv, actual) {   // apodo local; no toca el CSV ni los keywords. Vacío = quitar el apodo
+  const nombre = prompt('Nombre para esta búsqueda (no cambia lo que se busca):', actual);
+  if (nombre === null) return;   // canceló
+  const t = nombre.trim();
+  if (t) aliasMap[csv] = t; else delete aliasMap[csv];
+  saveAlias(); paintSearches();
 }
 function deleteSearch(csv, kw) {
   if (!confirm(`¿Borrar la búsqueda "${kw}"? Se pierde el CSV (el estado por perfil se conserva).`)) return;
@@ -1063,9 +1098,11 @@ function favText(rows) {
   }).join('\n\n');
   return 'Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. ' + PRICE_NOTE +
     'Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
-    'y dime cuál es el mejor calidad/precio. Responde con el ganador primero y el porqué en detalle, ' +
-    'y luego una valoración breve del resto ordenados de mejor a peor. ' +
-    'Además, para cada uno dime si debería intentar regatear el precio y, si es así, a qué precio propondrías, ' +
+    'y clasifícalos en tres listas:\n' +
+    '1) TOP 3: los tres mejores calidad/precio, ordenados del mejor al tercero, cada uno con el porqué en detalle.\n' +
+    '2) MENCIONES: los que no llegan al top 3 pero siguen mereciendo la pena, con una línea de por qué destacan.\n' +
+    '3) DESCARTES: los que descartarías, con el motivo breve.\n' +
+    'Para los del TOP 3 y las MENCIONES, dime además si debería intentar regatear el precio y, si es así, a qué precio propondrías, ' +
     'y si lo ves necesario dime qué preguntar al vendedor:\n\n' + items;
 }
 // copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS

@@ -525,9 +525,10 @@
   .sc-kw { font: 700 .99rem var(--sans); color: var(--ink); overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
   .sc-since { flex: 0 0 auto; font: 600 10px var(--mono); letter-spacing: .04em;
     color: var(--pine-ink); white-space: nowrap; }
+  .sc-realkw { font: 12px var(--mono); color: var(--ink-soft); overflow-wrap: anywhere; margin-top: .2rem; }
   .sc-meta { font: 11.5px var(--mono); color: var(--ink-soft); margin-top: .2rem; }
-  .sc-btns { display: flex; flex-wrap: nowrap; gap: .5rem; margin-top: .55rem; }
-  .sc-btns button { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }
+  .sc-btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
+  .sc-btns button { flex: 1 1 45%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }   /* 2 por fila en 320px */
   .sc-btns .danger { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 1px 3px rgba(176,48,36,.35), inset 0 1px 0 rgba(255,255,255,.2); }
   .sc-btns .danger:hover { background: #c0392b; border-color: #c0392b; }
