@@ -1087,7 +1087,9 @@ function renderQlist(term) {
     row.className = "qrow" + (q.csv === curCsv ? " cur" : "");
     row.title = q.kw; // la fila trunca con … si es larga; el title deja leerla entera
     row.innerHTML = `<span class="qrow-kw"></span><span class="qrow-since">${SINCE_SHORT[q.since]}</span>`;
-    row.querySelector(".qrow-kw").textContent = q.kw; // textContent: a prueba de < & en el término
+    const kwSpan = row.querySelector(".qrow-kw");
+    kwSpan.textContent = q.kw; // textContent: a prueba de < & en el término
+    marquee(kwSpan); // filas que difieren solo al final: el scroll deja leer el término entero
     row.onclick = () => chooseQuery(q.csv);
     qlist.appendChild(row);
   }
@@ -1289,39 +1291,39 @@ $("#scrape").onclick = async () => {
 $("#kw").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("#scrape").click();
 });
-// auto-scroll del término largo cuando el input no tiene foco: ping-pong para poder leerlo entero
-(function kwMarquee() {
-  const marquee = (kw) => {
-    let dir = 1,
-      hold = 0;
-    const tick = () => {
-      const over = kw.scrollWidth - kw.clientWidth;
-      if (document.activeElement !== kw && over > 4) {
-        if (hold > 0) hold--;
-        else {
-          kw.scrollLeft += dir * 0.4; // más lento = menos ruidoso
-          if (kw.scrollLeft >= over) {
-            kw.scrollLeft = over;
-            dir = -1;
-            hold = 140; // pausa más larga en los extremos
-          } else if (kw.scrollLeft <= 0) {
-            kw.scrollLeft = 0;
-            dir = 1;
-            hold = 140;
-          }
+// auto-scroll horizontal del texto que desborda: ping-pong para poder leerlo entero.
+// Se autodetiene si el elemento sale del DOM (las filas del dropdown se recrean al filtrar).
+function marquee(kw) {
+  let dir = 1,
+    hold = 0;
+  const tick = () => {
+    if (!kw.isConnected) return; // fila eliminada -> corta el rAF (no fugar loops)
+    const over = kw.scrollWidth - kw.clientWidth;
+    if (document.activeElement !== kw && over > 4) {
+      if (hold > 0) hold--;
+      else {
+        kw.scrollLeft += dir * 0.4; // más lento = menos ruidoso
+        if (kw.scrollLeft >= over) {
+          kw.scrollLeft = over;
+          dir = -1;
+          hold = 140; // pausa más larga en los extremos
+        } else if (kw.scrollLeft <= 0) {
+          kw.scrollLeft = 0;
+          dir = 1;
+          hold = 140;
         }
       }
-      requestAnimationFrame(tick);
-    };
-    kw.addEventListener("focus", () => {
-      kw.scrollLeft = 0;
-      dir = 1;
-      hold = 90;
-    });
+    }
     requestAnimationFrame(tick);
   };
-  ["#kw", "#pick"].forEach((sel) => { const el = $(sel); if (el) marquee(el); }); // barra de arriba + "Búsqueda activa"
-})();
+  kw.addEventListener("focus", () => {
+    kw.scrollLeft = 0;
+    dir = 1;
+    hold = 90;
+  });
+  requestAnimationFrame(tick);
+}
+["#kw", "#pick"].forEach((sel) => { const el = $(sel); if (el) marquee(el); }); // barra de arriba + "Búsqueda activa"
 
 // ── gestor de búsquedas: vista CRUD sobre los CSV del servidor ──
 const searchesView = $("#searchesView"),

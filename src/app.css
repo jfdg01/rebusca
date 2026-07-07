@@ -116,7 +116,7 @@
   .qrow:hover, .qrow:focus-visible { background: var(--surface-2); box-shadow: none; }
   .qrow.cur { background: var(--pine-soft); }
   .qrow-kw { font: 600 14px var(--sans); color: var(--ink); min-width: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    white-space: nowrap; overflow: hidden; }   /* sin ellipsis: marquee() lo scrollea entero */
   .qrow-since { flex: 0 0 auto; font: 600 10px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--pine-ink); white-space: nowrap; }
   .qempty { padding: .8rem; text-align: center; font: 12px var(--sans); color: var(--ink-soft); }
