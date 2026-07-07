@@ -1055,7 +1055,8 @@ function favText(rows) {
   return 'Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. ' +
     'Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
     'y dime cuál es el mejor calidad/precio. Responde con el ganador primero y el porqué en detalle, ' +
-    'y luego una valoración breve del resto ordenados de mejor a peor:\n\n' + items;
+    'y luego una valoración breve del resto ordenados de mejor a peor. ' +
+    'Además, para cada uno dime si debería intentar regatear el precio y, si es así, a qué precio propondrías:\n\n' + items;
 }
 // copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
 function copyAsync(makeText) {
@@ -1123,13 +1124,16 @@ $('#swVer').onclick = () => {
   if (!url) return;
   window.open(url, '_blank');
 };
-// texto plano de la tarjeta actual (título, precio, descripción).
+// prompt de IA para la tarjeta actual (título, precio, descripción).
 // Sin antigüedad, sin link ni línea de envío; el "(con envío[, aprox])" ya va dentro del precio.
 function cardText(r) {
   const lines = [stripEmoji(col(r, 'titulo'))];
   lines.push(priceLabel(r));
   const desc = col(r, 'descripcion'); if (desc) lines.push('', stripEmoji(desc));
-  return lines.join('\n');
+  return 'Este es un artículo de segunda mano de Wallapop que estoy pensando en comprar. ' +
+    'Investígalo a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) ' +
+    'y dime si es buena compra por ese precio. ' +
+    'Además dime si debería intentar regatear el precio y, si es así, a qué precio propondrías:\n\n' + lines.join('\n');
 }
 $('#swCopy').onclick = () => {
   if (di >= deck.length) return;
