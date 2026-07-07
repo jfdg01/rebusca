@@ -106,8 +106,16 @@ google-chrome --headless=new --disable-gpu --hide-scrollbars \
 El one-shot **no ejecuta clics ni JS**, así que para llegar al estado real se **edita temporalmente
 el disco** (el server de :8123 sirve de disco en cada request) y se **revierte tras la foto**:
 
-- **Saltar el selector de perfil:** `sed` en `app.js` para que `perfil` arranque en `'QA'`
-  (`localStorage.getItem('wp_perfil') || 'QA'`). Crea antes `estados/QA.json` y CSVs dummy en `csv/QA/`.
+- **Saltar el selector de perfil (overlay "¿Quién está buscando?"):** sin perfil, `app.js`
+  monta ese overlay a pantalla completa y tapa/atenúa lo que quieras fotografiar. Fuerza un
+  perfil por defecto en la línea `let perfil = localStorage.getItem("wp_perfil") || "";`:
+  ```bash
+  # crea el perfil dummy y su estado…
+  mkdir -p csv/QA; [ -f estados/QA.json ] || echo '{"seen":{},"trash":{},"fav":{},"color":{}}' > estados/QA.json
+  # …y arranca en QA en vez de vacío (ojo: comillas DOBLES, así está en el código)
+  sed -i 's/localStorage.getItem("wp_perfil") || ""/localStorage.getItem("wp_perfil") || "QA"/' src/app.js
+  ```
+  Revierte con el `sed` inverso (`|| "QA"` → `|| ""`) tras la foto.
 - **Abrir un `<details>`/popover:** añade el atributo `open` en el HTML.
 - **Abrir una vista que necesita clic** (p. ej. gestión de búsquedas): añade al final de `app.js`
   un `setTimeout(() => openManager(), 1200)` y sube `--virtual-time-budget` para que dé tiempo.
