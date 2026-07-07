@@ -1291,34 +1291,36 @@ $("#kw").addEventListener("keydown", (e) => {
 });
 // auto-scroll del término largo cuando el input no tiene foco: ping-pong para poder leerlo entero
 (function kwMarquee() {
-  const kw = $("#kw");
-  let dir = 1,
-    hold = 0;
-  const tick = () => {
-    const over = kw.scrollWidth - kw.clientWidth;
-    if (document.activeElement !== kw && over > 4) {
-      if (hold > 0) hold--;
-      else {
-        kw.scrollLeft += dir * 0.6;
-        if (kw.scrollLeft >= over) {
-          kw.scrollLeft = over;
-          dir = -1;
-          hold = 90;
-        } else if (kw.scrollLeft <= 0) {
-          kw.scrollLeft = 0;
-          dir = 1;
-          hold = 90;
+  const marquee = (kw) => {
+    let dir = 1,
+      hold = 0;
+    const tick = () => {
+      const over = kw.scrollWidth - kw.clientWidth;
+      if (document.activeElement !== kw && over > 4) {
+        if (hold > 0) hold--;
+        else {
+          kw.scrollLeft += dir * 0.4; // más lento = menos ruidoso
+          if (kw.scrollLeft >= over) {
+            kw.scrollLeft = over;
+            dir = -1;
+            hold = 140; // pausa más larga en los extremos
+          } else if (kw.scrollLeft <= 0) {
+            kw.scrollLeft = 0;
+            dir = 1;
+            hold = 140;
+          }
         }
       }
-    }
+      requestAnimationFrame(tick);
+    };
+    kw.addEventListener("focus", () => {
+      kw.scrollLeft = 0;
+      dir = 1;
+      hold = 90;
+    });
     requestAnimationFrame(tick);
   };
-  kw.addEventListener("focus", () => {
-    kw.scrollLeft = 0;
-    dir = 1;
-    hold = 60;
-  });
-  requestAnimationFrame(tick);
+  ["#kw", "#pick"].forEach((sel) => { const el = $(sel); if (el) marquee(el); }); // barra de arriba + "Búsqueda activa"
 })();
 
 // ── gestor de búsquedas: vista CRUD sobre los CSV del servidor ──
