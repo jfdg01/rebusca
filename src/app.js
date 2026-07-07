@@ -574,7 +574,9 @@ function chooseQuery(csv) { selectQuery(csv); closeQlist(); pick.blur(); }
 // pinta la lista filtrada por el texto tecleado (substring, sin acentos/mayúsculas)
 function renderQlist(term) {
   const t = norm(term);
-  const hits = allQueries.filter(q => norm(q.label).includes(t));
+  const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || '{}');   // última interacción por perfil
+  const hits = allQueries.filter(q => norm(q.label).includes(t))
+    .sort((a, b) => (seen[b.csv] || 0) - (seen[a.csv] || 0) || a.label.localeCompare(b.label, 'es'));   // reciente primero; alfabético las nunca abiertas
   qlist.innerHTML = '';
   if (!hits.length) { qlist.innerHTML = '<div class="qempty">sin coincidencias</div>'; qlist.hidden = false; return; }
   for (const q of hits) {
