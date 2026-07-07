@@ -1295,7 +1295,7 @@ $("#kw").addEventListener("keydown", (e) => {
 // Se autodetiene si el elemento sale del DOM (las filas del dropdown se recrean al filtrar).
 function marquee(kw) {
   let dir = 1,
-    hold = 0;
+    hold = 60; // ~1s parado antes de arrancar (que el usuario lea primero)
   const tick = () => {
     if (!kw.isConnected) return; // fila eliminada -> corta el rAF (no fugar loops)
     const over = kw.scrollWidth - kw.clientWidth;
