@@ -1483,7 +1483,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !searchesView.hidden) closeManager();
 });
 
-// ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 4) ──
+// ── perfiles estilo "¿quién está buscando?": tarjetas grandes, color por persona (máx 10) ──
 const COLORS = [
   "#FF6B6B",
   "#FFA94D",
@@ -1610,7 +1610,7 @@ function showPicker() {
     b.onclick = () => setPerfil(p.name, colorOf(p), false);
     tiles.appendChild(b);
   }
-  if (knownPerfiles.length < 4) {
+  if (knownPerfiles.length < 10) {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "tile add";
