@@ -1306,11 +1306,11 @@ function marquee(kw) {
         if (kw.scrollLeft >= over) {
           kw.scrollLeft = over;
           dir = -1;
-          hold = 140; // pausa más larga en los extremos
+          hold = 60; // ~1s de pausa en los extremos (frames @60fps)
         } else if (kw.scrollLeft <= 0) {
           kw.scrollLeft = 0;
           dir = 1;
-          hold = 140;
+          hold = 60;
         }
       }
     }
