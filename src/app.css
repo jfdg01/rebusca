@@ -137,6 +137,11 @@
     display: flex; align-items: center; justify-content: center;
     background: var(--pine); color: #fff; font: 700 .82rem var(--mono); }
   .tut-txt { font: 500 .85rem/1.4 var(--sans); color: var(--ink); }
+  /* modo tutorial: velo oscuro sobre toda la pantalla; solo panel + mensaje quedan iluminados */
+  body.tut-on::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; }
+  body.tut-on header { position: relative; z-index: 50; background: transparent; } /* el velo se ve a través: mismo fondo, solo oscurecido */
+  body.tut-on header > * { opacity: .28; pointer-events: none; } /* la parte atenuada se traga los clics */
+  body.tut-on header > .panel:not(.picker), body.tut-on header > .tut-msg { opacity: 1; pointer-events: auto; }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
