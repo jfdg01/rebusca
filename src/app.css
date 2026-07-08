@@ -225,7 +225,7 @@
   .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
     text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
   .cats summary .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline;
-    text-transform: none; letter-spacing: 0; margin-left: .5rem; }
+    text-transform: none; letter-spacing: 0; margin-left: .5rem; font-weight: 400; }
   .cats summary .link[hidden] { display: none; }
 
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
