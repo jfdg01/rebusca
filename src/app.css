@@ -244,6 +244,19 @@
   .list-actions { display: flex; gap: .5rem; }
   .list-actions .btn { flex: 1 1 0; margin: 0; padding: .55rem .5rem; white-space: nowrap; }
 
+  /* barra de acciones en masa (solo Rechazados): seleccionar todo · restaurar N · vaciar */
+  .trash-bulk { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .trash-bulk .tb-all { display: flex; align-items: center; gap: .45rem; cursor: pointer;
+    font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+  .trash-bulk .tb-all input { width: 1.2rem; height: 1.2rem; accent-color: var(--pine); flex: 0 0 auto; }
+  .trash-bulk .btn { margin: 0; padding: .4rem .9rem; }
+  .trash-bulk .tb-empty { margin-left: auto; background: none; border: none; box-shadow: none;
+    color: #b03024; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: .3rem;
+    font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+  .trash-bulk .tb-empty:hover { background: none; box-shadow: none; color: #8f251b; }
+  /* checkbox de selección por fila en la papelera: primero en la fila de acciones */
+  .tb-check { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; accent-color: var(--pine); align-self: center; margin: 0; }
+
   /* ── lista compuesta (Destacados / Papelera): SIEMPRE pila de tarjetas ──
      cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas
      del CSV, que no aplican a una tarjeta compuesta → se oculta en cualquier anchura.
