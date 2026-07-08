@@ -261,18 +261,19 @@
      cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas
      del CSV, que no aplican a una tarjeta compuesta → se oculta en cualquier anchura.
      En desktop el ancho lo marca --bleed (columna centrada), como el resto del contenido. */
-  table, tbody, tbody tr, tbody td { display: block; }
+  table, tbody, tbody td { display: block; }
   thead { display: none; }
-  /* fila a sangre completa: banda de ancho total separada por un hueco de papel */
+  /* cada fila = tarjeta redondeada estilo swipe: imagen a sangre arriba, sombra, esquinas 18px */
   tbody tr {
-    background: var(--surface);
-    padding: 1rem var(--bleed);
-    margin: 0 calc(-1 * var(--bleed)) .55rem;   /* laterales anulan el padding del body; abajo = separación */
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 18px; padding: 1.2rem; margin: 0 0 .7rem;
+    box-shadow: 0 4px 16px rgba(27,33,30,.12);
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  tbody td { border: none; padding: .2rem 0; }
+  tbody td { border: none; padding: 0; }
 
-  /* celda de acciones: Ver + Quitar/Restaurar, fila de botones al pie de la tarjeta */
-  td.act { display: flex; gap: .5rem; white-space: normal; padding: 0 0 .7rem; }
+  /* celda de acciones: Ver + Quitar/Restaurar al PIE de la tarjeta (bajo la descripción) */
+  td.act { display: flex; gap: .5rem; white-space: normal; order: 2; padding: .9rem 0 0; }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
     font: 700 12px var(--mono); padding: .5rem 1rem; margin-right: .4rem;
@@ -299,7 +300,9 @@
   .btn.destacar .icon { width: 1em; height: 1em; fill: currentColor; stroke: none; }
 
   /* item de lista compuesto (Destacados / Papelera) */
-  .li-img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; margin-bottom: .7rem; background: var(--paper-2, #0002); }
+  /* imagen a sangre: ancho = card + los dos paddings, así llega a ambos bordes; redondea solo arriba */
+  .li-img { display: block; width: calc(100% + 2.4rem); aspect-ratio: 16/9; object-fit: cover; background: var(--paper-2, #0002);
+    margin: -1.2rem -1.2rem .8rem; border-radius: 18px 18px 0 0; }
   .li-title { font: 700 1.09rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .li-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
@@ -310,12 +313,12 @@
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: center; margin-top: .4rem; }
   .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
   .li-star { font-size: .55em; vertical-align: super; margin-left: .1em; font-weight: 700; }   /* asterisco del precio estimado (comisión + porte); explicación en Ajustes */
-  /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
-  .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
-    font: 700 11px var(--mono); color: var(--ink-soft); background: var(--surface-2); }
-  .li-when.fav { color: var(--pine-ink); background: var(--pine-soft); }
+  /* cuándo se clasificó: línea sutil encima del título (fav en teal, papelera en gris) */
+  /* siempre gris (como la descripción), sea rechazado/interesante/favorito */
+  .li-when { display: block; margin: 0 0 .3rem; font: 400 11px var(--mono);
+    letter-spacing: .02em; color: var(--ink-soft); }
   .li-desc { font: 12.5px/1.5 var(--sans); color: var(--ink-soft); margin-top: .8rem; overflow-wrap: anywhere;
-    white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+    white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 
   .empty { color: var(--ink-soft); font: 13px var(--sans); padding: 3rem 0; text-align: center; }
 
