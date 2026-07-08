@@ -60,7 +60,11 @@
     vertical-align: -.12em; }
   /* badge del "desde" a la derecha del selector, en pino oscuro */
   .pick-since { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%);
-    font: 600 .74rem var(--sans); color: var(--pine-ink); pointer-events: none; }
+    font: 600 .74rem var(--sans); color: var(--pine-ink); pointer-events: none;
+    /* opaco con fade a la izquierda: Firefox recorta el texto del input en el padding-box y lo cuela
+       por debajo del badge; este fondo lo tapa sin corte en seco. */
+    padding: .25rem 0 .25rem .8rem;
+    background: linear-gradient(90deg, #FFF0, var(--field) .8rem); }
   .opts { position: relative; flex: 0 0 auto; }
   /* iconos SVG inline: cuadrados, heredan color, alineados con el texto */
   .icon { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -.15em; flex: 0 0 auto; }
