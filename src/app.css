@@ -92,21 +92,51 @@
   .opts .menu .opt-row input[type=number] { width: 3.6rem; font: inherit; padding: .3rem .4rem;
     border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); color: var(--ink); }
   /* cabecera: engranaje a la izq, título centrado, avatar a la der */
-  .brand { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
-  .brand-title { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+  /* engranaje y avatar fuera del flujo (a los bordes); el título ocupa todo el ancho
+     y coloca el icono en el centro EXACTO del header vía grid 1fr auto 1fr */
+  .brand { position: relative; display: flex; align-items: center; justify-content: center;
+    min-height: 2.1rem; }
+  .brand .opts { position: absolute; left: 0; }
+  .brand .avatar { position: absolute; right: 0; }
+  .brand-title { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: .5rem; width: 100%; }
+  .brand h1 { justify-self: end; }
+  .brand .logo { justify-self: center; }
+  .brand .eyebrow { justify-self: start; }
   .avatar { flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none;
     cursor: pointer; font: 700 .94rem var(--mono); background: var(--surface-2); color: var(--ink);
     display: flex; align-items: center; justify-content: center; padding: 0; }
   .brand .logo { height: 2.1rem; width: auto; border-radius: 8px; display: block; }
   .brand h1 {
-    font: 800 1.35rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
+    font: 800 1.1rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
   }
   .brand .eyebrow {
-    font: 600 .54rem/1.2 var(--mono); letter-spacing: .16em; text-transform: uppercase;
-    color: var(--ink-soft); white-space: nowrap; text-align: right;   /* solo parte por el <br> */
+    font: 600 .6rem/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-soft); white-space: nowrap; text-align: left;   /* parte por el <br> */
   }
   /* sin sitio para todo: se esconde el subtítulo antes que clipar el engranaje */
   @container (max-width: 290px) { .brand .eyebrow { display: none; } }
+  /* stepper de tutorial: círculos numerados unidos por una línea + bocadillo por paso */
+  .tut { position: relative; display: flex; align-items: center; justify-content: space-between;
+    list-style: none; margin: .9rem .2rem .3rem; padding: 0; }
+  .tut li { position: relative; flex: 1 1 0; display: flex; justify-content: center; }
+  .tut li::before { content: ""; position: absolute; top: 50%; right: 50%; left: -50%;
+    height: 2px; background: var(--line); z-index: 0; }
+  .tut li:first-child::before { display: none; }
+  .tut li span { position: relative; z-index: 1; width: 2rem; height: 2rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--pine-ink);
+    font: 700 .9rem var(--mono); }
+  .tut li span { cursor: pointer; }
+  .tut li.on span { background: var(--pine); color: #fff; }
+  .tut-msg { position: absolute; left: .4rem; right: .4rem; z-index: 5;
+    display: flex; align-items: center; gap: .6rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: .7rem .85rem; margin: 0; box-shadow: 0 10px 26px #00000024; }
+  .tut-num { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--pine); color: #fff; font: 700 .82rem var(--mono); }
+  .tut-txt { font: 500 .85rem/1.4 var(--sans); color: var(--ink); }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
