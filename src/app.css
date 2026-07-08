@@ -308,6 +308,7 @@
   .li-age { font: 600 12.5px var(--mono); color: var(--ink-soft); text-align: right; }
   /* envío + distancia: una línea centrada bajo el precio */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: center; margin-top: .4rem; }
+  .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
   .li-star { font-size: .55em; vertical-align: super; margin-left: .1em; font-weight: 700; }   /* asterisco del precio estimado (comisión + porte); explicación en Ajustes */
   /* cuándo se clasificó: badge sobrio; fav en teal, papelera en gris */
   .li-when { display: inline-block; margin-top: .55rem; padding: .18rem .55rem; border-radius: 999px;
