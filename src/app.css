@@ -369,7 +369,7 @@
     backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
   .li-title { font: 700 1.12rem/1.28 var(--sans); overflow-wrap: anywhere; margin: 0 0 .4rem;
     text-wrap: balance;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
   /* envío + distancia: metadato en una línea bajo el título */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; }
   .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
@@ -543,7 +543,7 @@
   .swipe-card.grab { cursor: grabbing; }
   /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
   /* título largo: máx 2 líneas, luego ellipsis (hereda el clamp de .li-title) */
-  .swipe-card .li-title { flex: 0 0 auto; }
+  .swipe-card .li-title { flex: 0 0 auto; -webkit-line-clamp: 2; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
   /* imagen a sangre: pega a los bordes de la tarjeta (cancela el padding) y redondea solo arriba */
   .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; width: auto;
