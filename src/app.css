@@ -11,18 +11,18 @@
     --pine: #13C1AC;       /* acento de marca = teal del logo de Wallapop */
     --pine-ink: #0A736A;   /* teal oscuro: texto/enlaces legibles sobre el papel claro */
     --pine-soft: #D3F1EC;  /* tinte teal para fondos suaves / track del spinner */
-    --bleed: clamp(.75rem, 2vw, 1.5rem);   /* gutter del body; las bandas edge-to-edge lo anulan con margen negativo */
+    /* gutter del body; las bandas edge-to-edge lo anulan con margen negativo.
+       max(gutter, (100vw-600)/2): <600px fluido con gutter normal; >600px el cuerpo
+       se clava a 600px centrado y el resto es blanco. Sin @media, transición continua. */
+    --bleed: max(clamp(.75rem, 2vw, 1.5rem), (100vw - 600px) / 2);
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
   body {
     font: 13px/1.45 var(--sans); color: var(--ink); background: var(--paper);
-    margin: 0; padding: 0 var(--bleed) 5rem;
+    margin: 0; padding: 0 var(--bleed) 6rem;
     zoom: .95;   /* encoge toda la UI un 5% de forma uniforme (px+rem+imágenes) */
   }
-  /* escritorio ancho: columna de contenido al ~40% (centrada), pero las bandas siguen a sangre completa
-     porque --bleed crece hasta el borde real del viewport */
-  @media (min-width: 1000px) { :root { --bleed: 30vw; } }
 
   /* ── cabecera / mesa de mandos ─────────────────────────── */
   header {
@@ -115,7 +115,12 @@
     color: var(--ink-soft); white-space: nowrap; text-align: left;   /* parte por el <br> */
   }
   /* sin sitio para todo: se esconde el subtítulo antes que clipar el engranaje */
-  @container (max-width: 290px) { .brand .eyebrow { display: none; } }
+  @container (max-width: 290px) {
+    .brand .eyebrow { display: none; }
+    /* sin subtítulo que compense: centra REBUSCA + logo como un bloque (no el logo solo) */
+    .brand-title { display: flex; justify-content: center; }
+    .brand h1, .brand .logo { justify-self: auto; }
+  }
   /* stepper de tutorial: círculos numerados unidos por una línea + bocadillo por paso */
   .tut { position: relative; display: flex; align-items: center; justify-content: space-between;
     list-style: none; margin: .9rem .2rem .3rem; padding: 0; }
@@ -172,12 +177,13 @@
   .search button { flex: 0 0 auto; }
   /* misma altura que las barras del picker (query activa / excluir) para que todas las barras sean iguales */
   .search #kw, .search #since, .search button { min-height: 2.15rem; }
-  select, input[type=search], button, input[type=file] { font: 12px var(--sans); }
+  /* controles a 16px SIEMPRE: dedo-friendly y sin auto-zoom en iOS (no depende del ancho) */
+  select, input[type=search], button, input[type=file] { font: 16px var(--sans); }
   select, input[type=search], input[type=number] {
     padding: .38rem .55rem; border: 1px solid var(--line); border-radius: 6px;
     background: var(--field); color: var(--ink);
   }
-  input[type=search] { min-width: 180px; flex: 1 1 180px; max-width: 320px; }
+  input[type=search] { min-width: 180px; flex: 1 1 100%; max-width: none; }
   button {
     padding: .38rem .7rem; border: 1px solid #B7BCB0; border-radius: 6px;
     background: var(--surface); color: var(--ink); cursor: pointer;
@@ -313,9 +319,11 @@
 
   /* celda de acciones: Ver + Quitar/Restaurar al PIE de la tarjeta (bajo la descripción) */
   td.act { display: flex; gap: .5rem; white-space: normal; order: 2; padding: .9rem 0 0; }
+  /* botones de acción de la tarjeta a lo ancho, grandes para el pulgar */
+  td.act .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; border-radius: 12px; }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
-    font: 700 12px var(--mono); padding: .5rem 1rem; margin-right: .4rem;
+    font: 700 16px var(--mono); padding: .5rem 1rem; margin-right: .4rem;
     border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
     color: var(--ink); text-decoration: none; cursor: pointer; line-height: 1;
     box-shadow: 0 2px 5px rgba(27,33,30,.16);
@@ -383,16 +391,6 @@
   .snack button { background: none; border: 1px solid #565e59; color: #fff; }
   .snack button:hover { background: #2b322e; }
   @media (prefers-reduced-motion: no-preference) { .snack { transition: transform .22s ease; } }
-
-  /* ── móvil: controles dedo-friendly ── */
-  @media (max-width: 640px) {
-    body { padding-bottom: 6rem; }
-    /* controles con texto de 16px: dedo-friendly y sin auto-zoom en iOS */
-    select, input[type=search], button, .btn { font-size: 16px; }
-    input[type=search] { max-width: none; flex: 1 1 100%; }
-    /* botones de acción de la tarjeta a lo ancho, grandes para el pulgar */
-    td.act .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; border-radius: 12px; }
-  }
 
   /* perfil: chip en cabecera con avatar del color de la persona */
   .chip { display: inline-flex; align-items: center; padding: .3rem .85rem;
