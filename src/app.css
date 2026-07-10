@@ -279,10 +279,16 @@
   /* el círculo solo aplica al botón "volver" de la barra de título */
   .list-head-bar #listBack { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; font: 400 1.24rem/1 var(--mono); }
-  .list-head h2 { flex: 1 1 auto; min-width: 0; margin: 0; font: 800 1.14rem var(--mono); letter-spacing: .04em; text-transform: uppercase;
+  .list-head h2 { flex: 0 1 auto; min-width: 0; margin: 0; font: 800 1.14rem var(--mono); letter-spacing: .04em; text-transform: uppercase;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* "Copiar para IA" pegado al título, empujado a la derecha */
-  .list-head-bar #exportFav { flex: 0 0 auto; margin: 0; padding: .4rem .8rem; white-space: nowrap; }
+  /* la "i" de info del precio: pegada al título; el pop cuelga bajo ella */
+  .list-head-bar .note { position: relative; flex: 0 0 auto; }
+  .list-head-bar .note .help-i { color: var(--ink-soft); }
+  .list-head-bar .note[open] .help-i { color: var(--pine); }
+  .list-head-bar .note .help-pop { position: absolute; left: 0; top: 2rem; right: auto;
+    width: min(19rem, 82vw); z-index: 20; }
+  /* "Copiar para IA" empujado al extremo derecho */
+  .list-head-bar #exportFav { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   /* pills de orden: una sola fila, segmentadas a ancho equitativo (caben las 4 en 320px) */

@@ -159,6 +159,14 @@
                 data-icon="arrow-left"
             ></button>
             <h2 id="listTitle"></h2>
+            <details class="note" id="priceNote" hidden>
+                <summary class="help-i" title="cómo se calcula el precio" aria-label="cómo se calcula el precio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
+                <div class="help-pop">
+                    En interesantes con envío el precio es el <b>final
+                    estimado al comprador</b>: precio + comisión de Wallapop
+                    (0,70€ + 5%) + porte estimado a 5&nbsp;kg («aprox»).
+                </div>
+            </details>
             <button
                 id="exportFav"
                 class="btn"
@@ -191,13 +199,6 @@
         </div>
     </div>
 </header>
-
-<!-- fuera del header: la nota es larga y debe scrollear con la lista, no quedar fija tapando la vista -->
-<p class="swipe-note" id="priceNote" hidden>
-    En interesantes con envío el precio es el <b>final estimado al
-    comprador</b>: precio + comisión de Wallapop (0,70€ + 5%) + porte
-    estimado a 5&nbsp;kg («aprox»).
-</p>
 
 <table hidden>
     <thead></thead>
