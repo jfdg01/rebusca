@@ -362,7 +362,6 @@
   .li-price { position: absolute; left: .65rem; bottom: .65rem; z-index: 1; white-space: nowrap;
     font: 800 1.3rem/1 var(--mono); color: #fff; background: var(--pine);
     padding: .4rem .64rem; border-radius: 11px; box-shadow: 0 3px 12px rgba(9,14,12,.4); }
-  .li-star { font-size: .5em; vertical-align: super; margin-left: .1em; font-weight: 700; }   /* precio estimado (comisión + porte); explicación en Ajustes */
   /* frescura: chip esmerilado arriba a la derecha, sin color de urgencia */
   .li-age { position: absolute; top: .6rem; right: .6rem; z-index: 1; white-space: nowrap;
     font: 600 11px/1 var(--mono); letter-spacing: .01em; color: #f3f5f1;
