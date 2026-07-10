@@ -19,7 +19,7 @@
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
   body {
-    font: 13px/1.45 var(--sans); color: var(--ink); background: var(--paper);
+    font: 12px/1.45 var(--sans); color: var(--ink); background: var(--paper);
     margin: 0; padding: 0 var(--bleed) 6rem;
     zoom: .95;   /* encoge toda la UI un 5% de forma uniforme (px+rem+imágenes) */
   }
