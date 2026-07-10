@@ -320,9 +320,10 @@
   tbody td { border: none; padding: 0; }
 
   /* celda de acciones: Ver + Quitar/Restaurar al PIE de la tarjeta (bajo la descripción) */
-  td.act { display: flex; gap: .5rem; white-space: normal; order: 2; padding: .9rem 0 0; }
+  /* a sangre: rompe el padding 1.2rem de la card para llegar a sus bordes (mismo truco que .li-img) */
+  td.act { display: flex; gap: .5rem; white-space: normal; order: 2; margin: .9rem -1.2rem -1.2rem; padding: 0; }
   /* botones de acción de la tarjeta a lo ancho, grandes para el pulgar */
-  td.act .btn { flex: 1 1 auto; text-align: center; padding: .8rem .5rem; margin: 0; border-radius: 12px; }
+  td.act .btn { flex: 1 1 auto; text-align: center; padding: .9rem .5rem; margin: 0; border-radius: 12px; }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
     font: 700 16px var(--mono); padding: .5rem 1rem; margin-right: .4rem;
