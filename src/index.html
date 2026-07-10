@@ -159,6 +159,14 @@
                 data-icon="arrow-left"
             ></button>
             <h2 id="listTitle"></h2>
+            <button
+                id="exportFav"
+                class="btn"
+                title="copiar la lista al portapapeles"
+                hidden
+            >
+                Copiar para IA
+            </button>
         </div>
         <input
             id="listFilter"
@@ -172,16 +180,6 @@
             <button data-sort="precio">Precio</button>
             <button data-sort="dias">Fecha</button>
             <button data-sort="km">Distancia</button>
-        </div>
-        <div class="list-actions" id="listActions" hidden>
-            <button
-                id="exportFav"
-                class="btn"
-                title="copiar la lista al portapapeles"
-                hidden
-            >
-                Copiar para IA
-            </button>
         </div>
         <div class="trash-bulk" id="trashBulk" hidden>
             <label class="tb-all"
