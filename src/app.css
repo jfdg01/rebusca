@@ -306,12 +306,14 @@
      cada fila = 2 celdas (acciones .act + tarjeta compuesta .li). La thead lista las columnas
      del CSV, que no aplican a una tarjeta compuesta → se oculta en cualquier anchura.
      En desktop el ancho lo marca --bleed (columna centrada), como el resto del contenido. */
-  table, tbody, tbody td { display: block; }
+  table, tbody td { display: block; }
   thead { display: none; }
+  /* rejilla fluida: 1 col en móvil, 2+ cuando el ancho lo permite. Sin @media: auto-fill decide */
+  tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .7rem; align-items: start; }
   /* cada fila = tarjeta redondeada estilo swipe: imagen a sangre arriba, sombra, esquinas 18px */
   tbody tr {
     background: var(--surface); border: 1px solid var(--line);
-    border-radius: 18px; padding: 1.2rem; margin: 0 0 .7rem;
+    border-radius: 18px; padding: 1.2rem; margin: 0;
     box-shadow: 0 4px 16px rgba(27,33,30,.12);
     display: flex; flex-direction: column; overflow: hidden;
   }
