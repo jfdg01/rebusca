@@ -355,12 +355,13 @@
     margin: -1.2rem -1.2rem .8rem; border-radius: 18px 18px 0 0; }
   .li-title { font: 700 1.09rem/1.25 var(--sans); overflow-wrap: anywhere; margin-bottom: .55rem;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-  .li-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+  /* precio y antigüedad comparten línea base: la cifra manda, la frescura se ancla a su pie */
+  .li-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
   .li-price { font: 800 1.64rem/1 var(--mono); color: var(--pine); white-space: nowrap; flex: none; }
   /* antigüedad a la derecha del precio, mismo gris que el resto (sin color de frescura) */
   .li-age { font: 600 12.5px var(--mono); color: var(--ink-soft); text-align: right; }
-  /* envío + distancia: una línea centrada bajo el precio */
-  .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: center; margin-top: .4rem; }
+  /* envío + distancia: sub-línea del precio, alineada a la izquierda (mismo riel que el resto) */
+  .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; margin-top: .35rem; }
   .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
   .li-star { font-size: .55em; vertical-align: super; margin-left: .1em; font-weight: 700; }   /* asterisco del precio estimado (comisión + porte); explicación en Ajustes */
   /* cuándo se clasificó: línea sutil encima del título (fav en teal, papelera en gris) */
