@@ -3,3 +3,4 @@ csv/
 estados/
 __pycache__/
 .venv/
+.wrangler/

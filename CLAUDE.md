@@ -4,28 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Rebusca — reglas del proyecto
 
-Cazador de chollos de Wallapop. Desplegado en https://rebusca.dibogomez.com
-(VPS `oracle` vía Cloudflare Tunnel). Solo **stdlib** de Python — sin dependencias,
-sin uv/pip en el VPS.
+Cazador de chollos de Wallapop, **app 100% estática y pública**: el dominio solo sirve
+HTML/CSS/JS y **el browser de cada usuario scrapea Wallapop sobre su propia IP**. Desplegado
+en https://rebusca.dibogomez.com (VPS `oracle` vía Cloudflare Tunnel). Solo **stdlib** de
+Python — sin dependencias, sin uv/pip en el VPS. Sin backend de datos: **un usuario por
+navegador** (sin perfiles); estado y búsquedas viven en `localStorage`.
 
-Estructura: el código vive en `src/`, los CSVs generados en `csv/` (gitignored).
+Estructura: todo el código vive en `src/`.
 
 Piezas:
-- `src/wallapop.py` — scraper (API interna `v3/search`, `order_by=newest` + `time_filter`).
-- `src/servidor.py` — servidor stdlib: sirve estáticos, lista CSVs, persiste perfiles, dispara el scraper.
+- `src/scrape.js` — scraper **en el browser** (`window.Rebusca.scrape(...)` → texto CSV).
+  Reproduce `wallapop.py` byte-a-byte. Es lo que se usa en prod.
+- `src/wallapop.py` — mismo scraper en Python; ya **no se usa en prod**, se mantiene como
+  CLI/referencia local (no se sirve, cero superficie).
+- `src/servidor.py` — servidor stdlib **solo-estáticos**: sirve `index.html` (con `stamp_versions`)
+  + `app.css`/`app.js`/`scrape.js`/imágenes, header `no-cache`. No escribe nada.
 - `src/index.html` + `src/app.css` + `src/app.js` — frontend (markup / estilos / lógica; sin build).
 - `deploy.sh` — rsync a `oracle` + reinicia el servicio.
 
 ## Comandos
 
-Ejecutar desde la raíz del repo (los paths de `src/servidor.py` asumen `csv/` y `estados/` como hermanos de `src/`).
+Ejecutar desde la raíz del repo.
 
 ```bash
-python3 src/servidor.py                       # levanta el server -> http://0.0.0.0:8000 (PORT env override)
+python3 src/servidor.py                       # levanta el server estático -> http://0.0.0.0:8000 (PORT env override)
 python3 src/servidor.py demo                  # self-check del server (sin red)
-python3 src/wallapop.py "deshumidificador"    # scrape directo -> <query>.csv (Jaén por defecto)
-python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
-python3 src/wallapop.py demo                  # self-check del scraper (sin red)
+node src/scrape.js demo                       # self-check del scraper del browser (sin red)
+node src/test_app.js                          # smoke test de app.js (evalúa el módulo + boot, sin navegador)
+python3 src/wallapop.py "deshumidificador"    # scrape CLI (referencia local) -> <query>.csv (Jaén por defecto)
+python3 src/wallapop.py demo                  # self-check del scraper Python (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart wallapop
 ```
 
@@ -36,29 +43,37 @@ python3 src/wallapop.py demo                  # self-check del scraper (sin red)
 > ```bash
 > curl -sf -o /dev/null http://127.0.0.1:8123/ || PORT=8123 python3 src/servidor.py &
 > ```
-> Sirve estáticos desde disco en cada petición, así que recoge tus ediciones de `app.css`/`app.js` sin reiniciar.
+> Sirve estáticos desde disco en cada petición, así que recoge tus ediciones de `app.css`/`app.js`/`scrape.js`
+> sin reiniciar. **Ojo:** cambios en `servidor.py` sí requieren reiniciar el server de pruebas.
 >
-> **Perfil de QA:** para probar/capturar usa (o crea) el perfil **`QA`** — busca y trastea con
-> datos dummy ahí (`csv/QA/`, `estados/QA.json`) sin tocar `Javi` ni las demás cuentas reales.
+> **QA sin tocar datos reales:** ya no hay perfiles (un usuario por navegador). Para probar/capturar,
+> el headless one-shot arranca con `localStorage` vacío, así que trastea ahí sin miedo. Si necesitas
+> sembrar estado dummy, escribe directo las claves fijas `wp_estado`/`wp_searches`/`wp_lastcsv`.
 
-Convención: la lógica no trivial deja un `demo()` con `assert`, invocable por `python3 <fichero>.py demo`.
+Convención: la lógica no trivial deja un check runnable (`demo()` con `assert`, `python3 <fichero>.py demo`
+o `node <fichero>.js demo`).
 
 ## Arquitectura (flujo de datos)
 
-Frontend (`app.js`) → `POST /scrape {keywords, since}` → el server ejecuta `wallapop.py`
-como subproceso y escribe `csv/<slug>[--<since>].csv` → responde con el nombre del CSV
-(sin cache: cada búsqueda re-scrapea; `POST /stop {csv}` mata el scraper y el CSV parcial
-—flusheado por página— se carga tal cual).
-El frontend luego pide `GET /<csv>` y lo pinta (el server enruta los `.csv` a `csv/`).
+**El browser hace todo el trabajo; el server solo sirve ficheros.** `api.wallapop.com`
+(`/v3/search`, `/v3/items/<id>`) devuelve `Access-Control-Allow-Origin: *` y permite el header
+`X-DeviceOS` en preflight → cada browser scrapea directo sobre su IP (no hay ban compartido de
+la IP del VPS, no hay cuentas, no hay endpoints de escritura).
 
-- **Estado por persona:** `estados/<perfil>.json` guarda `{seen, trash, fav, color}`.
-  El frontend lo lee/escribe vía `GET|POST /estado?perfil=<nombre>`. `perfil_path()`
-  sanea el nombre (anti path-traversal). `estados/` y `csv/` viven solo en el VPS
-  (gitignored); `deploy.sh` no los toca.
-- **Escritura incremental:** el scraper flushea cada página a disco; si crashea o lo bloquean
-  (403 DataDome), el CSV conserva lo ya escrito. Ordena por km al final si no se filtró por distancia.
+- **Scrape:** botón Buscar → `window.Rebusca.scrape({keywords, since, titleOnly, lat, lon,
+  onProgress, signal})` (`scrape.js`) → texto CSV → `loadCSV(text, name)` (`app.js`) lo pinta.
+  `AbortController` para el botón parar; `onProgress` para el contador. Cada búsqueda re-scrapea
+  (no hay CSV en disco). Ubicación por defecto Jaén (`getLoc()` lee `wp_loc`; selector de ciudad = pendiente).
+- **Búsquedas guardadas:** `localStorage["wp_searches"]` = `[{csv, rows, mtime}]`
+  (definiciones, no resultados). Abrir una guardada = re-scrape con su `kw`/`since`.
+- **Estado (un usuario/navegador, sin perfiles):** `localStorage["wp_estado"]` guarda el blob
+  `{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}`
+  (`hydrateEstado`/`pushEstado`). También `wp_lastcsv`/`wp_lastseen`. Al cargar, una migración
+  one-shot adopta el `wp_estado_<perfil>` del perfil activo del modelo viejo a estas claves fijas.
+- **Pesos (precio con envío exacto):** `fetchPesos` hace el bucle en el browser contra
+  `api.wallapop.com/v3/items/<id>` (`itemWeight`, saca `type_attributes.up_to_kg`, jitter, tope 200).
 - **Cache del móvil:** el HTML se sirve `no-cache`; `stamp_versions()` añade `?v=<mtime>` a
-  `app.css`/`app.js` para bustear la cache de 4h de Cloudflare en cada deploy.
+  `app.css`/`app.js`/`scrape.js` para bustear la cache de 4h de Cloudflare en cada deploy.
 
 ## Flujo de trabajo (obligatorio)
 
@@ -109,21 +124,15 @@ google-chrome --headless=new --disable-gpu --hide-scrollbars \
 El one-shot **no ejecuta clics ni JS**, así que para llegar al estado real se **edita temporalmente
 el disco** (el server de :8123 sirve de disco en cada request) y se **revierte tras la foto**:
 
-- **Saltar el selector de perfil (overlay "¿Quién está buscando?"):** sin perfil, `app.js`
-  monta ese overlay a pantalla completa y tapa/atenúa lo que quieras fotografiar. Fuerza un
-  perfil por defecto en la línea `let perfil = localStorage.getItem("wp_perfil") || "";`:
-  ```bash
-  # crea el perfil dummy y su estado…
-  mkdir -p csv/QA; [ -f estados/QA.json ] || echo '{"seen":{},"trash":{},"fav":{},"color":{}}' > estados/QA.json
-  # …y arranca en QA en vez de vacío (ojo: comillas DOBLES, así está en el código)
-  sed -i 's/localStorage.getItem("wp_perfil") || ""/localStorage.getItem("wp_perfil") || "QA"/' src/app.js
-  ```
-  Revierte con el `sed` inverso (`|| "QA"` → `|| ""`) tras la foto.
+- **Arranque directo:** ya no hay gate de perfil; el one-shot headless arranca con `localStorage`
+  vacío y cae directo en la app (pantalla de bienvenida). Para fotografiar con estado, siembra las
+  claves fijas al final de `app.js` (`localStorage.setItem("wp_estado", '...'); location.reload();`)
+  y borra el bloque tras la foto.
 - **Abrir un `<details>`/popover:** añade el atributo `open` en el HTML.
 - **Abrir una vista que necesita clic** (p. ej. gestión de búsquedas): añade al final de `app.js`
   un `setTimeout(() => openManager(), 1200)` y sube `--virtual-time-budget` para que dé tiempo.
-- **Revertir SIEMPRE:** deshaz los `sed`/append y borra `csv/QA` + `estados/QA.json`. Comprueba
-  con `grep` que no quedan restos antes de commitear.
+- **Revertir SIEMPRE:** deshaz los append/edits temporales. Comprueba con `grep` que no quedan
+  restos (p. ej. `grep -n 'TEMP screenshot' src/app.js`) antes de commitear.
 
 Sigue siendo validación real (mismo CSS/markup/flujo), solo se fuerza el estado que un tap daría.
 

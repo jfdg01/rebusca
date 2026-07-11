@@ -97,15 +97,11 @@
   .brand { position: relative; display: flex; align-items: center; justify-content: center;
     min-height: 2.1rem; }
   .brand .opts { position: absolute; left: 0; }
-  .brand .avatar { position: absolute; right: 0; }
   .brand-title { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
     gap: .5rem; width: 100%; }
   .brand h1 { justify-self: end; }
   .brand .logo { justify-self: center; }
   .brand .eyebrow { justify-self: start; }
-  .avatar { flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none;
-    cursor: pointer; font: 700 .94rem var(--mono); background: var(--surface-2); color: var(--ink);
-    display: flex; align-items: center; justify-content: center; padding: 0; }
   .brand .logo { height: 2.1rem; width: auto; border-radius: 8px; display: block; }
   .brand h1 {
     font: 800 1.1rem/1 var(--mono); letter-spacing: -.02em; text-transform: uppercase; margin: 0;
@@ -417,55 +413,6 @@
     font: 700 11px var(--mono); letter-spacing: .02em; }
   .chip:hover { filter: brightness(1.08); }
   .chip.empty:hover { filter: none; border-color: var(--pine); }
-
-  /* gate estilo "¿quién está viendo?": tarjetas grandes sobre fondo oscuro */
-  .gate { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
-    background: rgba(20,25,22,.94); padding: 1.5rem; overflow-y: auto; }
-  .gate.show { display: grid; }
-  .gate-inner { position: relative; width: min(720px, 100%); text-align: center;
-    display: flex; flex-direction: column; align-items: center; gap: 1.8rem; }
-  .gate h2 { font: 700 clamp(1.24rem, 4vw, 1.94rem)/1 var(--mono); text-transform: uppercase;
-    letter-spacing: .08em; color: #ECEEE8; margin: 0; }
-
-  /* fila de perfiles (máx 4) + tile de añadir */
-  .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(1rem, 4vw, 2.2rem); }
-  .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: .7rem;
-    background: none; border: none; cursor: pointer; padding: 0; }
-  .tile .edit { position: absolute; top: -10px; right: -10px; z-index: 1;
-    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
-    background: #2A302C; border: 1px solid #4A514C; color: #ECEEE8; font-size: 13px; }
-  .tile:hover, .tile:focus-visible { background: none; }   /* gana al button:hover global (fondo claro ilegible) */
-  .tile .edit:hover { border-color: #ECEEE8; transform: scale(1.1); }
-  .av { width: clamp(84px, 22vw, 116px); aspect-ratio: 1; border-radius: 12px;
-    display: grid; place-items: center; font: 700 clamp(1.94rem, 7vw, 2.94rem) var(--mono);
-    color: #1A1E1B; text-transform: uppercase; border: 3px solid transparent; transition: border-color .15s, transform .15s; }
-  .tile .name { font: 600 clamp(.84rem, 2.6vw, .99rem) var(--mono); color: #A9AFA7; transition: color .15s; }
-  .tile:hover .av, .tile:focus-visible .av { border-color: #ECEEE8; transform: translateY(-3px); }
-  .tile:hover .name, .tile:focus-visible .name { color: #ECEEE8; }
-  .tile.add .av { background: none; border: 2px dashed #5A625D; color: #7E857D; font-weight: 400; }
-  .tile.add:hover .av { border-color: #ECEEE8; color: #ECEEE8; }
-
-  /* crear perfil: nombre + color */
-  .creator { display: flex; flex-direction: column; align-items: center; gap: 1.2rem; width: min(360px, 100%); }
-  .creator input { width: 100%; padding: .7rem .8rem; text-align: center; font: 16px var(--sans);
-    border: 1px solid #4A514C; border-radius: 8px; background: #2A302C; color: #ECEEE8; }
-  .creator input::placeholder { color: #7E857D; }
-  .swatches { display: flex; flex-wrap: wrap; justify-content: center; gap: .7rem; }
-  .swatch { width: 2.1rem; height: 2.1rem; border-radius: 8px; border: 3px solid transparent;
-    cursor: pointer; padding: 0; transition: transform .12s; }
-  .swatch:hover { transform: scale(1.12); }
-  .swatch.sel { border-color: #ECEEE8; }
-  .creator-btns { display: flex; gap: .6rem; }
-  .creator .ghost { background: none; border: 1px solid #4A514C; color: #A9AFA7; }
-  .creator .ghost:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
-  .creator .danger { border-color: #7A3B3B; color: #D99; }
-  .creator .danger:hover { border-color: #D99; color: #ECEEE8; background: none; }
-
-  /* botón de salida evidente: cierra el selector sin cambiar de perfil */
-  .gate-exit { background: none; border: 1px solid #4A514C; color: #A9AFA7; cursor: pointer;
-    font: 700 13px var(--mono); letter-spacing: .1em; text-transform: uppercase;
-    padding: .6rem 1.6rem; border-radius: 8px; }
-  .gate-exit:hover { border-color: #ECEEE8; color: #ECEEE8; background: none; }
 
   /* ── modo swipe (tinder): el swipe es la interfaz principal (la tabla queda [hidden]) ── */
   .titleonly { display: flex; align-items: center; gap: .4rem; margin-top: .5rem;

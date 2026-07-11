@@ -13,7 +13,6 @@
         <details class="opts" id="perfilOpts">
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
-                <button id="perfilChip" class="chip">Cambiar de perfil</button>
                 <button id="copyFavOpt" class="chip">
                     Copiar interesantes para IA
                 </button>
@@ -49,9 +48,6 @@
             />
             <span class="eyebrow">rebuscador<br />de chollos</span>
         </div>
-        <button class="avatar" id="perfilAvatar" title="cambiar de perfil">
-            ?
-        </button>
     </div>
     <ol class="tut" id="tut">
         <li title="Haz una búsqueda"><span>1</span></li>
@@ -221,38 +217,6 @@
 <button id="swipeFab" hidden>REBUSCAR</button>
 <button id="copyFav" hidden>Copiar interesantes para IA</button>
 
-<div class="gate" id="gate">
-    <div class="gate-inner">
-        <h2 id="gateTitle">¿Quién eres?</h2>
-        <div class="tiles" id="tiles"></div>
-        <form class="creator" id="creator" hidden>
-            <input
-                id="newName"
-                placeholder="tu nombre…"
-                autocomplete="off"
-                maxlength="40"
-            />
-            <div class="swatches" id="swatches"></div>
-            <div class="creator-btns">
-                <button
-                    type="button"
-                    class="ghost danger"
-                    id="deletePerfil"
-                    hidden
-                >
-                    Borrar
-                </button>
-                <button type="button" class="ghost" id="cancelCreate" hidden>
-                    Cancelar
-                </button>
-                <button class="primary" type="submit" id="saveBtn">
-                    Guardar
-                </button>
-            </div>
-        </form>
-        <button class="gate-exit" id="gateX" hidden>Salir</button>
-    </div>
-</div>
 
 <div class="searches" id="searchesView" hidden>
     <div class="searches-bar">
@@ -335,4 +299,5 @@
     <button id="undo">Deshacer</button>
 </div>
 
+<script src="scrape.js"></script>
 <script src="app.js"></script>
