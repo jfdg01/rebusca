@@ -551,9 +551,9 @@
   /* título largo: máx 2 líneas, luego ellipsis (hereda el clamp de .li-title) */
   .swipe-card .li-title { flex: 0 0 auto; -webkit-line-clamp: 2; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
-  /* imagen a sangre: pega a los bordes de la tarjeta (cancela el padding) y redondea solo arriba */
-  .swipe-card .li-img { flex: 0 0 auto; height: 22vh; aspect-ratio: auto; width: auto;
-    margin: -1.2rem -1.2rem .7rem; border-radius: 18px 18px 0 0; }
+  /* la media (foto + gradiente + overlays) crece a altura fija: más escaparate que el 16/9 de la lista.
+     .li-img sigue siendo absolute/inset:0/cover, así que llena esta caja sin trucos de margen */
+  .swipe-card .li-media { flex: 0 0 auto; aspect-ratio: auto; height: 22vh; }
   /* la descripción scrollea dentro de la tarjeta, con tope de altura para no comerse la pantalla */
   .swipe-card .li-desc { flex: 0 1 auto; min-height: 0; max-height: 40vh; overflow-y: auto;
     display: block; -webkit-line-clamp: unset; }   /* min-height 0: en pantallas cortas se colapsa antes de recortar los flags */
