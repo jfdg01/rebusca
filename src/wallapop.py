@@ -151,6 +151,15 @@ FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
           "reservado", "envio", "url", "vendedor", "imagen", "descripcion"]  # id inmutable primero, descripcion al final
 
 
+# quita emojis y pictogramas de los textos del anuncio (símbolos, banderas, ZWJ, tonos de piel, VS16)
+_EMOJI = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    "\U00002190-\U000021FF\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U0000200D\U000020E3]"
+)
+def _deemoji(s):
+    return " ".join(_EMOJI.sub("", s).split())   # limpia y colapsa los huecos que dejan
+
+
 def row(it, origin):
     loc = it.get("location") or {}
     lat, lon = loc.get("latitude"), loc.get("longitude")
@@ -160,10 +169,10 @@ def row(it, origin):
     tax = it.get("taxonomy") or []   # breadcrumb de categorias; la hoja es la mas especifica
     return {
         "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
-        "titulo": it["title"],
+        "titulo": _deemoji(it["title"]),
         "precio": it["price"]["amount"],
         "categoria": tax[-1]["name"] if tax else "",
-        "descripcion": " ".join((it.get("description") or "").split()),  # 1 sola linea
+        "descripcion": _deemoji(it.get("description") or ""),  # 1 sola linea, sin emojis
         "ciudad": loc.get("city", ""),
         "cp": loc.get("postal_code", ""),
         "km": dist,
@@ -289,6 +298,9 @@ def demo():
     assert branches("(a OR b) (c OR d)") == ["a c", "a d", "b c", "b d"], "branches: producto de dos grupos"
     assert branches('"be quiet" OR corsair') == ["be quiet", "corsair"], "branches: frase entre comillas"
     assert branches("corsair OR seasonic gold") == ["corsair", "seasonic gold"], "branches: OR liga más flojo que el espacio"
+    assert _deemoji("Aleron 🔥 AMG 🚗💨") == "Aleron AMG", "deemoji: quita emojis y colapsa huecos"
+    assert _deemoji("café ñ 5€ ✅") == "café ñ 5€", "deemoji: conserva acentos/€, quita check"
+    assert _deemoji("🇪🇸 España") == "España", "deemoji: quita banderas"
     print("ok")
 
 
