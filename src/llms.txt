@@ -1,178 +1,111 @@
-# Rebusca
+# Rebusca — guía de uso
 
-> Cazador de chollos de Wallapop. Defines búsquedas (keywords + frescura), Rebusca
-> las reejecuta contra la API interna de Wallapop, ordena por lo más reciente/cercano
-> y recuerda qué has visto, descartado o marcado como favorito — para que solo mires
-> lo que de verdad es nuevo. Live: https://rebusca.dibogomez.com
+> Rebusca (https://rebusca.dibogomez.com) es un cazador de chollos de Wallapop.
+> El usuario define búsquedas y Rebusca reejecuta el buscador de Wallapop, ordena
+> por lo más nuevo/cercano y recuerda qué ya vio, para que solo mire lo nuevo.
 
-Este documento describe la app completa para lectores automáticos (LLMs): qué hace,
-cómo está construida y dónde vive cada pieza. Es autocontenido; para ir al detalle,
-las fuentes se sirven en las URLs indicadas.
+Este documento es para ti, la IA: explica **cómo ayudar al usuario a sacarle el
+máximo partido** a la app. No cómo está construida por dentro, sino cómo se usa bien.
 
-## Idea en una frase
+## Qué hace por el usuario
 
-**App 100% estática y pública.** El dominio solo sirve HTML/CSS/JS. **Todo el trabajo
-ocurre en el navegador de cada usuario**: el scraping, el estado y las búsquedas. No hay
-base de datos, no hay cuentas, no hay endpoints de escritura. Un usuario por navegador;
-su estado vive en `localStorage`.
+- Reejecuta sus búsquedas de Wallapop y le muestra los resultados ordenados por
+  cercanía (o por lo más reciente si filtra por fecha).
+- Le deja **triar rápido** cada anuncio (interesa / no interesa) y **recuerda** su
+  decisión, así que en la siguiente pasada solo revisa lo que aún no ha clasificado.
+- Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el
+  buscador nativo de Wallapop no permite.
+- Prepara la lista de "interesantes" **lista para pegar a una IA** que le ayude a
+  decidir qué comprar.
 
-Clave técnica que lo hace posible: `api.wallapop.com` responde con
-`Access-Control-Allow-Origin: *` y permite el header `X-DeviceOS` en el preflight CORS,
-así que **cada browser puede llamar a la API de Wallapop directamente desde su propia IP**.
-Ventaja: no hay una IP de servidor compartida que Wallapop pueda banear para todos.
+## Cómo escribir una búsqueda potente (lo más útil que le puedes enseñar)
 
-## Arquitectura y flujo de datos
+El campo de búsqueda entiende una mini-gramática. Domínala para proponerle buenas
+consultas:
 
-```
-Usuario define búsqueda (keywords + "desde": hora/día/semana/mes)
-        |
-        v
-  app.js llama window.Rebusca.scrape({keywords, since, titleOnly, lat, lon, onProgress, signal})
-        |                                    (scrape.js, en el browser)
-        v
-  fetch -> https://api.wallapop.com/api/v3/search   (order_by=newest + time_filter, paginado por cursor)
-        |
-        v
-  scrape() devuelve TEXTO CSV  ->  loadCSV(text, name) en app.js lo parsea y pinta
-        |
-        v
-  El usuario marca visto / favorito / descarta / bloquea vendedor / excluye
-        |
-        v
-  Estado se persiste en localStorage (un blob por navegador)
-```
+- **Espacio = «y»** (todas las palabras juntas): `corsair gold` → anuncios que digan
+  *corsair* y *gold*.
+- **`OR` (o `|`) = «o»**: `corsair OR seasonic` → lanza las dos búsquedas y junta los
+  resultados. Ideal para varias marcas, sinónimos o modelos equivalentes.
+- **`( )` = grupo**, lo de fuera se reparte a cada opción de dentro:
+  `(corsair OR seasonic) gold` → busca *corsair gold* y *seasonic gold*.
+- **`"comillas"` = frase exacta**: `"be quiet"` → esas dos palabras seguidas y en ese
+  orden.
+- Se puede mezclar todo: `(corsair OR seasonic) (gold OR platinum)`.
+- **`OR` liga más flojo que el espacio**: `corsair OR seasonic gold` = *corsair* O
+  *seasonic gold*.
 
-No hay `POST /scrape`, ni CSVs en disco, ni `estados/*.json` en el servidor. Todo eso
-(modelo antiguo con backend) fue reemplazado por scraping y estado en el cliente.
+Consejos: usa `OR` para cubrir sinónimos y variantes de nombre (`sillon OR sillón`,
+`ps5 OR "play station 5"`), agrupa cuando el término común aplica a todas las ramas,
+y activa **«Buscar solo en el título»** cuando la palabra sale mucho en descripciones
+irrelevantes (así reduces falsos positivos).
 
-## Piezas y dónde están
+**Frescura** (opcional): «cualquiera», «última hora», «último día», «última semana»,
+«último mes». Filtra por antigüedad del anuncio y ordena por lo más reciente. Útil
+para vigilar un tipo de producto y cazar lo que se acaba de publicar antes de que vuele.
 
-Todo el código vive en `src/`. Ficheros servidos (fetch-ables desde el dominio):
+## El flujo de uso (búsqueda → triaje → decisión)
 
-- `/`  o  `/index.html` — markup de la app (una sola página). El server le inyecta
-  `?v=<mtime>` a los estáticos versionados para bustear la caché de Cloudflare.
-- `/app.js` — toda la lógica del frontend (~82 KB, sin build, sin framework).
-- `/app.css` — estilos.
-- `/scrape.js` — el scraper que corre en el browser (`window.Rebusca`).
-- `/llms.txt` — este documento.
+1. **Buscar**: escribe la búsqueda + frescura, pulsa buscar. Rebusca trae los anuncios.
+2. **Triar en el mazo** (tipo Tinder, una tarjeta a la vez):
+   - **Deslizar a la derecha = "Interesante"** (me lo guardo para mirar).
+   - **Deslizar a la izquierda = "Rechazado"** (fuera, no vuelve a molestar).
+   - Hay **Deshacer** para la última decisión.
+   Lo clasificado se recuerda: la próxima búsqueda no te vuelve a enseñar lo rechazado.
+3. **Copiar interesantes para IA**: junta todos los "interesantes" en un texto
+   (con precio y coste de envío estimado) y lo copia al portapapeles, ya redactado
+   como petición para que una IA los compare. El usuario lo pega en el chat.
+4. **Favoritos**: tras la criba de la IA, el usuario **asciende los mejores** a
+   "Favoritos" (la lista definitiva de lo que de verdad quiere comprar).
 
-No servido (referencia local, no forma parte de la app en producción):
+Hay **tres cubos exclusivos**: *Interesante* (sí preliminar), *Rechazado* (papelera)
+y *Favorito* (los definitivos). Un anuncio está en uno solo.
 
-- `src/wallapop.py` — el MISMO scraper en Python. Reproduce `scrape.js` byte-a-byte
-  (mismo CSV). Se mantiene como CLI/referencia: `python3 src/wallapop.py "cosa" --since dia`.
-- `src/servidor.py` — el servidor (ver abajo).
-- `deploy.sh`, `wallapop.service` — despliegue.
+## Cuando el usuario te pega su lista de "interesantes"
 
-## El servidor (`src/servidor.py`)
-
-Python de **stdlib pura** (`http.server`), cero dependencias. **Solo sirve estáticos y no
-escribe nada.** Un único comportamiento no trivial:
-
-- `GET /` → sirve `index.html` pasándolo por `stamp_versions()`, que añade `?v=<mtime>` a
-  `app.css`/`app.js`/`scrape.js`. Como Cloudflare cachea el JS/CSS 4 h ignorando el origen,
-  cambiar esa URL en cada deploy hace que el móvil vea la versión nueva al recargar.
-- Cualquier otra ruta → fichero estático desde `src/` (con anti-traversal de la stdlib).
-- Todas las respuestas llevan `Cache-Control: no-cache` (el navegador revalida siempre;
-  304 si no cambió).
-
-Arranque: `python3 src/servidor.py` → `http://0.0.0.0:8000` (override con `PORT`).
-Self-check sin red: `python3 src/servidor.py demo`.
-
-## El scraper (`src/scrape.js` → `window.Rebusca`)
-
-API pública en el browser: `window.Rebusca.scrape(opts)` donde
-`opts = {keywords, since, titleOnly, lat, lon, onProgress, signal}` y devuelve una
-**promesa que resuelve a texto CSV**. También expone `branches`, `haversineKm`, `deemoji`,
-`titleMatches`, `row`, `toCSV`, `FIELDS`, `JAEN`, `demo`. Corre igual en Node
-(`node src/scrape.js demo` para el self-check).
-
-Endpoint: `GET https://api.wallapop.com/api/v3/search`. Detalles:
-
-- **Frescura** (`since`): `order_by=newest` + `time_filter`. Mapa
-  `hora/dia→today`, `semana→lastWeek`, `mes→lastMonth`. Como `newest` viene desc por fecha,
-  al pasar el umbral de antigüedad (`SINCE_DAYS`) la rama corta (el resto es más viejo).
-  Sin `since` no se ordena por fecha; al final se ordena por cercanía (km).
-- **Búsqueda booleana OR propia** (`branches`): Wallapop no sabe hacer `OR`, así que cada
-  rama se lanza como búsqueda aparte y se unen los resultados (dedup por `id`). Gramática:
-  el espacio es AND; `OR`/`|` separa ramas; `AND`/`&` es opcional; `()` agrupa; `"frase"`
-  entre comillas. Ej: `(corsair OR seasonic) gold` → `["corsair gold","seasonic gold"]`.
-  `OR` liga más flojo que el espacio. Tope de 32 ramas.
-- **Paginación por cursor** (`meta.next_page`), con jitter de 0.5–1 s entre páginas para no
-  parecer un bot.
-- **Reintentos**: backoff exponencial ante `429`/`5xx` (respeta `Retry-After`). Un `403` es
-  bloqueo (DataDome) → corta esa rama y **conserva lo ya recogido** (degrada, no rompe).
-- **Cancelación**: `AbortController` (`opts.signal`); el botón de parar aborta y se devuelve
-  el CSV con lo recolectado hasta el momento.
-- **Filtros de cliente**: `titleOnly` (todas las palabras del término han de estar en el
-  título) y el umbral de días de `since`.
-- **Limpieza**: `deemoji()` quita emojis/pictogramas de título y descripción (conserva
-  acentos, ñ, €).
-
-## Modelo de datos (CSV)
-
-Cada búsqueda produce un CSV con estas columnas (`FIELDS`), una fila por anuncio:
+Ese es el momento en que más le ayudas. Recibirás una lista tipo:
 
 ```
-id, titulo, precio, categoria, ciudad, cp, km, dias, reservado, envio, url, vendedor, imagen, descripcion
+1. <título del anuncio> — <precio> (+ envío ≈ <coste>)
+   <descripción en una línea>
+2. ...
 ```
 
-- `id` — id inmutable de Wallapop (sobrevive a cambios de título/precio/desc). Es la clave
-  de todo el estado.
-- `km` — distancia haversine al origen (por defecto Jaén: `37.7796, -3.7849`).
-- `dias` — antigüedad del anuncio en días (desde `created_at`). Señal de "lo bueno ya voló".
-- `reservado`, `envio` — banderas (`True`/`False`, formato Python `csv`).
-- `vendedor` — `user_id` opaco y estable; sirve de clave para bloquear vendedores.
-- `imagen` — URL del thumbnail (W320).
-- El serializador replica `csv.QUOTE_MINIMAL` de Python (comillas, comas, saltos; `\r\n`),
-  para que un CSV del browser y uno de `wallapop.py` sean idénticos.
+El texto ya trae instrucciones (compáralos, haz un TOP 3, menciones y descartes, di
+si regatear y a qué precio, y qué preguntar al vendedor). Para hacerlo bien:
 
-## El frontend (`src/app.js`)
+- **Identifica el modelo/versión exacto** por el título+descripción; una palabra
+  cambia el valor (una edición, un tamaño, "para piezas").
+- **Compara contra el precio típico** nuevo y de segunda mano de ese modelo.
+- **Suma el envío** al comparar (el precio "a secas" engaña si uno pesa mucho).
+- **Señales de riesgo/urgencia**: si el anuncio es viejo quizá siga porque nadie lo
+  quiere (o esté ya vendido); "reservado" = puede caerse; sin envío y lejos = recogida
+  en persona. Anúncialas.
+- Sé concreto con el **regateo**: propón un precio con su razón, no "intenta negociar".
 
-Una sola página vanilla JS. Flujo y responsabilidades (nombres de funciones reales):
+## Reducir ruido (para búsquedas que traen mucha morralla)
 
-- **Scrape + carga**: `runScrape` invoca `window.Rebusca.scrape(...)` (con `AbortController`
-  para el botón parar y `onProgress` para el contador en vivo) → `loadCSV`/`parseCSV`
-  parsean el texto y `render` pinta.
-- **Dos vistas de resultados**: baraja de swipe (tipo Tinder: `openSwipe`, `buildCard`,
-  `fling`, `decide`, `nextCard`, `rebuildDeck`) y lista (`sortList`, `applyListSort`,
-  `filteredRows`). Ordenación por columnas.
-- **Estado por anuncio**: visto (`stampSeen`/`wp_lastseen`), favorito (`favText`),
-  destacado/star (`unstar`), descartar (`discard`/`restore`/`bulkRestore`).
-- **Bloqueo de vendedores**: `blockSeller`/`unblockFor`/`enforceBlocks` — oculta todo lo de
-  un `vendedor`.
-- **Exclusiones**: por palabra (`addExcl`/`delExcl`/`renderExcl`) y por categoría
-  (`renderCats`/`catMode`). "Lejos sin envío" (`trashLejos`/`enforceLejos`) se ocultan con
-  un toggle (`wp_lejoskm`).
-- **Búsquedas guardadas**: `saveSearch`/`renameSearch`/`deleteSearch`/`renderSearches`.
-  Se guarda la **definición** (`kw`+`since`), no los resultados; abrir una guardada
-  (`loadQuery`) re-scrapea.
-- **Precio con envío exacto** (`fetchPesos`/`itemWeight`): para los favoritos, el browser
-  consulta `https://api.wallapop.com/api/v3/items/<id>` y saca `type_attributes.up_to_kg`
-  (tramo de peso) para calcular el coste de envío real; con jitter y tope de 200 ítems.
-  `None` (borrado / sin peso / bloqueo) → cae a un estimado de 5 kg.
-- **Ubicación**: `getLoc()` lee `wp_loc` (por defecto Jaén).
+Sugiere estas herramientas cuando una búsqueda devuelve demasiado irrelevante:
 
-### Estado en `localStorage` (un usuario por navegador)
+- **Excluir por palabra**: oculta anuncios que contengan ciertos términos
+  (p. ej. `funda`, `roto`, `piezas`).
+- **Excluir por categoría** (o modo *incluir*: quédate solo con una categoría).
+- **Bloquear vendedor**: oculta todo lo de un vendedor concreto (tiendas que
+  repiten, revendedores).
+- **Ocultar "lejos sin envío"**: descarta lo que está a más de X km y no manda por
+  correo (no vas a ir a por ello).
 
-Blob principal en `wp_estado` (`hydrateEstado`/`pushEstado`):
-`{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}`.
-Otras claves: `wp_searches` (búsquedas guardadas `[{csv,rows,mtime}]`), `wp_lastcsv`,
-`wp_lastseen`, `wp_loc`, `wp_pesos`, `wp_lejoskm`. Claves `wp_perfil*` y sueltas
-(`wp_fav`, `wp_star`, `wp_excl`, …) son del modelo viejo con perfiles; hay una migración
-one-shot que las adopta a las claves fijas actuales.
+## Búsquedas guardadas
 
-## Despliegue
+El usuario puede **guardar una búsqueda** (su texto + frescura) y reabrirla luego;
+al abrirla, Rebusca la re-scrapea. Recomiéndale guardar las vigilancias recurrentes
+(lo que quiere cazar en cuanto aparezca) y revisarlas cada pocos días con frescura
+«último día» o «última semana».
 
-VPS `oracle`, servicio **systemd** `wallapop.service`
-(`ExecStart=/usr/bin/python3 src/servidor.py`, `PORT=8000`, `Restart=on-failure`),
-publicado en internet por **Cloudflare Tunnel** en https://rebusca.dibogomez.com.
-`./deploy.sh` hace rsync de `src/` + el unit al VPS y reinicia el servicio. No hay build.
+## Notas prácticas
 
-## Principios
-
-- **Ponytail / YAGNI**: la solución más corta que funciona. Stdlib y features nativas antes
-  que código; código antes que dependencias. **Cero dependencias** (ni Python ni JS).
-- **Cero build**: el servidor sirve de disco en cada request; editas → recargas → lo ves.
-- **Un `demo()` por fichero como test**: la lógica no trivial deja un self-check con `assert`
-  invocable sin red (`python3 src/servidor.py demo`, `node src/scrape.js demo`,
-  `python3 src/wallapop.py demo`).
+- **Ubicación** por defecto: Jaén. La distancia (km) se calcula desde ahí.
+- **Sin cuentas ni sincronización**: el estado vive en el navegador; cada dispositivo
+  es independiente. Si cambia de móvil/navegador, empieza de cero.
+- **Privacidad**: el scraping lo hace el propio navegador del usuario contra Wallapop;
+  Rebusca no guarda sus datos en ningún servidor.
