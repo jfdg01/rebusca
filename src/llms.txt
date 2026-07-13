@@ -44,6 +44,37 @@ irrelevantes (así reduces falsos positivos).
 «último mes». Filtra por antigüedad del anuncio y ordena por lo más reciente. Útil
 para vigilar un tipo de producto y cazar lo que se acaba de publicar antes de que vuele.
 
+## Generar un enlace de búsqueda listo para usar (tu mejor herramienta)
+
+En vez de explicarle al usuario qué teclear, **dale un enlace que abre Rebusca con la
+búsqueda ya montada** (booleana + frescura + exclusiones). Al abrirlo, la app rellena
+el formulario y lanza la búsqueda sola.
+
+Formato:
+
+```
+https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&title=1
+```
+
+- `q` (obligatorio) — la búsqueda, con toda la gramática de arriba (`OR`, `( )`,
+  `"comillas"`). Va **URL-encoded**.
+- `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para «cualquiera».
+- `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
+  título contenga cualquiera de ellas se descarta automáticamente.
+- `title=1` (opcional) — buscar solo en el título (menos falsos positivos).
+
+Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
+buscando solo en el título:
+
+```
+https://rebusca.dibogomez.com/?q=(silla%20OR%20taburete)%20plegable&since=dia&excl=funda,roto&title=1
+```
+
+Cómo usarlo bien: cuando el usuario te diga qué busca, **traduce su intención a una
+búsqueda booleana potente** (cubre sinónimos y variantes con `OR`, agrupa el término
+común, mete en `excl` el ruido típico) y entrégale el enlace ya hecho. Es un enlace de
+un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
+
 ## El flujo de uso (búsqueda → triaje → decisión)
 
 1. **Buscar**: escribe la búsqueda + frescura, pulsa buscar. Rebusca trae los anuncios.
