@@ -10,72 +10,76 @@
 [![Deploy](https://img.shields.io/badge/deploy-VPS%20%2B%20Cloudflare%20Tunnel-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](#ejecutar-en-local-y-desplegar)
 
 > ### ▶ Pruébalo en vivo: **[rebusca.dibogomez.com](https://rebusca.dibogomez.com)**
+>
+> 🤖 ¿Eres un LLM? Léete **[/llms.txt](https://rebusca.dibogomez.com/llms.txt)** para entender la app entera.
 
 ---
 
 ## El problema
 
-En Wallapop los chollos vuelan: el mejor anuncio a buen precio se vende en minutos y el buscador no distingue lo que ya viste de lo nuevo. Rebusca hace el trabajo pesado por ti: reejecuta tus búsquedas, ordena por lo más reciente y **recuerda por persona qué has visto, descartado o marcado como favorito**, para que cada vez solo tengas que mirar lo que de verdad es nuevo.
+En Wallapop los chollos vuelan: el mejor anuncio a buen precio se vende en minutos y el buscador no distingue lo que ya viste de lo nuevo. Rebusca hace el trabajo pesado por ti: reejecuta tus búsquedas, ordena por lo más reciente y **recuerda qué has visto, descartado o marcado como favorito**, para que cada vez solo tengas que mirar lo que de verdad es nuevo.
 
 ## Cómo funciona
 
+**App 100% estática y pública: el dominio solo sirve HTML/CSS/JS, y el navegador de cada usuario scrapea Wallapop sobre su propia IP.** No hay backend de datos, ni cuentas, ni endpoints de escritura: el estado y las búsquedas viven en el `localStorage` del navegador.
+
 ```mermaid
 flowchart LR
-    A["🔎 Búsqueda<br/>(keywords + frescura)"] --> B["🖥️ servidor.py<br/>POST /scrape"]
-    B --> C["🕷️ wallapop.py<br/>API v3/search<br/>order_by=newest"]
-    C -->|"escribe página a página"| D[("📄 csv/&lt;perfil&gt;/&lt;query&gt;.csv")]
-    B --> E[("🗂️ estados/&lt;perfil&gt;.json<br/>seen · trash · fav · color")]
-    D --> F["📱 Frontend (app.js)<br/>GET /csvfile"]
-    E --> F
-    F -->|"resalta lo nuevo,<br/>oculta lo descartado"| G["✨ Solo los chollos<br/>que importan"]
-    F -->|"marcar visto / fav / descartar"| E
+    A["🔎 Búsqueda<br/>(keywords + frescura)"] --> B["🌐 app.js<br/>window.Rebusca.scrape()"]
+    B --> C["🕷️ scrape.js<br/>fetch a api.wallapop.com<br/>v3/search · order_by=newest"]
+    C -->|"texto CSV"| D["📱 app.js<br/>loadCSV() lo pinta"]
+    D -->|"marcar visto / fav / descartar"| E[("💾 localStorage<br/>seen · trash · fav · bloqueos")]
+    E --> D
+    D -->|"resalta lo nuevo,<br/>oculta lo descartado"| G["✨ Solo los chollos<br/>que importan"]
 ```
 
 **Decisiones técnicas y su porqué:**
 
-- **Scraping por la API interna `v3/search`** (`src/wallapop.py`), con `order_by=newest` + `time_filter` (`today`/`lastWeek`/`lastMonth`) para que sea el propio servidor de Wallapop quien filtre por antigüedad, en vez de paginar todo el catálogo.
-- **Escritura incremental**: el scraper vuelca cada página a disco al recibirla. Si crashea o le sueltan un `403` (DataDome), el CSV conserva lo ya escrito en lugar de perderse.
-- **Búsqueda booleana propia**: `corsair OR seasonic`, `(corsair OR seasonic) gold`, frases entre comillas… Wallapop no sabe hacer `OR`, así que cada rama se lanza como una búsqueda aparte y se unen los resultados.
-- **Estado por persona** (`estados/<perfil>.json`): cada perfil guarda su `{seen, trash, fav, color}`. Así varias personas comparten la instancia sin pisarse lo visto ni los favoritos, y cada búsqueda queda aislada en `csv/<perfil>/`. El nombre del perfil se sanea (anti path-traversal) antes de tocar el disco.
-- **Sin caché de resultados**: cada búsqueda re-scrapea. Parar una a la mitad (`POST /stop`) mata el scraper y carga el CSV parcial tal cual, sin bloquear la siguiente.
-- **Cero build en el front**: el HTML se sirve `no-cache` y `stamp_versions()` añade `?v=<mtime>` a `app.css`/`app.js` para invalidar la caché de Cloudflare en cada deploy sin tocar su configuración.
+- **El browser scrapea directo, no el servidor.** `api.wallapop.com` responde con `Access-Control-Allow-Origin: *` y permite el header `X-DeviceOS` en el preflight CORS, así que cada navegador llama a la API de Wallapop desde su propia IP. Ventaja: no hay una IP de servidor compartida que Wallapop pueda banear para todos, y el server se reduce a servir ficheros.
+- **Scraping por la API interna `v3/search`** (`src/scrape.js`), con `order_by=newest` + `time_filter` (`today`/`lastWeek`/`lastMonth`) para que sea el propio servidor de Wallapop quien filtre por antigüedad, en vez de paginar todo el catálogo.
+- **Búsqueda booleana propia**: `corsair OR seasonic`, `(corsair OR seasonic) gold`, frases entre comillas… Wallapop no sabe hacer `OR`, así que cada rama se lanza como una búsqueda aparte y se unen los resultados (dedup por `id`).
+- **Estado por navegador** (`localStorage`): un blob `wp_estado` con `{trash, fav, star, blockSel, excl, catExcl, catMode, alias}` + las búsquedas guardadas (`wp_searches`). Un usuario por navegador, sin perfiles ni cuentas.
+- **Tolerante a bloqueos**: si Wallapop suelta un `403` (DataDome), el scraper corta esa rama y devuelve lo ya recogido en lugar de fallar. `AbortController` permite parar a mitad y quedarte con el CSV parcial.
+- **Cero build en el front**: el HTML se sirve `no-cache` y `stamp_versions()` añade `?v=<mtime>` a `app.css`/`app.js`/`scrape.js` para invalidar la caché de Cloudflare en cada deploy sin tocar su configuración.
+- **`wallapop.py`**: el mismo scraper en Python (CLI de referencia local, byte-a-byte igual que `scrape.js`). No se usa en producción; se mantiene como referencia y para scrapear desde la terminal.
 
 ## Stack
 
 | Capa        | Tecnología                                                                 |
 |-------------|---------------------------------------------------------------------------|
 | Frontend    | HTML + CSS + JavaScript **vanilla** — sin frameworks, sin bundler, sin build |
-| Backend     | **Python de librería estándar pura** (`http.server`, `urllib`, `csv`, `json`…) — cero dependencias |
-| Scraper     | API interna de Wallapop (`api/v3/search`) desde `urllib`, sin librerías externas |
-| Persistencia| Ficheros planos: un CSV por búsqueda + un JSON de estado por perfil        |
+| Scraper     | **En el browser** (`scrape.js`), contra la API interna de Wallapop (`v3/search`) vía `fetch` |
+| Backend     | **Python de librería estándar pura** (`http.server`) — solo sirve estáticos, cero dependencias |
+| Persistencia| **`localStorage`** del navegador (estado + búsquedas); el servidor no guarda nada |
 | Despliegue  | VPS + **systemd** (`wallapop.service`) expuesto por **Cloudflare Tunnel**  |
 
 ## En números
 
-> ⚡ **0 dependencias** — solo la stdlib de Python; en el VPS no hace falta ni `pip` ni `uv`.
+> ⚡ **0 dependencias** — solo la stdlib de Python en el server; en el VPS no hace falta ni `pip` ni `uv`.
 > 📦 **Repo < 2 MB, sin `node_modules` ni artefactos de build.**
+> 🌐 **El scraping corre en tu navegador, sobre tu IP** — sin backend de datos que banear.
 > 🚀 **Carga en < 1 s** — HTML/CSS/JS estáticos servidos desde disco.
-> 🗂️ **Estado ilimitado por persona** — `{seen, trash, fav, color}` en un JSON por perfil.
-> 🔁 **Tolerante a bloqueos** — escritura página a página: un `403` no te deja sin datos.
+> 🔁 **Tolerante a bloqueos** — un `403` corta la rama pero conserva lo ya recogido.
 
 ## Ejecutar en local (y desplegar)
 
-Todo se ejecuta **desde la raíz del repo** (`src/servidor.py` asume `csv/` y `estados/` como hermanos de `src/`). Requiere solo **Python 3**.
+Todo se ejecuta **desde la raíz del repo**. El servidor solo sirve estáticos desde `src/`. Requiere solo **Python 3** (y **Node** si quieres correr los self-checks de JS).
 
 ```bash
-# 1) Levantar la app -> http://0.0.0.0:8000  (override con PORT)
+# 1) Levantar la app (sirve estáticos) -> http://0.0.0.0:8000  (override con PORT)
 python3 src/servidor.py
 
-# 2) Self-check del servidor, sin red
-python3 src/servidor.py demo
+# 2) Self-checks sin red
+python3 src/servidor.py demo          # servidor
+node src/scrape.js demo               # scraper del browser
+python3 src/wallapop.py demo          # scraper Python (referencia)
 
-# 3) Scrapear directo desde la CLI -> <query>.csv (Jaén por defecto)
+# 3) Scrapear desde la CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py "deshumidificador"
 python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
-python3 src/wallapop.py demo          # self-check del scraper, sin red
 ```
 
-**Despliegue a producción** (`deploy.sh`): rsync del código y `wallapop.service` al VPS, reinstala el unit de systemd y reinicia el servicio. Los datos del VPS (`estados/`, `csv/`) no se tocan.
+**Despliegue a producción** (`deploy.sh`): rsync del código y `wallapop.service` al VPS, reinstala el unit de systemd y reinicia el servicio.
 
 ```bash
 ./deploy.sh                           # rsync a oracle + systemctl restart wallapop
