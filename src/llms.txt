@@ -1,0 +1,178 @@
+# Rebusca
+
+> Cazador de chollos de Wallapop. Defines búsquedas (keywords + frescura), Rebusca
+> las reejecuta contra la API interna de Wallapop, ordena por lo más reciente/cercano
+> y recuerda qué has visto, descartado o marcado como favorito — para que solo mires
+> lo que de verdad es nuevo. Live: https://rebusca.dibogomez.com
+
+Este documento describe la app completa para lectores automáticos (LLMs): qué hace,
+cómo está construida y dónde vive cada pieza. Es autocontenido; para ir al detalle,
+las fuentes se sirven en las URLs indicadas.
+
+## Idea en una frase
+
+**App 100% estática y pública.** El dominio solo sirve HTML/CSS/JS. **Todo el trabajo
+ocurre en el navegador de cada usuario**: el scraping, el estado y las búsquedas. No hay
+base de datos, no hay cuentas, no hay endpoints de escritura. Un usuario por navegador;
+su estado vive en `localStorage`.
+
+Clave técnica que lo hace posible: `api.wallapop.com` responde con
+`Access-Control-Allow-Origin: *` y permite el header `X-DeviceOS` en el preflight CORS,
+así que **cada browser puede llamar a la API de Wallapop directamente desde su propia IP**.
+Ventaja: no hay una IP de servidor compartida que Wallapop pueda banear para todos.
+
+## Arquitectura y flujo de datos
+
+```
+Usuario define búsqueda (keywords + "desde": hora/día/semana/mes)
+        |
+        v
+  app.js llama window.Rebusca.scrape({keywords, since, titleOnly, lat, lon, onProgress, signal})
+        |                                    (scrape.js, en el browser)
+        v
+  fetch -> https://api.wallapop.com/api/v3/search   (order_by=newest + time_filter, paginado por cursor)
+        |
+        v
+  scrape() devuelve TEXTO CSV  ->  loadCSV(text, name) en app.js lo parsea y pinta
+        |
+        v
+  El usuario marca visto / favorito / descarta / bloquea vendedor / excluye
+        |
+        v
+  Estado se persiste en localStorage (un blob por navegador)
+```
+
+No hay `POST /scrape`, ni CSVs en disco, ni `estados/*.json` en el servidor. Todo eso
+(modelo antiguo con backend) fue reemplazado por scraping y estado en el cliente.
+
+## Piezas y dónde están
+
+Todo el código vive en `src/`. Ficheros servidos (fetch-ables desde el dominio):
+
+- `/`  o  `/index.html` — markup de la app (una sola página). El server le inyecta
+  `?v=<mtime>` a los estáticos versionados para bustear la caché de Cloudflare.
+- `/app.js` — toda la lógica del frontend (~82 KB, sin build, sin framework).
+- `/app.css` — estilos.
+- `/scrape.js` — el scraper que corre en el browser (`window.Rebusca`).
+- `/llms.txt` — este documento.
+
+No servido (referencia local, no forma parte de la app en producción):
+
+- `src/wallapop.py` — el MISMO scraper en Python. Reproduce `scrape.js` byte-a-byte
+  (mismo CSV). Se mantiene como CLI/referencia: `python3 src/wallapop.py "cosa" --since dia`.
+- `src/servidor.py` — el servidor (ver abajo).
+- `deploy.sh`, `wallapop.service` — despliegue.
+
+## El servidor (`src/servidor.py`)
+
+Python de **stdlib pura** (`http.server`), cero dependencias. **Solo sirve estáticos y no
+escribe nada.** Un único comportamiento no trivial:
+
+- `GET /` → sirve `index.html` pasándolo por `stamp_versions()`, que añade `?v=<mtime>` a
+  `app.css`/`app.js`/`scrape.js`. Como Cloudflare cachea el JS/CSS 4 h ignorando el origen,
+  cambiar esa URL en cada deploy hace que el móvil vea la versión nueva al recargar.
+- Cualquier otra ruta → fichero estático desde `src/` (con anti-traversal de la stdlib).
+- Todas las respuestas llevan `Cache-Control: no-cache` (el navegador revalida siempre;
+  304 si no cambió).
+
+Arranque: `python3 src/servidor.py` → `http://0.0.0.0:8000` (override con `PORT`).
+Self-check sin red: `python3 src/servidor.py demo`.
+
+## El scraper (`src/scrape.js` → `window.Rebusca`)
+
+API pública en el browser: `window.Rebusca.scrape(opts)` donde
+`opts = {keywords, since, titleOnly, lat, lon, onProgress, signal}` y devuelve una
+**promesa que resuelve a texto CSV**. También expone `branches`, `haversineKm`, `deemoji`,
+`titleMatches`, `row`, `toCSV`, `FIELDS`, `JAEN`, `demo`. Corre igual en Node
+(`node src/scrape.js demo` para el self-check).
+
+Endpoint: `GET https://api.wallapop.com/api/v3/search`. Detalles:
+
+- **Frescura** (`since`): `order_by=newest` + `time_filter`. Mapa
+  `hora/dia→today`, `semana→lastWeek`, `mes→lastMonth`. Como `newest` viene desc por fecha,
+  al pasar el umbral de antigüedad (`SINCE_DAYS`) la rama corta (el resto es más viejo).
+  Sin `since` no se ordena por fecha; al final se ordena por cercanía (km).
+- **Búsqueda booleana OR propia** (`branches`): Wallapop no sabe hacer `OR`, así que cada
+  rama se lanza como búsqueda aparte y se unen los resultados (dedup por `id`). Gramática:
+  el espacio es AND; `OR`/`|` separa ramas; `AND`/`&` es opcional; `()` agrupa; `"frase"`
+  entre comillas. Ej: `(corsair OR seasonic) gold` → `["corsair gold","seasonic gold"]`.
+  `OR` liga más flojo que el espacio. Tope de 32 ramas.
+- **Paginación por cursor** (`meta.next_page`), con jitter de 0.5–1 s entre páginas para no
+  parecer un bot.
+- **Reintentos**: backoff exponencial ante `429`/`5xx` (respeta `Retry-After`). Un `403` es
+  bloqueo (DataDome) → corta esa rama y **conserva lo ya recogido** (degrada, no rompe).
+- **Cancelación**: `AbortController` (`opts.signal`); el botón de parar aborta y se devuelve
+  el CSV con lo recolectado hasta el momento.
+- **Filtros de cliente**: `titleOnly` (todas las palabras del término han de estar en el
+  título) y el umbral de días de `since`.
+- **Limpieza**: `deemoji()` quita emojis/pictogramas de título y descripción (conserva
+  acentos, ñ, €).
+
+## Modelo de datos (CSV)
+
+Cada búsqueda produce un CSV con estas columnas (`FIELDS`), una fila por anuncio:
+
+```
+id, titulo, precio, categoria, ciudad, cp, km, dias, reservado, envio, url, vendedor, imagen, descripcion
+```
+
+- `id` — id inmutable de Wallapop (sobrevive a cambios de título/precio/desc). Es la clave
+  de todo el estado.
+- `km` — distancia haversine al origen (por defecto Jaén: `37.7796, -3.7849`).
+- `dias` — antigüedad del anuncio en días (desde `created_at`). Señal de "lo bueno ya voló".
+- `reservado`, `envio` — banderas (`True`/`False`, formato Python `csv`).
+- `vendedor` — `user_id` opaco y estable; sirve de clave para bloquear vendedores.
+- `imagen` — URL del thumbnail (W320).
+- El serializador replica `csv.QUOTE_MINIMAL` de Python (comillas, comas, saltos; `\r\n`),
+  para que un CSV del browser y uno de `wallapop.py` sean idénticos.
+
+## El frontend (`src/app.js`)
+
+Una sola página vanilla JS. Flujo y responsabilidades (nombres de funciones reales):
+
+- **Scrape + carga**: `runScrape` invoca `window.Rebusca.scrape(...)` (con `AbortController`
+  para el botón parar y `onProgress` para el contador en vivo) → `loadCSV`/`parseCSV`
+  parsean el texto y `render` pinta.
+- **Dos vistas de resultados**: baraja de swipe (tipo Tinder: `openSwipe`, `buildCard`,
+  `fling`, `decide`, `nextCard`, `rebuildDeck`) y lista (`sortList`, `applyListSort`,
+  `filteredRows`). Ordenación por columnas.
+- **Estado por anuncio**: visto (`stampSeen`/`wp_lastseen`), favorito (`favText`),
+  destacado/star (`unstar`), descartar (`discard`/`restore`/`bulkRestore`).
+- **Bloqueo de vendedores**: `blockSeller`/`unblockFor`/`enforceBlocks` — oculta todo lo de
+  un `vendedor`.
+- **Exclusiones**: por palabra (`addExcl`/`delExcl`/`renderExcl`) y por categoría
+  (`renderCats`/`catMode`). "Lejos sin envío" (`trashLejos`/`enforceLejos`) se ocultan con
+  un toggle (`wp_lejoskm`).
+- **Búsquedas guardadas**: `saveSearch`/`renameSearch`/`deleteSearch`/`renderSearches`.
+  Se guarda la **definición** (`kw`+`since`), no los resultados; abrir una guardada
+  (`loadQuery`) re-scrapea.
+- **Precio con envío exacto** (`fetchPesos`/`itemWeight`): para los favoritos, el browser
+  consulta `https://api.wallapop.com/api/v3/items/<id>` y saca `type_attributes.up_to_kg`
+  (tramo de peso) para calcular el coste de envío real; con jitter y tope de 200 ítems.
+  `None` (borrado / sin peso / bloqueo) → cae a un estimado de 5 kg.
+- **Ubicación**: `getLoc()` lee `wp_loc` (por defecto Jaén).
+
+### Estado en `localStorage` (un usuario por navegador)
+
+Blob principal en `wp_estado` (`hydrateEstado`/`pushEstado`):
+`{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}`.
+Otras claves: `wp_searches` (búsquedas guardadas `[{csv,rows,mtime}]`), `wp_lastcsv`,
+`wp_lastseen`, `wp_loc`, `wp_pesos`, `wp_lejoskm`. Claves `wp_perfil*` y sueltas
+(`wp_fav`, `wp_star`, `wp_excl`, …) son del modelo viejo con perfiles; hay una migración
+one-shot que las adopta a las claves fijas actuales.
+
+## Despliegue
+
+VPS `oracle`, servicio **systemd** `wallapop.service`
+(`ExecStart=/usr/bin/python3 src/servidor.py`, `PORT=8000`, `Restart=on-failure`),
+publicado en internet por **Cloudflare Tunnel** en https://rebusca.dibogomez.com.
+`./deploy.sh` hace rsync de `src/` + el unit al VPS y reinicia el servicio. No hay build.
+
+## Principios
+
+- **Ponytail / YAGNI**: la solución más corta que funciona. Stdlib y features nativas antes
+  que código; código antes que dependencias. **Cero dependencias** (ni Python ni JS).
+- **Cero build**: el servidor sirve de disco en cada request; editas → recargas → lo ves.
+- **Un `demo()` por fichero como test**: la lógica no trivial deja un self-check con `assert`
+  invocable sin red (`python3 src/servidor.py demo`, `node src/scrape.js demo`,
+  `python3 src/wallapop.py demo`).
