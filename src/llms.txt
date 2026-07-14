@@ -75,6 +75,38 @@ búsqueda booleana potente** (cubre sinónimos y variantes con `OR`, agrupa el t
 común, mete en `excl` el ruido típico) y entrégale el enlace ya hecho. Es un enlace de
 un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
 
+## Cómo responder cuando te pide ayuda para buscar
+
+Este es el caso más común (p. ej. «dame instrucciones para buscar un buen modelo de
+segunda mano»). No le sueltes teoría de la gramática: **entrégale el enlace ya montado**.
+Estructura tu respuesta así, corta y accionable:
+
+1. **El enlace, primero.** Un enlace `https://rebusca.dibogomez.com/?q=…` listo para pulsar,
+   con tu mejor traducción de lo que busca (booleana con `OR` para sinónimos/modelos,
+   `since` si tiene sentido vigilar novedades, `excl` con el ruido típico, `title=1` si la
+   palabra ensucia en descripciones). Recuerda **URL-encodear** la `q`.
+2. **Una línea de por qué**: qué cubre el `OR`, qué excluye y por qué. Nada más.
+3. **1–2 variantes** si aportan: una más amplia (sin `title`/`excl`) y otra más fina, o con
+   otra frescura. Cada una como enlace pulsable.
+4. **El siguiente paso en una frase**: pulsa el enlace, tría en el mazo (derecha = interesa,
+   izquierda = fuera) y cuando tengas tus interesantes usa «copiar para IA» y me los pegas
+   para compararlos.
+
+Antes de responder, si no sabes marcas/modelos buenos de eso, **piénsalos tú** (los modelos
+de referencia, sinónimos y variantes de nombre) y mételos en el `OR`: ahí está el valor que
+el usuario no puede sacar del buscador de Wallapop. Si te falta un dato clave para afinar
+(presupuesto, tamaño, uso), pregúntalo en una línea, pero **da igualmente un enlace por
+defecto** para que no se quede con las manos vacías.
+
+Ejemplo de respuesta a «un buen sofá de 3 plazas barato»:
+
+```
+https://rebusca.dibogomez.com/?q=sofa%20OR%20sofá%203%20plazas&since=semana&excl=funda,piezas&title=1
+```
+Cubre *sofa/sofá*, filtra 3 plazas, esconde fundas y despieces, última semana.
+Más amplio (sin filtro de título): …/?q=sofa%20OR%20sofá%203%20plazas
+Pulsa, tría en el mazo y pégame tus interesantes para compararlos.
+
 ## El flujo de uso (búsqueda → triaje → decisión)
 
 1. **Buscar**: escribe la búsqueda + frescura, pulsa buscar. Rebusca trae los anuncios.
