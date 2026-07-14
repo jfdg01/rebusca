@@ -1229,7 +1229,13 @@ let curCsv = null; // csv de la query seleccionada (el input solo muestra el kw)
 let curCsvScrape = 0; // epoch ms del scrape (Last-Modified del CSV): base para la edad real de los anuncios
 const lastCsvKey = () => "wp_lastcsv"; // último dataset cargado
 function loadQuery(csv) {
-  // en estático no hay CSV en disco: abrir una búsqueda = re-scrapear (kw+since del nombre)
+  const c = getCsvCache(csv);
+  if (c) { // ya scrapeada antes: pinta lo cacheado, no re-scrapea (usa "Repetir" para refrescar)
+    curCsvScrape = c.ts;
+    loadCSV(c.text, csv);
+    return;
+  }
+  // sin cache: primera vez que se abre (o cache podado) → scrape (kw+since del nombre)
   const { kw, since } = queryParts(csv);
   runScrape(kw, since, false).catch((e) => {
     if (e.name !== "AbortError") snack("No se pudo buscar: " + e.message, null);
@@ -1389,8 +1395,39 @@ function saveSearch(csv, rows) {
   list.push({ csv, rows, mtime: Math.floor(Date.now() / 1000) });
   writeSearches(list);
 }
-const removeSearch = (csv) =>
+const removeSearch = (csv) => {
   writeSearches(loadSearches().filter((s) => s.csv !== csv));
+  dropCsvCache(csv);
+};
+
+// cache del CSV scrapeado por búsqueda: seleccionar una búsqueda pinta esto (sin re-scrapear);
+// "Repetir"/Buscar sí re-scrapea y refresca el cache. {text, ts(ms scrape)} por csv.
+const csvCacheKey = "wp_csv";
+const readCsvCache = () => {
+  try { return JSON.parse(localStorage.getItem(csvCacheKey) || "{}"); } catch { return {}; }
+};
+const getCsvCache = (csv) => readCsvCache()[csv] || null;
+function cacheCsv(csv, text, ts) {
+  const m = readCsvCache();
+  m[csv] = { text, ts };
+  const saved = new Set(loadSearches().map((s) => s.csv)); // poda: solo búsquedas vivas...
+  for (const k in m) if (!saved.has(k) && k !== csv) delete m[k];
+  for (const k of Object.keys(m).sort((a, b) => m[b].ts - m[a].ts).slice(12)) // ...y las 12 más recientes
+    delete m[k];
+  // persiste; si peta por quota, desaloja la más vieja (nunca la actual) y reintenta, sin tirar el cache entero
+  while (true) {
+    try { localStorage.setItem(csvCacheKey, JSON.stringify(m)); return; }
+    catch {
+      const old = Object.keys(m).filter((k) => k !== csv).sort((a, b) => m[a].ts - m[b].ts)[0];
+      if (!old) return; // solo queda la actual y aun así no cabe: se queda sin cachear (CSV demasiado grande)
+      delete m[old];
+    }
+  }
+}
+function dropCsvCache(csv) {
+  const m = readCsvCache();
+  if (csv in m) { delete m[csv]; localStorage.setItem(csvCacheKey, JSON.stringify(m)); }
+}
 
 // búsquedas guardadas → items del combobox (kw + ventana temporal, filtrable al escribir)
 function refreshCsvs() {
@@ -1481,6 +1518,7 @@ async function runScrape(kw, since, titleOnly) {
     });
     curCsvScrape = Date.now(); // CSV recién generado: base para la edad real de cada anuncio
     loadCSV(text, csv);
+    cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
   } finally {
