@@ -118,6 +118,7 @@
     .brand h1, .brand .logo { justify-self: auto; }
   }
   /* stepper de tutorial: círculos numerados unidos por una línea + bocadillo por paso */
+  .tut[hidden] { display: none; } /* tutorial oculto por ahora; se rehará bien en el futuro */
   .tut { position: relative; display: flex; align-items: center; justify-content: space-between;
     list-style: none; margin: .9rem .2rem .3rem; padding: 0; }
   .tut li { position: relative; flex: 1 1 0; display: flex; justify-content: center; }

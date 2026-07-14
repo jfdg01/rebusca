@@ -578,7 +578,7 @@ function render() {
   // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
   document.querySelector("header").classList.toggle("pinned", listView); // fija la barra solo en modo lista (ver CSS)
   $(".brand").hidden = listView;
-  $("#tut").hidden = listView; // el stepper solo vive en la pantalla principal
+  $("#tut").hidden = true; // ponytail: tutorial oculto por ahora (se rehará bien en el futuro)
   if (listView) {
     tut.querySelector(".on")?.classList.remove("on");
     tutMsg.hidden = true;
@@ -1639,7 +1639,7 @@ function afterCsvChange(oldCsv, newCsv) {
       sortKeys = [];
       view = "";
       thead.innerHTML = ""; // sin query activa: nada de stats/rebuscar stale
-      $("#empty").textContent = "Bienvenid@ a Rebusca, prueba a tocar el primer número";
+      $("#empty").textContent = "Bienvenid@ a Rebusca — escribe una búsqueda y pulsa Buscar";
       render();
     }
   }
@@ -1705,7 +1705,7 @@ function fromURL() {
 // arranque: sin perfiles, un usuario por navegador. Hidrata estado y restaura la última búsqueda.
 // queueMicrotask difiere el boot a tras evaluar el módulo -> render() no toca consts en TDZ (p.ej. `col`).
 queueMicrotask(() => {
-  $("#empty").textContent = "Bienvenid@ a Rebusca, prueba a tocar el primer número";
+  $("#empty").textContent = "Bienvenid@ a Rebusca — escribe una búsqueda y pulsa Buscar";
   hydrateEstado();
   render();
   if (!fromURL()) restoreLastCsv(); // ?q=… dispara su búsqueda; si no, la última vista
