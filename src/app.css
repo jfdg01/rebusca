@@ -284,7 +284,7 @@
   .list-head-bar .note .help-pop { position: absolute; left: 0; top: 2rem; right: auto;
     width: min(19rem, 82vw); z-index: 20; }
   /* "Copiar para IA" empujado al extremo derecho */
-  .list-head-bar #exportFav { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
+  .list-head-bar #exportInterested { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   /* pills de orden: una sola fila, segmentadas a ancho equitativo (caben las 4 en 320px) */
@@ -292,15 +292,15 @@
   .list-head #listSort button { flex: 1 1 0; min-width: 0; padding: .4rem .25rem; justify-content: center; text-align: center; }
 
   /* barra de acciones en masa (solo Rechazados): seleccionar todo · restaurar N · vaciar */
-  .trash-bulk { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-  .trash-bulk .tb-all { display: flex; align-items: center; gap: .45rem; cursor: pointer;
+  .rejected-bulk { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .rejected-bulk .tb-all { display: flex; align-items: center; gap: .45rem; cursor: pointer;
     font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
-  .trash-bulk .tb-all input { width: 1.2rem; height: 1.2rem; accent-color: var(--pine); flex: 0 0 auto; }
-  .trash-bulk .btn { margin: 0; padding: .4rem .9rem; }
-  .trash-bulk .tb-empty { margin-left: auto; background: none; border: none; box-shadow: none;
+  .rejected-bulk .tb-all input { width: 1.2rem; height: 1.2rem; accent-color: var(--pine); flex: 0 0 auto; }
+  .rejected-bulk .btn { margin: 0; padding: .4rem .9rem; }
+  .rejected-bulk .tb-empty { margin-left: auto; background: none; border: none; box-shadow: none;
     color: #b03024; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: .3rem;
     font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
-  .trash-bulk .tb-empty:hover { background: none; box-shadow: none; color: #8f251b; }
+  .rejected-bulk .tb-empty:hover { background: none; box-shadow: none; color: #8f251b; }
   /* checkbox de selección por fila en la papelera: primero en la fila de acciones */
   .tb-check { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; accent-color: var(--pine); align-self: center; margin: 0; }
 
@@ -375,10 +375,10 @@
   /* envío + distancia: metadato en una línea bajo el título */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; }
   .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
-  /* cuándo se clasificó: eyebrow en versalitas sobre el título (fav/star en teal, papelera en gris) */
+  /* cuándo se clasificó: eyebrow en versalitas sobre el título (interested/favorite en teal, papelera en gris) */
   .li-when { display: block; margin: 0 0 .28rem; font: 600 10px var(--mono);
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
-  .li-when.fav { color: var(--pine-ink); }
+  .li-when.interested { color: var(--pine-ink); }
   .li-desc { font: 12.5px/1.5 var(--sans); color: var(--ink-soft); margin-top: .55rem; overflow-wrap: anywhere;
     white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 
@@ -438,12 +438,12 @@
   .help-pop code { font: 11px var(--mono); background: var(--surface-2);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
 
-  #swipeFab, #copyFav { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
+  #swipeFab, #copyInterested { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover, #copyFav:hover { background: #10A896; border-color: #10A896; box-shadow: 0 4px 13px rgba(16,168,150,.44); }
-  #swipeFab:active, #copyFav:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
-  #copyFav { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
+  #swipeFab:hover, #copyInterested:hover { background: #10A896; border-color: #10A896; box-shadow: 0 4px 13px rgba(16,168,150,.44); }
+  #swipeFab:active, #copyInterested:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
+  #copyInterested { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
@@ -559,3 +559,18 @@
   .sc-btns .danger { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 1px 3px rgba(176,48,36,.35), inset 0 1px 0 rgba(255,255,255,.2); }
   .sc-btns .danger:hover { background: #c0392b; border-color: #c0392b; }
+
+/* ── PDF dossier de favoritos: oculto en pantalla, único visible al imprimir ── */
+#dossier { display: none; }
+@media print {
+  body > *:not(#dossier) { display: none !important; }
+  #dossier { display: block; color: #000; font: 13px/1.45 system-ui, sans-serif; }
+  .dsr-intro { white-space: pre-wrap; font-size: 11px; margin: 0 0 14px; }
+  .dsr-card { display: flex; gap: 12px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid #ccc; page-break-inside: avoid; break-inside: avoid; }
+  .dsr-card img { width: 150px; height: 150px; object-fit: cover; flex: none; }
+  .dsr-t { font-weight: 700; margin-bottom: 3px; }
+  .dsr-p { color: #333; margin-bottom: 3px; }
+  .dsr-d { font-size: 12px; }
+  .dsr-u { font-size: 10px; color: #666; word-break: break-all; margin-top: 3px; }
+}

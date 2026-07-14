@@ -13,7 +13,7 @@
         <details class="opts" id="perfilOpts">
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
-                <button id="copyFavOpt" class="chip">
+                <button id="copyInterestedOpt" class="chip">
                     Copiar interesantes para IA
                 </button>
                 <div class="opt-group">
@@ -164,12 +164,20 @@
                 </div>
             </details>
             <button
-                id="exportFav"
+                id="exportInterested"
                 class="btn"
                 title="copiar la lista al portapapeles"
                 hidden
             >
                 Copiar para IA
+            </button>
+            <button
+                id="dossierFav"
+                class="btn"
+                title="PDF con fotos + fichas para arrastrar a una IA"
+                hidden
+            >
+                PDF para IA
             </button>
         </div>
         <input
@@ -185,13 +193,13 @@
             <button data-sort="dias">Fecha</button>
             <button data-sort="km">Distancia</button>
         </div>
-        <div class="trash-bulk" id="trashBulk" hidden>
+        <div class="rejected-bulk" id="rejectedBulk" hidden>
             <label class="tb-all"
-                ><input type="checkbox" id="trashSelAll" /> Seleccionar
+                ><input type="checkbox" id="rejectedSelAll" /> Seleccionar
                 todo</label
             >
-            <button id="trashRestoreSel" class="btn" hidden>Restaurar</button>
-            <button id="trashEmpty" class="tb-empty">Vaciar papelera</button>
+            <button id="rejectedRestoreSel" class="btn" hidden>Restaurar</button>
+            <button id="rejectedEmpty" class="tb-empty">Vaciar papelera</button>
         </div>
     </div>
 </header>
@@ -215,7 +223,7 @@
 </div>
 
 <button id="swipeFab" hidden>REBUSCAR</button>
-<button id="copyFav" hidden>Copiar interesantes para IA</button>
+<button id="copyInterested" hidden>Copiar interesantes para IA</button>
 
 
 <div class="searches" id="searchesView" hidden>
@@ -298,6 +306,9 @@
     <span id="snackmsg"></span>
     <button id="undo">Deshacer</button>
 </div>
+
+<!-- dossier: fichas+fotos de favoritos, solo visible al imprimir (window.print -> Guardar como PDF) -->
+<div id="dossier" aria-hidden="true"></div>
 
 <script src="scrape.js"></script>
 <script src="app.js"></script>

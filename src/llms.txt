@@ -62,6 +62,9 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
 - `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
   título contenga cualquiera de ellas se descarta automáticamente.
 - `title=1` (opcional) — buscar solo en el título (menos falsos positivos).
+- `fav` (opcional) — ids de Wallapop separados por comas. Al abrir el enlace, esos anuncios se
+  marcan como **favoritos** (se sacan de interesados/rechazados). Es tu forma de **ascender de un
+  toque** los anuncios que eliges tras comparar la lista del usuario (ver la sección de abajo).
 
 Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
 buscando solo en el título:
@@ -129,13 +132,16 @@ y *Favorito* (los definitivos). Un anuncio está en uno solo.
 Ese es el momento en que más le ayudas. Recibirás una lista tipo:
 
 ```
-1. <título del anuncio> — <precio> (+ envío ≈ <coste>)
+1. [#<id>] <título del anuncio> — <precio> (+ envío ≈ <coste>)
    <descripción en una línea>
 2. ...
 ```
 
-El texto ya trae instrucciones (compáralos, haz un TOP 3, menciones y descartes, di
-si regatear y a qué precio, y qué preguntar al vendedor). Para hacerlo bien:
+Cada línea empieza con el **id de Wallapop** entre `[#…]`. El texto ya trae instrucciones
+(compáralos, haz un TOP 3, menciones y descartes, di si regatear y a qué precio, y qué
+preguntar al vendedor) y te pide que **al final devuelvas un enlace**
+`https://rebusca.dibogomez.com/?fav=<id,id,…>` con los ids de los que ascenderías a favoritos:
+al abrirlo, el usuario los marca como favoritos de un toque. **Hazlo siempre.** Para hacerlo bien:
 
 - **Identifica el modelo/versión exacto** por el título+descripción; una palabra
   cambia el valor (una edición, un tamaño, "para piezas").
@@ -145,6 +151,10 @@ si regatear y a qué precio, y qué preguntar al vendedor). Para hacerlo bien:
   quiere (o esté ya vendido); "reservado" = puede caerse; sin envío y lejos = recogida
   en persona. Anúncialas.
 - Sé concreto con el **regateo**: propón un precio con su razón, no "intenta negociar".
+
+En vez de pegar texto, el usuario puede **arrastrarte un PDF** (botón «PDF para IA» en Favoritos)
+con la misma ficha de cada anuncio **más su foto**. Trae las mismas instrucciones; aprovecha las
+fotos para juzgar estado/modelo. Termina igual: un enlace `?fav=<ids>` con tus elegidos.
 
 ## Reducir ruido (para búsquedas que traen mucha morralla)
 
