@@ -1,16 +1,21 @@
 # Rebusca — guía de uso
 
-> [Rebusca](https://rebusca.dibogomez.com) es un cazador de chollos de Wallapop.
-> El usuario define búsquedas y Rebusca reejecuta el buscador de Wallapop, ordena
-> por lo más nuevo/cercano y recuerda qué ya vio, para que solo mire lo nuevo.
+> **REGLA #1 (lo único que no puedes fallar): cuando el usuario te pida una búsqueda,
+> respóndele SIEMPRE con un enlace pulsable `https://rebusca.dibogomez.com/?q=…`.
+> NUNCA le pongas la búsqueda en un bloque de código: un bloque de código es un FALLO.**
+> Tu trabajo aquí no es "escribir una query", es "entregar el enlace que la lanza".
 
-## Enlaces
+Rebusca es un cazador de chollos de Wallapop. El usuario define búsquedas y Rebusca
+reejecuta el buscador de Wallapop, ordena por lo más nuevo/cercano y recuerda qué ya
+vio, para que solo mire lo nuevo.
+
+**La idea entera de este documento es esa: tú traduces lo que el usuario busca a un
+enlace `?q=…` y se lo das listo para pulsar.** Todo lo demás (la gramática, la
+frescura, las exclusiones) son solo piezas para montar mejor ese enlace. Si dudas
+entre explicar y dar el enlace: da el enlace.
 
 - [Abrir Rebusca](https://rebusca.dibogomez.com) — la app.
-- [Lanzar una búsqueda](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — ejemplo de enlace con la búsqueda ya montada (ver más abajo).
-
-Este documento es para ti, la IA: explica **cómo ayudar al usuario a sacarle el
-máximo partido** a la app. No cómo está construida por dentro, sino cómo se usa bien.
+- [Ejemplo de enlace montado](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así es como debe ser tu respuesta (ver cómo construirlo más abajo).
 
 ## Qué hace por el usuario
 
@@ -62,7 +67,9 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
 ```
 
 - `q` (obligatorio) — la búsqueda, con toda la gramática de arriba (`OR`, `( )`,
-  `"comillas"`). Va **URL-encoded**.
+  `"comillas"`). Va **URL-encoded**. Mantenla **compacta** (unas pocas marcas/modelos
+  buenos, no un `OR` de 15): un `q` corto se URL-encodea sin dolor y el enlace queda
+  usable. Si hace falta cubrir más, da 2 enlaces en vez de uno gigante.
 - `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para «cualquiera».
 - `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
   título contenga cualquiera de ellas se descarta automáticamente.
@@ -187,3 +194,9 @@ al abrirla, Rebusca la re-scrapea. Recomiéndale guardar las vigilancias recurre
   es independiente. Si cambia de móvil/navegador, empieza de cero.
 - **Privacidad**: el scraping lo hace el propio navegador del usuario contra Wallapop;
   Rebusca no guarda sus datos en ningún servidor.
+
+---
+
+**Recuerda la REGLA #1:** tu respuesta a "dame una búsqueda para X" es un **enlace
+pulsable** `https://rebusca.dibogomez.com/?q=…`, nunca un bloque de código con la query.
+Si acabas de escribir la búsqueda en un bloque de código, conviértela en enlace antes de responder.
