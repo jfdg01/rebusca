@@ -33,7 +33,7 @@ node src/scrape.js demo                       # self-check del scraper del brows
 node src/test_app.js                          # smoke test de app.js (evalúa el módulo + boot, sin navegador)
 python3 src/wallapop.py "deshumidificador"    # scrape CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py demo                  # self-check del scraper Python (sin red)
-./deploy.sh                                   # rsync a oracle + systemctl restart wallapop
+./deploy.sh                                   # rsync a oracle + systemctl restart rebusca
 ```
 
 > **Servidor de pruebas: SIEMPRE el puerto 8123.** Para verificar cambios, comprueba
