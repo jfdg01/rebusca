@@ -1,8 +1,13 @@
 # Rebusca — guía de uso
 
-> Rebusca (https://rebusca.dibogomez.com) es un cazador de chollos de Wallapop.
+> [Rebusca](https://rebusca.dibogomez.com) es un cazador de chollos de Wallapop.
 > El usuario define búsquedas y Rebusca reejecuta el buscador de Wallapop, ordena
 > por lo más nuevo/cercano y recuerda qué ya vio, para que solo mire lo nuevo.
+
+## Enlaces
+
+- [Abrir Rebusca](https://rebusca.dibogomez.com) — la app.
+- [Lanzar una búsqueda](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — ejemplo de enlace con la búsqueda ya montada (ver más abajo).
 
 Este documento es para ti, la IA: explica **cómo ayudar al usuario a sacarle el
 máximo partido** a la app. No cómo está construida por dentro, sino cómo se usa bien.
