@@ -19,7 +19,15 @@
   "operatingSystem": "Web",
   "browserRequirements": "Requires JavaScript",
   "inLanguage": "es",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "https://rebusca.dibogomez.com/?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
 }
 </script>
 <link rel="icon" href="wallapop-logo.webp" type="image/webp" />
