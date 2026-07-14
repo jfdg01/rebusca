@@ -1556,6 +1556,7 @@ let allSearches = [],
 function openManager() {
   searchesView.hidden = false;
   document.body.style.overflow = "hidden";
+  enterOverlay($("#searchesX"));
   searchesQ = "";
   $("#searchesFilter").value = "";
   renderSearches();
@@ -1564,6 +1565,7 @@ function openManager() {
 function closeManager() {
   searchesView.hidden = true;
   document.body.style.overflow = "";
+  exitOverlay();
   reconcileBack();
 }
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s); // "última semana" → "Última semana"
@@ -1763,6 +1765,17 @@ const col = (r, name) => {
   return i >= 0 ? r[i] : "";
 };
 
+// a11y overlays modales: al abrir, el fondo (header + main) se marca `inert` — sale del árbol de
+// accesibilidad y del tab, así el foco queda atrapado en el overlay; y se lleva el foco dentro.
+const overlayBg = () => [document.querySelector("header"), document.querySelector("main")];
+function enterOverlay(focusEl) {
+  overlayBg().forEach((el) => el && (el.inert = true));
+  focusEl?.focus();
+}
+function exitOverlay() {
+  overlayBg().forEach((el) => el && (el.inert = false));
+}
+
 function openSwipe() {
   deck = filteredRows();
   di = 0;
@@ -1771,6 +1784,7 @@ function openSwipe() {
     return snack("No hay nada que revisar con estos filtros.", null);
   swipeView.hidden = false;
   document.body.style.overflow = "hidden";
+  enterOverlay($("#swipeX")); // a11y: oculta el fondo a AT + foco al overlay
   renderSwExcl();
   nextCard();
   reconcileBack();
@@ -1792,6 +1806,7 @@ function closeSwipe() {
   swipeView.hidden = true;
   $("#swipeMenu").hidden = true;
   document.body.style.overflow = "";
+  exitOverlay();
   render();
 }
 
@@ -2316,4 +2331,20 @@ window.addEventListener("popstate", () => {
   const wasArmed = rbArmed;
   rbArmed = false;
   if (wasArmed && closeTop()) reconcileBack(); // cierra una capa; re-arma si aún queda otra
+});
+
+// a11y: los <span class="link"> hacen de botón (ver rechazados, limpiar, parar búsqueda…).
+// Dales rol y foco de teclado. ponytail: MutationObserver global; el DOM es diminuto, el
+// coste por mutación es despreciable. Sube a armLinks() puntual si algún día pesa.
+new MutationObserver(() => {
+  for (const el of document.querySelectorAll(".link:not([role])")) {
+    el.setAttribute("role", "button");
+    el.tabIndex = 0;
+  }
+}).observe(document.body, { childList: true, subtree: true });
+document.addEventListener("keydown", (e) => {
+  if (e.target.classList?.contains("link") && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    e.target.click();
+  }
 });

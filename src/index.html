@@ -8,6 +8,20 @@
 />
 <title>A rebuscar</title>
 <meta name="description" content="Rebusca: cazador de chollos de Wallapop. Búsquedas con OR, ordena por lo más nuevo y cercano, tría tipo Tinder y recuerda qué ya viste para que solo mires lo nuevo." />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Rebusca",
+  "url": "https://rebusca.dibogomez.com",
+  "description": "Cazador de chollos de Wallapop: búsquedas con OR, ordena por lo más nuevo y cercano, triaje tipo Tinder y recuerda qué ya viste.",
+  "applicationCategory": "ShoppingApplication",
+  "operatingSystem": "Web",
+  "browserRequirements": "Requires JavaScript",
+  "inLanguage": "es",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+}
+</script>
 <link rel="icon" href="wallapop-logo.webp" type="image/webp" />
 <link rel="alternate" type="text/plain" title="Guía para IA (llms.txt)" href="/llms.txt" />
 <link rel="stylesheet" href="app.css" />
@@ -209,6 +223,7 @@
     </div>
 </header>
 
+<main>
 <table hidden>
     <thead></thead>
     <tbody></tbody>
@@ -226,12 +241,13 @@
         <span class="link" id="stopScrape">parar búsqueda</span>
     </div>
 </div>
+</main>
 
 <button id="swipeFab" hidden>REBUSCAR</button>
 <button id="copyInterested" hidden>Copiar interesantes para IA</button>
 
 
-<div class="searches" id="searchesView" hidden>
+<div class="searches" id="searchesView" role="dialog" aria-modal="true" aria-label="Tus búsquedas" hidden>
     <div class="searches-bar">
         <button
             class="swipe-x"
@@ -251,7 +267,7 @@
     <div class="searches-list" id="searchesList"></div>
 </div>
 
-<div class="swipe" id="swipeView" hidden>
+<div class="swipe" id="swipeView" role="dialog" aria-modal="true" aria-label="Rebuscar en el mazo" hidden>
     <div class="swipe-top">
         <button class="swipe-tool" id="swipeX" title="cerrar">
             <i data-icon="x"></i><span>Cerrar</span>

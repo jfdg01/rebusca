@@ -8,8 +8,12 @@
     --ink: #1B211E;
     --ink-soft: #5A625D;
     --line: #C9CDC2;
-    --pine: #13C1AC;       /* acento de marca = teal del logo de Wallapop */
-    --pine-ink: #0A736A;   /* teal oscuro: texto/enlaces legibles sobre el papel claro */
+    --pine: #0B8175;       /* acento de marca: teal contrastado (blanco encima pasa AA 4.76:1) */
+    --pine-hover: #096B61; /* teal aún más oscuro para hover de botones sólidos */
+    --pine-ink: #086B61;   /* teal oscuro: texto/enlaces legibles sobre el papel claro (>=4.9:1) */
+    --amber: #9A6A12;      /* favorito / avisos ámbar: blanco encima pasa AA 4.73:1 */
+    --amber-ink: #8A5E0F;  /* ámbar como enlace/hover sobre superficies claras */
+    --ship-no: #9C4E00;    /* "sin envío": naranja oscuro legible sobre paper/surface */
     --pine-soft: #D3F1EC;  /* tinte teal para fondos suaves / track del spinner */
     /* gutter del body; las bandas edge-to-edge lo anulan con margen negativo.
        max(gutter, (100vw-600)/2): <600px fluido con gutter normal; >600px el cuerpo
@@ -17,6 +21,7 @@
     --bleed: max(clamp(.75rem, 2vw, 1.5rem), (100vw - 600px) / 2);
   }
   * { box-sizing: border-box; }
+  main { display: contents; }   /* landmark a11y sin caja: el full-bleed sigue midiendo contra el body */
   [hidden] { display: none !important; }   /* gana a los display:flex de chip/tiles/creator */
   body {
     font: 12px/1.45 var(--sans); color: var(--ink); background: var(--paper);
@@ -54,7 +59,7 @@
   .panel-label { display: flex; justify-content: space-between; align-items: baseline;
     font: 400 .66rem/1 var(--mono); letter-spacing: .01em;
     color: var(--ink-soft); margin: 0 0 .55rem .1rem; }
-  .panel-label .hint { font-weight: 400; color: var(--ink-soft); opacity: .6; }
+  .panel-label .hint { font-weight: 400; color: var(--ink-soft); }
   /* misma tinta y grosor que el texto del lado (hereda de .hint); pegada al texto y desplazada para apuntar al centro del botón */
   .panel-label .hint-arrow { display: inline-block; font-size: .95rem; margin-left: -.15em; margin-right: 1rem;
     vertical-align: -.12em; }
@@ -193,7 +198,7 @@
   /* botones de acento (pino): sólidos, redondeados, con sombra proyectada */
   button.primary { background: var(--pine); border: 1px solid var(--pine); border-radius: 9px;
     color: #fff; font-weight: 700; box-shadow: 0 2px 6px rgba(16,168,150,.35); }
-  button.primary:hover { background: #10A896; border-color: #10A896; box-shadow: 0 3px 9px rgba(16,168,150,.4); }
+  button.primary:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 3px 9px rgba(16,168,150,.4); }
   button.primary:active { box-shadow: 0 1px 3px rgba(16,168,150,.3); }
   :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 
@@ -233,12 +238,12 @@
   .swipe-menu .seller-banner { margin: .8rem 0 0; padding: .8rem 0 0; background: none;
     border: 0; border-top: 1px solid var(--line); }
   .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
-  .sb-head .link { color: #9a6a12; cursor: pointer; text-decoration: underline; white-space: nowrap; }
+  .sb-head .link { color: var(--amber-ink); cursor: pointer; text-decoration: underline; white-space: nowrap; }
   .sb-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; }
   .sb-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
   .sb-info { min-width: 0; white-space: nowrap; color: var(--ink-soft); }
   .sb-info b { color: var(--ink); }
-  .sb-info .link { color: #9a6a12; cursor: pointer; text-decoration: underline; }
+  .sb-info .link { color: var(--amber-ink); cursor: pointer; text-decoration: underline; }
   .sb-block { flex: 0 0 auto; white-space: nowrap; color: #b03024; border-color: #d0a59f; background: var(--field); }
   /* banner estrecho (320px): encoge fila para que texto + botón quepan en una línea */
   .swipe-menu .sb-info { font-size: 12px; }
@@ -339,7 +344,7 @@
   .btn:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(27,33,30,.14); }
   /* Ver = acción principal: teal relleno */
   .btn.ver { background: var(--pine); border: 1px solid var(--pine); border-radius: 12px; color: #fff; box-shadow: 0 2px 6px rgba(16,168,150,.35); }
-  .btn.ver:hover { background: #10A896; border-color: #10A896; box-shadow: 0 3px 9px rgba(16,168,150,.4); }
+  .btn.ver:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 3px 9px rgba(16,168,150,.4); }
   .btn.ver:active { box-shadow: 0 1px 3px rgba(16,168,150,.3); }
   .btn.ver[aria-disabled] { background: var(--surface-2); border-color: var(--line);
     color: var(--ink-soft); box-shadow: none; opacity: .55; pointer-events: none; }
@@ -348,8 +353,8 @@
   .btn.quitar:hover { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
   /* Favorito = ascender de interesantes: ámbar relleno */
-  .btn.destacar { background: #d99a00; border-color: #d99a00; color: #fff; box-shadow: 0 2px 6px rgba(217,154,0,.38); }
-  .btn.destacar:hover { background: #c78a00; border-color: #c78a00; box-shadow: 0 3px 9px rgba(217,154,0,.44); }
+  .btn.destacar { background: var(--amber); border-color: var(--amber); color: #fff; box-shadow: 0 2px 6px rgba(217,154,0,.38); }
+  .btn.destacar:hover { background: var(--amber-ink); border-color: var(--amber-ink); box-shadow: 0 3px 9px rgba(217,154,0,.44); }
   .btn.destacar .icon { width: 1em; height: 1em; fill: currentColor; stroke: none; }
 
   /* ── tarjeta de lista: la foto es el escaparate; el precio, su etiqueta ──
@@ -375,7 +380,7 @@
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
   /* envío + distancia: metadato en una línea bajo el título */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; }
-  .li-flags .ship.no { color: #c96a00; font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
+  .li-flags .ship.no { color: var(--ship-no); font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
   /* cuándo se clasificó: eyebrow en versalitas sobre el título (interested/favorite en teal, papelera en gris) */
   .li-when { display: block; margin: 0 0 .28rem; font: 600 10px var(--mono);
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
@@ -442,7 +447,7 @@
   #swipeFab, #copyInterested { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover, #copyInterested:hover { background: #10A896; border-color: #10A896; box-shadow: 0 4px 13px rgba(16,168,150,.44); }
+  #swipeFab:hover, #copyInterested:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
   #swipeFab:active, #copyInterested:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
   #copyInterested { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
 
@@ -460,7 +465,7 @@
   .swipe-tool:disabled { opacity: .4; }
   .swipe-top .swipe-tool { padding: 0 .7rem; gap: .35rem; }   /* tres botones: aprieta para caber a 320px */
   .swipe-cog-badge { position: absolute; top: -.35rem; right: -.35rem; min-width: 1.15rem; height: 1.15rem; padding: 0 .28rem;
-    border-radius: 999px; background: #b0872b; color: #fff; font: 700 10px var(--mono);
+    border-radius: 999px; background: var(--amber); color: #fff; font: 700 10px var(--mono);
     display: flex; align-items: center; justify-content: center; }
   .swipe-cog-badge[hidden] { display: none; }
   /* menú (cog): flota sobre la tarjeta anclado bajo la barra, no la reescala */

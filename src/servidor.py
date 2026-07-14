@@ -16,6 +16,22 @@ PORT = int(os.environ.get("PORT", 8000))
 # refs locales en el HTML: href/src="fichero" relativo (sin esquema http:, sin ? ni #, sin barra inicial)
 REF = re.compile(r'(?:href|src)="([^":/?#][^"?#]*)"')
 
+# Cabeceras de seguridad (Lighthouse Best Practices). script-src 'self' bloquea inline
+# (mitiga el DOM-XSS de meter datos scrapeados de Wallapop por innerHTML: un onerror= inyectado
+# no ejecuta). img-src https: = fotos de cualquier CDN de Wallapop; connect-src = solo su API.
+# ponytail: sin Trusted Types (app.js usa innerHTML por todos lados; migrarlo es otra tarea).
+SEC_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; connect-src 'self' https://api.wallapop.com; "
+        "frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Strict-Transport-Security": "max-age=31536000",
+}
+
 
 def stamp_versions(html, mtimes):
     # Añade ?v=<mtime> a href/src de los estáticos versionados. El HTML no se cachea
@@ -41,6 +57,8 @@ class H(SimpleHTTPRequestHandler):
         # no-cache = el navegador revalida siempre (If-Modified-Since -> 304 si no cambió).
         # Sin esto, Cloudflare mandaba max-age=14400 y el móvil veía la versión vieja horas.
         self.send_header("Cache-Control", "no-cache")
+        for k, v in SEC_HEADERS.items():
+            self.send_header(k, v)
         super().end_headers()
 
     def guess_type(self, path):
