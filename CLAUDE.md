@@ -36,8 +36,6 @@ python3 src/wallapop.py demo                  # self-check del scraper Python (s
 ./deploy.sh                                   # rsync a oracle + systemctl restart wallapop
 ```
 
-> **NUNCA matar ningún servidor** (`pkill -f servidor.py`, `kill`, etc.).
-> El usuario tiene el suyo corriendo (normalmente en :8000) y lo está usando.
 > **Servidor de pruebas: SIEMPRE el puerto 8123.** Para verificar cambios, comprueba
 > si ya está abierto y reúsalo; si no, ábrelo tú y déjalo estar:
 > ```bash
