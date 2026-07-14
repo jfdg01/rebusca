@@ -43,6 +43,14 @@ class H(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
+    def guess_type(self, path):
+        # SimpleHTTPRequestHandler manda text/plain sin charset -> el browser adivina Latin-1
+        # y los acentos UTF-8 salen como mojibake (p. ej. /llms.txt). Forzamos utf-8 en text/*.
+        t = super().guess_type(path)
+        if t.startswith("text/") and "charset" not in t:
+            t += "; charset=utf-8"
+        return t
+
     def do_GET(self):
         if urlparse(self.path).path in ("/", "/index.html"):
             html = (HERE / "index.html").read_text()
@@ -66,6 +74,11 @@ def demo():
     # descubrimiento: coge locales existentes (servidor.py existe en HERE); ignora http/absolutas/ancla
     m = stamped_mtimes('<link href="servidor.py"><a href="https://x/y"><img src="/logo.png"><a href="#z">')
     assert list(m) == ["servidor.py"], m
+    # charset utf-8 en text/*; binarios sin tocar
+    g = H.__new__(H).guess_type
+    assert g("x.txt").endswith("charset=utf-8"), g("x.txt")
+    assert g("x.css").endswith("charset=utf-8"), g("x.css")
+    assert "charset" not in g("x.png"), g("x.png")
     print("ok")
 
 
