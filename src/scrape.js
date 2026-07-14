@@ -8,7 +8,7 @@
   const HEADERS = { "X-DeviceOS": "0", "Accept": "application/json",
                     "Accept-Language": "es-ES", "User-Agent": "Mozilla/5.0" };
   const FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-                  "reservado", "envio", "url", "vendedor", "imagen", "descripcion"];
+                  "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
   const SINCE_TF = { hora: "today", dia: "today", semana: "lastWeek", mes: "lastMonth" };
   const SINCE_DAYS = { hora: 1 / 24, dia: 1, semana: 7, mes: 30 };
   const JAEN = [37.7796, -3.7849];
@@ -82,7 +82,12 @@
       envio: (it.shipping || {}).user_allows_shipping || false,
       url: "https://es.wallapop.com/item/" + (it.web_slug || ""),
       vendedor: it.user_id || "",
-      imagen: ((it.images || [{}])[0].urls || {}).small || "",
+      imagen: ((it.images || [{}])[0].urls || {}).small || "", // miniatura para la tarjeta
+      // todas las fotos (mejor resolución disponible), separadas por espacio, para el PDF/dossier
+      imagenes: (it.images || [])
+        .map((im) => { const u = im.urls || {}; return u.big || u.large || u.xlarge || u.medium || u.small || ""; })
+        .filter(Boolean)
+        .join(" "),
     };
   }
 
@@ -162,10 +167,13 @@
   function demo() {
     const a = (c, m) => { if (!c) throw new Error("FAIL: " + m); };
     a(Math.round(haversineKm(37.7796, -3.7849, 38.9785, -3.9097)) === 134, "haversine");
-    const it = { id: "abc123", title: "x", price: { amount: 5 }, location: {}, user_id: "sel1", images: [{ urls: { small: "http://x/i.jpg" } }] };
+    const it = { id: "abc123", title: "x", price: { amount: 5 }, location: {}, user_id: "sel1",
+      images: [{ urls: { small: "http://x/i.jpg", big: "http://x/big1.jpg" } }, { urls: { medium: "http://x/m2.jpg" } }] };
     const r = row(it, [0, 0]);
     a(r.id === "abc123", "id"); a(r.vendedor === "sel1", "vendedor"); a(r.imagen === "http://x/i.jpg", "imagen");
+    a(r.imagenes === "http://x/big1.jpg http://x/m2.jpg", "imagenes: todas, mejor res"); // small p/tarjeta, big/medium p/dossier
     a(row({ id: "y", title: "x", price: { amount: 1 }, location: {} }, [0, 0]).imagen === "", "imagen vacía");
+    a(row({ id: "y", title: "x", price: { amount: 1 }, location: {} }, [0, 0]).imagenes === "", "imagenes vacía");
     a(titleMatches("iPhone 12 azul", "iphone azul"), "titleMatches acentos");
     a(!titleMatches("Funda para móvil", "iphone"), "titleMatches no casa");
     const eq = (x, y, m) => a(JSON.stringify(branches(x)) === JSON.stringify(y), m);

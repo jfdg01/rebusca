@@ -148,7 +148,7 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
 
 
 FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-          "reservado", "envio", "url", "vendedor", "imagen", "descripcion"]  # id inmutable primero, descripcion al final
+          "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"]  # id inmutable primero, descripcion al final
 
 
 # quita emojis y pictogramas de los textos del anuncio (símbolos, banderas, ZWJ, tonos de piel, VS16)
@@ -181,7 +181,13 @@ def row(it, origin):
         "envio": it.get("shipping", {}).get("user_allows_shipping", False),
         "url": "https://es.wallapop.com/item/" + it.get("web_slug", ""),
         "vendedor": it.get("user_id", ""),   # id opaco del vendedor: estable, sirve de key para bloquear
-        "imagen": ((it.get("images") or [{}])[0].get("urls") or {}).get("small", ""),  # thumb W320
+        "imagen": ((it.get("images") or [{}])[0].get("urls") or {}).get("small", ""),  # thumb W320 p/tarjeta
+        # todas las fotos (mejor resolucion disponible), separadas por espacio, para el PDF/dossier
+        "imagenes": " ".join(
+            u for im in (it.get("images") or [])
+            for u in [(lambda x: x.get("big") or x.get("large") or x.get("xlarge") or x.get("medium") or x.get("small") or "")(im.get("urls") or {})]
+            if u
+        ),
     }
 
 
@@ -279,13 +285,15 @@ def _sort_by_km(path):
 def demo():
     # ponytail: check runnable sin red — haversine e id inmutable como clave de estado
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
-    it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {},
-          "user_id": "sel1", "images": [{"urls": {"small": "http://x/i.jpg"}}]}
+    it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}, "user_id": "sel1",
+          "images": [{"urls": {"small": "http://x/i.jpg", "big": "http://x/big1.jpg"}}, {"urls": {"medium": "http://x/m2.jpg"}}]}
     r = row(it, (0, 0))
     assert r["id"] == "abc123", "id no capturado"
     assert r["vendedor"] == "sel1", "vendedor (user_id) no capturado"
     assert r["imagen"] == "http://x/i.jpg", "imagen (thumb) no capturada"
-    assert row({"id": "y", "title": "x", "price": {"amount": 1}, "location": {}}, (0, 0))["imagen"] == "", "imagen sin fotos debe ser ''"
+    assert r["imagenes"] == "http://x/big1.jpg http://x/m2.jpg", "imagenes: todas, mejor resolucion"
+    r0 = row({"id": "y", "title": "x", "price": {"amount": 1}, "location": {}}, (0, 0))
+    assert r0["imagen"] == "" and r0["imagenes"] == "", "sin fotos debe ser ''"
     assert title_matches("iPhone 12 azul", "iphone azul"), "title_matches: acentos/orden"
     assert not title_matches("Funda para móvil", "iphone"), "title_matches: no debería casar"
     assert branches("corsair fuente OR seasonic") == ["corsair fuente", "seasonic"], "branches: OR palabra"

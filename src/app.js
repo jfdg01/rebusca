@@ -30,13 +30,35 @@ function parseCSV(text) {
 }
 // ── estado persistente: localStorage (offline) + servidor (compartido) ──
 const load = (k) => new Set(JSON.parse(localStorage.getItem(k) || "[]"));
+const BUCKET_KEYS = new Set(["wp_rejected", "wp_interested", "wp_favorite"]);
 const save = (k, set) => {
   localStorage.setItem(k, JSON.stringify([...set]));
+  if (BUCKET_KEYS.has(k)) saveRows(); // cambió un cubo: refresca/poda el cache de filas
   pushEstado();
 };
 const rejected = load("wp_rejected"),
   interested = load("wp_interested"), // "interesantes": sí preliminar del swipe
   favorite = load("wp_favorite"); // "favoritos": ascendidos desde interesantes (tras la IA). 3 cubos exclusivos; "sin ver" = ninguno
+const aiseen = load("wp_aiseen"); // ids ya copiados a la IA: "copiar para IA" solo manda los nuevos
+// cache de filas por id (objeto {columna:valor}). Permite ver interesantes/favoritos aunque su
+// CSV no esté cargado (p.ej. al abrir un enlace ?fav=): el dato vive aquí, no solo en `data`.
+let rowCache = {};
+try { rowCache = JSON.parse(localStorage.getItem("wp_rows") || "{}"); } catch {}
+const bucketed = (id) => interested.has(id) || favorite.has(id) || rejected.has(id);
+const rowToObj = (r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
+const objToRow = (o) => headers.map((h) => o[h] ?? ""); // reconstruye fila posicional con el esquema actual
+function saveRows() {
+  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = rowToObj(r); } // refresca con lo cargado
+  for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cubo
+  localStorage.setItem("wp_rows", JSON.stringify(rowCache));
+}
+// filas de un cubo = las de `data` + las que solo viven en cache (de otras búsquedas)
+function bucketRows(set) {
+  const seen = new Set(), out = [];
+  for (const r of data) { const k = key(r); if (set.has(k)) { seen.add(k); out.push(r); } }
+  for (const id of set) if (!seen.has(id) && rowCache[id]) out.push(objToRow(rowCache[id]));
+  return out;
+}
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
 const saveBlockSel = () => {
   localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
@@ -164,16 +186,20 @@ function hydrateEstado() {
   return Promise.resolve();
 }
 
-const HIDE = new Set(["id", "cp", "url", "vendedor", "imagen"]); // no se muestran como columna (url va en el boton Ver; vendedor/imagen se usan en la tarjeta)
-let headers = [],
+const HIDE = new Set(["id", "cp", "url", "vendedor", "imagen", "imagenes"]); // no se muestran como columna (url va en el boton Ver; vendedor/imagen(es) se usan en la tarjeta/dossier)
+// esquema fijo del scraper (== FIELDS de scrape.js). Sirve de headers por defecto para poder
+// renderizar favoritos/interesantes desde el cache aunque no se haya scrapeado nada esta sesión.
+const DEFAULT_HEADERS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
+  "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
+let headers = DEFAULT_HEADERS.slice(),
   data = [],
   sortKeys = [],
   view = ""; // view: '' mazo | 'rejected' papelera | 'interested' interesantes | 'favorite' favoritos
 const rejectedSel = new Set(); // selección en masa de la papelera (keys); solo viva en view==='rejected'
-let iId = -1,
-  iUrl = -1,
-  iTitulo = -1,
-  iPrecio = -1;
+let iId = headers.indexOf("id"),
+  iUrl = headers.indexOf("url"),
+  iTitulo = headers.indexOf("titulo"),
+  iPrecio = headers.indexOf("precio");
 const isNum = (v) => v !== "" && !isNaN(v);
 // identidad GLOBAL del anuncio = id inmutable de Wallapop (rechazados/interesantes/favoritos
 // son globales, no por CSV). Fallback titulo|precio solo para drag de CSV sin id.
@@ -473,20 +499,27 @@ function sortList(rows) {
 
 function filteredRows() {
   const listView = view === "rejected" || view === "interested" || view === "favorite";
-  const q = listView ? norm(listQ) : ""; // el filtro solo aplica en vista de lista
-  let rows = data.filter((r) => {
+  if (listView) {
+    const q = norm(listQ); // el filtro solo aplica en vista de lista
+    const set = view === "rejected" ? rejected : view === "interested" ? interested : favorite;
+    const rows = bucketRows(set).filter((r) => {
+      // "#123" filtra por id de Wallapop; cualquier otra cosa, por título
+      if (q) {
+        if (q.startsWith("#")) {
+          if (!String(col(r, "id") || "").includes(q.slice(1).trim())) return false;
+        } else if (!norm(col(r, "titulo") || "").includes(q)) return false;
+      }
+      if (view === "rejected" && listSeller && col(r, "vendedor") !== listSeller) return false;
+      return true; // pertenencia al cubo ya garantizada por bucketRows
+    });
+    sortList(rows); // las listas ordenan con su barra (#listSort)
+    return rows;
+  }
+  const rows = data.filter((r) => {
     const k = key(r);
-    if (q && !norm(r[iTitulo] || "").includes(q)) return false;
-    if (view === "rejected" && listSeller && col(r, "vendedor") !== listSeller)
-      return false;
-    if (view === "rejected") return rejected.has(k);
-    if (view === "interested") return interested.has(k);
-    if (view === "favorite") return favorite.has(k);
     return !interested.has(k) && !rejected.has(k) && !favorite.has(k) && !isExcluded(r); // mazo: sin clasificar y sin vetar (los lejos-sin-envío también entran)
   });
-  if (listView)
-    sortList(rows); // las listas ordenan con su barra (#listSort)
-  else if (sortKeys.length)
+  if (sortKeys.length)
     rows.sort((a, b) => {
       // mazo/swipe: orden multinivel
       for (const { col, dir } of sortKeys) {
@@ -1182,6 +1215,7 @@ function loadCSV(text, name) {
     tr.append(th);
   });
   thead.append(tr);
+  saveRows(); // refresca el cache de filas con este dataset (fotos/precios al día)
   render();
 }
 
@@ -1687,9 +1721,12 @@ function fromURL() {
   if (!q) {
     if (favIds.length) {
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
-      snack(`${favIds.length} a favoritos · toca «ver favoritos»`, null);
+      view = "favorite"; // muéstralos ya: se pintan desde el cache, sin re-scrapear
+      render();
+      snack(`${favIds.length} añadidos a favoritos`, null);
+      return true; // ya hay algo en pantalla; no dispares restoreLastCsv()
     }
-    return false; // sin q: deja que restoreLastCsv() cargue datos para poder verlos
+    return false; // sin fav ni q: deja que restoreLastCsv() cargue la última vista
   }
   const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
@@ -2005,10 +2042,17 @@ function copyAsync(makeText) {
     .then(makeText)
     .then((t) => navigator.clipboard.writeText(t)); // fallback sin ClipboardItem
 }
-// copiar favoritos: calcula el precio exacto (peso real) y copia la ficha de cada destacado para una IA
-function copyInterested(btn) {
-  const rows = data.filter((r) => interested.has(key(r)));
-  if (!rows.length) return snack("No tienes interesantes que copiar", null);
+// copiar interesantes para una IA (precio exacto por peso real). Por defecto copia SOLO los NUEVOS
+// (no enviados aún): tras la criba de la IA, los ya revisados que quedan en interesantes son ruido.
+// all=true copia todos (fallback desde el menú ⚙).
+function copyInterested(btn, all) {
+  let rows = bucketRows(interested);
+  if (!all) rows = rows.filter((r) => !aiseen.has(col(r, "id")));
+  if (!rows.length)
+    return snack(
+      all ? "No tienes interesantes que copiar" : "No hay interesantes nuevos (usa ⚙ para copiar todos)",
+      null,
+    );
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Preparando…";
@@ -2016,7 +2060,11 @@ function copyInterested(btn) {
     await fetchPesos(rows).catch(() => {});
     return interestedPrompt(rows);
   }) // si falla el peso, se copia con el estimado
-    .then(() => snack(`Copiados ${rows.length} interesantes para la IA`, null))
+    .then(() => {
+      rows.forEach((r) => { const id = col(r, "id"); if (id) aiseen.add(id); }); // márcalos como enviados
+      localStorage.setItem("wp_aiseen", JSON.stringify([...aiseen]));
+      snack(`Copiados ${rows.length} ${all ? "interesantes" : "nuevos"} para la IA`, null);
+    })
     .catch(() => snack("No se pudo copiar", null))
     .finally(() => {
       btn.disabled = false;
@@ -2026,8 +2074,8 @@ function copyInterested(btn) {
 $("#copyInterested").onclick = (e) => copyInterested(e.currentTarget);
 $("#copyInterestedOpt").onclick = (e) => {
   opts.open = false;
-  copyInterested(e.currentTarget);
-}; // desde el menú ⚙: cierra el menú para que se vea el snack
+  copyInterested(e.currentTarget, true); // menú ⚙: copia TODOS (aunque ya se enviaran)
+}; // cierra el menú para que se vea el snack
 
 // ── PDF dossier de favoritos: fotos + fichas en un archivo para arrastrar a la IA ──
 // Truco CORS: cdn.wallapop.com NO da Access-Control-Allow-Origin, así que fetch/canvas de
@@ -2038,21 +2086,24 @@ const esc = (s) =>
 function dossierHTML(rows) {
   const cards = rows
     .map((r, i) => {
-      const img = col(r, "imagen"),
-        url = col(r, "url"),
+      // todas las fotos del anuncio (col "imagenes", separadas por espacio); si no hay, la única "imagen"
+      const imgs = (col(r, "imagenes") || col(r, "imagen") || "").split(" ").filter(Boolean);
+      const url = col(r, "url"),
         desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
-      return `<div class="dsr-card">${img ? `<img src="${esc(img)}" alt="">` : ""}<div class="dsr-body">` +
+      const photos = imgs.map((u) => `<img src="${esc(u)}" alt="">`).join("");
+      return `<div class="dsr-card"><div class="dsr-body">` +
         `<div class="dsr-t">${i + 1}. [#${esc(col(r, "id"))}] ${esc(stripEmoji(col(r, "titulo")))}</div>` +
         `<div class="dsr-p">${esc(pricePair(r))}</div>` +
         (desc ? `<div class="dsr-d">${esc(desc)}</div>` : "") +
-        (url ? `<div class="dsr-u">${esc(url)}</div>` : "") +
+        (url ? `<a class="dsr-u" href="${esc(url)}">${esc(url)}</a>` : "") +
+        (photos ? `<div class="dsr-photos">${photos}</div>` : "") +
         `</div></div>`;
     })
     .join("");
   return `<pre class="dsr-intro">${esc(promptIntro())}</pre>${cards}`;
 }
 async function dossierFav(btn) {
-  const rows = data.filter((r) => favorite.has(key(r)));
+  const rows = bucketRows(favorite);
   if (!rows.length) return snack("No tienes favoritos", null);
   const prev = btn.textContent;
   btn.disabled = true;

@@ -567,11 +567,12 @@
   body > *:not(#dossier) { display: none !important; }
   #dossier { display: block; color: #000; font: 13px/1.45 system-ui, sans-serif; }
   .dsr-intro { white-space: pre-wrap; font-size: 11px; margin: 0 0 14px; }
-  .dsr-card { display: flex; gap: 12px; margin-bottom: 12px; padding-bottom: 10px;
+  .dsr-card { margin-bottom: 14px; padding-bottom: 10px;
     border-bottom: 1px solid #ccc; page-break-inside: avoid; break-inside: avoid; }
-  .dsr-card img { width: 150px; height: 150px; object-fit: cover; flex: none; }
   .dsr-t { font-weight: 700; margin-bottom: 3px; }
   .dsr-p { color: #333; margin-bottom: 3px; }
   .dsr-d { font-size: 12px; }
-  .dsr-u { font-size: 10px; color: #666; word-break: break-all; margin-top: 3px; }
+  .dsr-u { display: block; font-size: 10px; color: #06c; word-break: break-all; margin-top: 3px; }
+  .dsr-photos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .dsr-photos img { width: 130px; height: 130px; object-fit: cover; }
 }
