@@ -48,7 +48,7 @@ const bucketed = (id) => interested.has(id) || favorite.has(id) || rejected.has(
 const rowToObj = (r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
 const objToRow = (o) => headers.map((h) => o[h] ?? ""); // reconstruye fila posicional con el esquema actual
 function saveRows() {
-  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = rowToObj(r); } // refresca con lo cargado
+  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" }; } // refresca con lo cargado; recuerda de qué búsqueda salió (para agrupar interesantes/favoritos)
   for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cubo
   localStorage.setItem("wp_rows", JSON.stringify(rowCache));
 }
@@ -59,6 +59,7 @@ function bucketRows(set) {
   for (const id of set) if (!seen.has(id) && rowCache[id]) out.push(objToRow(rowCache[id]));
   return out;
 }
+const originOf = (r) => rowCache[col(r, "id")]?._csv || ""; // búsqueda de la que salió el anuncio ("" si desconocida)
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
 const saveBlockSel = () => {
   localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
@@ -552,7 +553,31 @@ function render() {
   const rows = filteredRows();
   tbody.innerHTML = "";
   const frag = document.createDocumentFragment();
-  for (const r of rows) {
+  // interesantes/favoritos: agrupa por búsqueda de origen (una sección por query, respeta el orden ya calculado)
+  const grouped = view === "interested" || view === "favorite";
+  if (grouped && rows.length) {
+    const order = [], byCsv = new Map();
+    for (const r of rows) {
+      const c = originOf(r);
+      if (!byCsv.has(c)) { byCsv.set(c, []); order.push(c); }
+      byCsv.get(c).push(r);
+    }
+    for (const c of order) {
+      const h = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 2;
+      td.className = "sc-group";
+      td.textContent = c ? (aliasMap[c] || queryLabel(c)) : "Sin búsqueda";
+      h.append(td);
+      frag.append(h);
+      for (const r of byCsv.get(c)) frag.append(rowTr(r));
+    }
+  } else for (const r of rows) frag.append(rowTr(r));
+  tbody.append(frag);
+  const listView = view === "rejected" || view === "interested" || view === "favorite";
+  return finishRender(rows, listView);
+}
+function rowTr(r) {
     const k = key(r);
     const tr = document.createElement("tr");
 
@@ -603,10 +628,9 @@ function render() {
     tr.append(act);
 
     tr.append(listBody(r));
-    frag.append(tr);
-  }
-  tbody.append(frag);
-  const listView = view === "rejected" || view === "interested" || view === "favorite";
+    return tr;
+}
+function finishRender(rows, listView) {
   $("table").hidden = !(listView && headers.length); // la tabla es la vista de lista editable (interesantes/favoritos/papelera)
   // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
   document.querySelector("header").classList.toggle("pinned", listView); // fija la barra solo en modo lista (ver CSS)

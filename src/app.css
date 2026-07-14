@@ -566,6 +566,11 @@
     box-shadow: 0 1px 3px rgba(176,48,36,.35), inset 0 1px 0 rgba(255,255,255,.2); }
   .sc-btns .danger:hover { background: #c0392b; border-color: #c0392b; }
 
+  /* cabecera de sección: agrupa interesantes/favoritos por su búsqueda de origen */
+  td.sc-group { font: 700 .82rem var(--sans); text-transform: uppercase; letter-spacing: .04em;
+    color: var(--pine-ink); padding: 1rem .1rem .35rem; border-bottom: 2px solid var(--pine-soft); }
+  tbody tr:first-child td.sc-group { padding-top: .35rem; }
+
 /* ── PDF dossier de favoritos: oculto en pantalla, único visible al imprimir ── */
 #dossier { display: none; }
 @media print {
