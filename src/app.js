@@ -1647,9 +1647,9 @@ function paintSearches() {
       (alias ? `<div class="sc-realkw"></div>` : "") +
       `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? "" : "s"} · ${age}</div>` +
       `<div class="sc-btns">` +
-      `<button class="ghost sc-pick">${ic("check")} Seleccionar</button>` +
-      `<button class="ghost sc-ren">${ic("pencil")} Renombrar</button>` +
       `<button class="ghost sc-run">${ic("search")} Repetir</button>` +
+      `<button class="ghost sc-ren">${ic("pencil")} Renombrar</button>` +
+      `<button class="primary sc-pick">${ic("check")} Seleccionar</button>` +
       `<button class="danger sc-del">${ic("rejected")} Borrar</button></div>`;
     card.querySelector(".sc-kw").textContent = alias || kw; // textContent: a prueba de < & en el término
     if (alias) card.querySelector(".sc-realkw").textContent = kw;
