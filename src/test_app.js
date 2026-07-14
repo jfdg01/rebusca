@@ -201,7 +201,21 @@ async function main() {
   if ("wp_perfil" in store || "wp_perfiles" in store)
     fail("migración: no retiró wp_perfil/wp_perfiles");
 
-  // 4. el scraper del browser (scrape.js) sigue verde
+  // 4. migración cubos GLOBALES (Array) -> POR CAJÓN {csv:[ids]}: cada id va al cajón de su
+  //    origen (wp_rows._csv). Sin esto, favoritos/interesantes viejos caerían todos en un cajón.
+  const gs = {
+    wp_rows: JSON.stringify({
+      c: { id: "c", _csv: "ford.csv" },
+      d: { id: "d", _csv: "ps4.csv" },
+    }),
+    wp_estado: JSON.stringify({ favorite: ["c", "d"], rejected: [], interested: [] }), // formato global viejo
+  };
+  errs = await boot(gs);
+  if (errs.length) fail("boot con cubos globales viejos lanzó: " + (errs[0].message || errs[0]));
+  if (gs.wp_favorite !== '{"ford.csv":["c"],"ps4.csv":["d"]}')
+    fail("migración por cajón: wp_favorite no se repartió por origen, salió " + gs.wp_favorite);
+
+  // 5. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 
   console.log("ok");

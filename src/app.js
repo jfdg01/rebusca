@@ -30,36 +30,53 @@ function parseCSV(text) {
 }
 // ── estado persistente: localStorage (offline) + servidor (compartido) ──
 const load = (k) => new Set(JSON.parse(localStorage.getItem(k) || "[]"));
-const BUCKET_KEYS = new Set(["wp_rejected", "wp_interested", "wp_favorite"]);
-const save = (k, set) => {
-  localStorage.setItem(k, JSON.stringify([...set]));
-  if (BUCKET_KEYS.has(k)) saveRows(); // cambió un cubo: refresca/poda el cache de filas
-  pushEstado();
-};
-const rejected = load("wp_rejected"),
-  interested = load("wp_interested"), // "interesantes": sí preliminar del swipe
-  favorite = load("wp_favorite"); // "favoritos": ascendidos desde interesantes (tras la IA). 3 cubos exclusivos; "sin ver" = ninguno
-const aiseen = load("wp_aiseen"); // ids ya copiados a la IA: "copiar para IA" solo manda los nuevos
+const BUCKET_NAMES = ["rejected", "interested", "favorite"]; // los 3 "ficheros" de cada cajón
+const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
 // cache de filas por id (objeto {columna:valor}). Permite ver interesantes/favoritos aunque su
-// CSV no esté cargado (p.ej. al abrir un enlace ?fav=): el dato vive aquí, no solo en `data`.
+// CSV no esté cargado; guarda _csv (cajón de origen) para migrar el modelo global viejo.
 let rowCache = {};
 try { rowCache = JSON.parse(localStorage.getItem("wp_rows") || "{}"); } catch {}
-const bucketed = (id) => interested.has(id) || favorite.has(id) || rejected.has(id);
+// ── cubos POR CAJÓN (búsqueda): cada csv tiene sus propios ficheros, sin fugas entre cajones.
+// buckets[nombre] = {csv: Set<id>}. `rejected/interested/favorite` apuntan al cajón activo (curCsv)
+// vía pointBuckets(), así el resto del código sigue usando `.has/.add/.delete` sin cambios.
+const buckets = { rejected: {}, interested: {}, favorite: {} };
+// Array = formato global viejo → reparte por origen (rowCache._csv). {csv:[ids]} = ya por cajón.
+const toMap = (val) => {
+  const map = {};
+  if (Array.isArray(val)) for (const id of val) (map[rowCache[id]?._csv || ""] ||= new Set()).add(id);
+  else if (val && typeof val === "object") for (const c in val) map[c] = new Set(val[c]);
+  return map;
+};
+const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
+for (const n of BUCKET_NAMES) buckets[n] = toMap(JSON.parse(localStorage.getItem("wp_" + n) || "null"));
+let rejected = new Set(), interested = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
+function pointBuckets(csv) { // reapunta las 3 vars al cajón `csv` (créalo vacío si no existe)
+  const c = csv || "";
+  rejected = buckets.rejected[c] ||= new Set();
+  interested = buckets.interested[c] ||= new Set();
+  favorite = buckets.favorite[c] ||= new Set();
+}
+const save = (k, _set) => {
+  if (BUCKET_KEYS.has(k)) { localStorage.setItem(k, JSON.stringify(fromMap(buckets[k.slice(3)]))); saveRows(); }
+  else localStorage.setItem(k, JSON.stringify([..._set]));
+  pushEstado();
+};
+const aiseen = load("wp_aiseen"); // ids ya copiados a la IA: "copiar para IA" solo manda los nuevos
+const bucketed = (id) => BUCKET_NAMES.some((n) => Object.values(buckets[n]).some((s) => s.has(id))); // en algún cajón
 const rowToObj = (r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
 const objToRow = (o) => headers.map((h) => o[h] ?? ""); // reconstruye fila posicional con el esquema actual
 function saveRows() {
-  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" }; } // refresca con lo cargado; recuerda de qué búsqueda salió (para agrupar interesantes/favoritos)
-  for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cubo
+  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" }; } // refresca con lo cargado; recuerda de qué búsqueda salió
+  for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cajón
   localStorage.setItem("wp_rows", JSON.stringify(rowCache));
 }
-// filas de un cubo = las de `data` + las que solo viven en cache (de otras búsquedas)
+// filas del cubo activo = las de `data` + las que solo viven en cache (item vendido/expirado)
 function bucketRows(set) {
   const seen = new Set(), out = [];
   for (const r of data) { const k = key(r); if (set.has(k)) { seen.add(k); out.push(r); } }
   for (const id of set) if (!seen.has(id) && rowCache[id]) out.push(objToRow(rowCache[id]));
   return out;
 }
-const originOf = (r) => rowCache[col(r, "id")]?._csv || ""; // búsqueda de la que salió el anuncio ("" si desconocida)
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
 const saveBlockSel = () => {
   localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
@@ -119,9 +136,9 @@ function pushEstado() {
   localStorage.setItem(
     estadoKey(),
     JSON.stringify({
-      rejected: [...rejected],
-      interested: [...interested],
-      favorite: [...favorite],
+      rejected: fromMap(buckets.rejected),
+      interested: fromMap(buckets.interested),
+      favorite: fromMap(buckets.favorite),
       blockSel: [...blockSel],
       excl: exclMap,
       catExcl: catExclMap,
@@ -140,17 +157,15 @@ function hydrateEstado() {
   {
     {
       // ponytail: doble bloque solo para conservar la indentación del cuerpo original intacta
-      for (const [set, arr] of [
-        [rejected, e.rejected],
-        [interested, e.interested],
-        [favorite, e.favorite],
-      ]) {
-        set.clear();
-        (arr || []).forEach((x) => set.add(x));
+      for (const n of BUCKET_NAMES) buckets[n] = toMap(e[n]); // reparte por cajón (o migra el global viejo)
+      // cubos exclusivos POR CAJÓN: papelera > favoritos > interesantes.
+      const cajones = new Set([...Object.keys(buckets.rejected), ...Object.keys(buckets.favorite), ...Object.keys(buckets.interested)]);
+      for (const c of cajones) {
+        const rej = buckets.rejected[c], fav = buckets.favorite[c], intr = buckets.interested[c];
+        if (fav) for (const k of fav) if (rej?.has(k)) fav.delete(k);
+        if (intr) for (const k of intr) if (rej?.has(k) || fav?.has(k)) intr.delete(k);
       }
-      // cubos exclusivos: limpia solapes heredados. Precedencia papelera > favoritos > interesantes.
-      for (const k of favorite) if (rejected.has(k)) favorite.delete(k);
-      for (const k of interested) if (rejected.has(k) || favorite.has(k)) interested.delete(k);
+      pointBuckets(curCsv); // reapunta rejected/interested/favorite al cajón activo
       blockSel.clear();
       (e.blockSel || []).forEach((x) => blockSel.add(x));
       localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
@@ -176,9 +191,7 @@ function hydrateEstado() {
           ? e.stamp
           : {}; // {key:epochMs} cuándo se clasificó
       localStorage.setItem("wp_stamp", JSON.stringify(stamp));
-      localStorage.setItem("wp_rejected", JSON.stringify([...rejected])); // espejo offline
-      localStorage.setItem("wp_interested", JSON.stringify([...interested]));
-      localStorage.setItem("wp_favorite", JSON.stringify([...favorite]));
+      for (const n of BUCKET_NAMES) localStorage.setItem("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
       localStorage.setItem("wp_excl", JSON.stringify(exclMap));
       localStorage.setItem("wp_catexcl", JSON.stringify(catExclMap));
       if (data.length) render();
@@ -202,10 +215,11 @@ let iId = headers.indexOf("id"),
   iTitulo = headers.indexOf("titulo"),
   iPrecio = headers.indexOf("precio");
 const isNum = (v) => v !== "" && !isNaN(v);
-// identidad GLOBAL del anuncio = id inmutable de Wallapop (rechazados/interesantes/favoritos
-// son globales, no por CSV). Fallback titulo|precio solo para drag de CSV sin id.
+// identidad del anuncio DENTRO de su cajón = id inmutable de Wallapop. La clasificación es
+// por cajón (curCsv): el mismo id en otra búsqueda se clasifica aparte. Fallback titulo|precio
+// solo para drag de CSV sin id.
 const itemId = (r) => (iId >= 0 && r[iId]) || r[iTitulo] + "|" + r[iPrecio];
-const key = (r) => itemId(r); // GLOBAL por id de Wallapop: un anuncio se clasifica igual venga de la búsqueda que venga -> la IA puede marcar favoritos con ?fav=<ids>
+const key = (r) => itemId(r); // id de Wallapop; el cajón lo pone curCsv (buckets[…][curCsv])
 
 // --- precio final estimado al comprador (envío protegido de Wallapop) ---
 // tarifa de envío por tramo de peso (up_to_kg), verificada contra la API: kg <= tope -> €
@@ -553,26 +567,7 @@ function render() {
   const rows = filteredRows();
   tbody.innerHTML = "";
   const frag = document.createDocumentFragment();
-  // interesantes/favoritos: agrupa por búsqueda de origen (una sección por query, respeta el orden ya calculado)
-  const grouped = view === "interested" || view === "favorite";
-  if (grouped && rows.length) {
-    const order = [], byCsv = new Map();
-    for (const r of rows) {
-      const c = originOf(r);
-      if (!byCsv.has(c)) { byCsv.set(c, []); order.push(c); }
-      byCsv.get(c).push(r);
-    }
-    for (const c of order) {
-      const h = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 2;
-      td.className = "sc-group";
-      td.textContent = c ? (aliasMap[c] || queryLabel(c)) : "Sin búsqueda";
-      h.append(td);
-      frag.append(h);
-      for (const r of byCsv.get(c)) frag.append(rowTr(r));
-    }
-  } else for (const r of rows) frag.append(rowTr(r));
+  for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
   tbody.append(frag);
   const listView = view === "rejected" || view === "interested" || view === "favorite";
   return finishRender(rows, listView);
@@ -1210,6 +1205,7 @@ function hideSnack() {
 
 // ── carga de un CSV (texto) ──
 function loadCSV(text, name) {
+  pointBuckets(name); // apunta al cajón de este CSV antes de render (runScrape carga antes de selectQueryUI)
   const rows = parseCSV(text);
   headers = rows[0];
   data = rows.slice(1);
@@ -1286,6 +1282,7 @@ function selectQueryUI(csv) {
   const { kw, since } = queryParts(csv);
   pick.value = kw;
   curCsv = csv;
+  pointBuckets(csv); // ficheros del cajón de esta búsqueda
   setSince(since);
   localStorage.setItem(lastCsvKey(), csv); // último dataset cargado
   stampSeen(csv);
@@ -1729,6 +1726,7 @@ function afterCsvChange(oldCsv, newCsv) {
       localStorage.setItem(lastCsvKey(), newCsv);
     } else {
       curCsv = null;
+      pointBuckets(null);
       pick.value = "";
       setSince("");
       localStorage.removeItem(lastCsvKey());
@@ -1772,16 +1770,18 @@ lejosKmEl.onchange = () => {
 // deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1&fav=<id,id>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:
 // booleana (OR/grupos/comillas van tal cual en q) + exclusiones. Devuelve true si disparó.
-// ?fav=<ids> marca esos anuncios como FAVORITOS por id (global; los saca de interesados/rechazados):
-// así la IA, tras comparar la lista, devuelve un enlace que asciende sus elegidos de un toque.
+// ?fav=<ids> marca esos anuncios como FAVORITOS en el cajón de ?q= (o el activo si no hay q):
+// así la IA, tras comparar la lista de esa búsqueda, asciende sus elegidos de un toque.
 function fromURL() {
   const p = new URLSearchParams(location.search);
   const favIds = [...new Set((p.get("fav") || "").split(",").map((s) => s.trim()).filter(Boolean))];
+  const q = (p.get("q") || "").trim();
+  const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
   if (favIds.length) {
+    pointBuckets(q ? csvNameOf(q, since) : curCsv); // el fav pertenece al cajón de q (o al activo)
     for (const id of favIds) { interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id); }
     save("wp_interested", interested); save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
-  const q = (p.get("q") || "").trim();
   if (!q) {
     if (favIds.length) {
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
@@ -1792,7 +1792,6 @@ function fromURL() {
     }
     return false; // sin fav ni q: deja que restoreLastCsv() cargue la última vista
   }
-  const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
   if (words.length) { exclMap[csvNameOf(q, since)] = words; saveExcl(); } // se aplican al renderizar
   $("#kw").value = q;
