@@ -38,7 +38,7 @@ function makeAny() {
   return any;
 }
 
-function makeContext(store) {
+function makeContext(store, search = "") {
   const any = makeAny();
   const localStorage = {
     getItem: (k) => (k in store ? store[k] : null),
@@ -106,7 +106,7 @@ function makeContext(store) {
     cancelAnimationFrame: noop,
     fetch: () => new Promise(() => {}), // no resuelve; en boot no se llama
     navigator: { userAgent: "test", clipboard: { writeText: () => Promise.resolve() } },
-    location: { reload: noop, href: "", search: "", assign: noop },
+    location: { reload: noop, href: "", search, pathname: "/", assign: noop },
     history: { pushState: noop, replaceState: noop },
     matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
     getComputedStyle: () => makeAny(),
@@ -142,8 +142,8 @@ function makeContext(store) {
 }
 
 // Evalúa app.js con `store` como localStorage inicial; devuelve los errores de boot.
-async function boot(store) {
-  const { sandbox, bootErrors } = makeContext(store);
+async function boot(store, search = "") {
+  const { sandbox, bootErrors } = makeContext(store, search);
   vm.createContext(sandbox);
   try {
     vm.runInContext(APP, sandbox, { filename: "app.js" });
@@ -214,6 +214,17 @@ async function main() {
   if (errs.length) fail("boot con cubos globales viejos lanzó: " + (errs[0].message || errs[0]));
   if (gs.wp_favorite !== '{"ford.csv":["c"],"ps4.csv":["d"]}')
     fail("migración por cajón: wp_favorite no se repartió por origen, salió " + gs.wp_favorite);
+
+  // 6. deep-link ?fav=<id> SIN q: cada fav va al cajón de ORIGEN del item (wp_rows._csv),
+  //    no al activo/"" del boot (curCsv=null). Sin esto se guardaban en el cajón equivocado
+  //    y desaparecían al abrir la búsqueda real (bug de favoritos que no persistían).
+  const fv = {
+    wp_rows: JSON.stringify({ z9: { id: "z9", _csv: "kindle.csv" } }),
+  };
+  errs = await boot(fv, "?fav=z9");
+  if (errs.length) fail("deep-link ?fav lanzó: " + (errs[0].message || errs[0]));
+  if (fv.wp_favorite !== '{"kindle.csv":["z9"]}')
+    fail("?fav sin q: no ruteó al cajón de origen, salió " + fv.wp_favorite);
 
   // 5. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });

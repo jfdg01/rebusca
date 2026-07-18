@@ -1824,12 +1824,18 @@ function fromURL() {
   const q = (p.get("q") || "").trim();
   const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
   if (favIds.length) {
-    pointBuckets(q ? csvNameOf(q, since) : curCsv); // el fav pertenece al cajón de q (o al activo)
-    for (const id of favIds) { interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id); }
+    // cubos POR CAJÓN: cada fav va al cajón de ?q= o, sin q, al de ORIGEN del item (rowCache._csv).
+    // Meterlos en el activo (o "" al boot, curCsv=null) los perdía al abrir su búsqueda real.
+    for (const id of favIds) {
+      pointBuckets(q ? csvNameOf(q, since) : (rowCache[id]?._csv || curCsv || ""));
+      interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id);
+    }
     save("wp_interested", interested); save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
   if (!q) {
     if (favIds.length) {
+      curCsv = rowCache[favIds[0]]?._csv || curCsv || ""; // muestra el cajón de origen de los favs
+      pointBuckets(curCsv);
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
       view = "favorite"; // muéstralos ya: se pintan desde el cache, sin re-scrapear
       render();
