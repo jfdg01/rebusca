@@ -226,6 +226,34 @@ async function main() {
   if (fv.wp_favorite !== '{"kindle.csv":["z9"]}')
     fail("?fav sin q: no ruteó al cajón de origen, salió " + fv.wp_favorite);
 
+  // 7. migración: el cubo "interesantes" desaparece; sus ids ascienden a favoritos
+  const mi = {
+    wp_rows: JSON.stringify({ i1: { id: "i1", _csv: "ford.csv" } }),
+    wp_estado: JSON.stringify({ rejected: {}, favorite: {}, interested: { "ford.csv": ["i1"] } }),
+  };
+  errs = await boot(mi);
+  if (errs.length) fail("boot con interesantes viejos lanzó: " + (errs[0].message || errs[0]));
+  if (mi.wp_favorite !== '{"ford.csv":["i1"]}')
+    fail("migración interesantes: no ascendieron a favoritos, salió " + mi.wp_favorite);
+
+  // 8. deep-link ?keep=<ids> (veredicto de la IA): los conservados van a favoritos y el
+  //    RESTO del lote enviado (wp_aisent) se rechaza; el lote queda consumido.
+  const kp = {
+    wp_rows: JSON.stringify({
+      a1: { id: "a1", _csv: "ps4.csv" },
+      a2: { id: "a2", _csv: "ps4.csv" },
+      a3: { id: "a3", _csv: "ps4.csv" },
+    }),
+    wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2", "a3"] }),
+  };
+  errs = await boot(kp, "?keep=a1");
+  if (errs.length) fail("deep-link ?keep lanzó: " + (errs[0].message || errs[0]));
+  if (kp.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep: el conservado no acabó en favoritos, salió " + kp.wp_favorite);
+  if (kp.wp_rejected !== '{"ps4.csv":["a2","a3"]}')
+    fail("?keep: el resto del lote no se rechazó, salió " + kp.wp_rejected);
+  if ("wp_aisent" in kp) fail("?keep: no consumió wp_aisent");
+
   // 5. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

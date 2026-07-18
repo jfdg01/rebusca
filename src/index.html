@@ -39,12 +39,6 @@
         <details class="opts" id="perfilOpts">
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
-                <button id="copyInterestedOpt" class="chip">
-                    Copiar interesantes para IA
-                </button>
-                <button id="copyDeckOpt" class="chip">
-                    Copiar todo el mazo para IA
-                </button>
                 <div class="opt-group">
                     <span class="opt-row">Rechazar del mazo lo que supere…</span>
                     <label class="opt-row num sub">
@@ -108,7 +102,7 @@
     </div>
     <ol class="tut" id="tut" hidden>
         <li title="Haz una búsqueda"><span>1</span></li>
-        <li title="Ponte a rebuscar para seleccionar aquellas cosas que sean interesantes"><span>2</span></li>
+        <li title="Copia los candidatos para tu IA (o rebusca a mano) y quédate con los favoritos"><span>2</span></li>
         <li><span>3</span></li>
         <li><span>4</span></li>
         <li><span>5</span></li>
@@ -216,13 +210,13 @@
             <details class="note" id="priceNote" hidden>
                 <summary class="help-i" title="cómo se calcula el precio" aria-label="cómo se calcula el precio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
                 <div class="help-pop">
-                    En interesantes con envío el precio es el <b>final
+                    En favoritos con envío el precio es el <b>final
                     estimado al comprador</b>: precio + comisión de Wallapop
                     (0,70€ + 5%) + porte estimado a 5&nbsp;kg («aprox»).
                 </div>
             </details>
             <button
-                id="exportInterested"
+                id="exportFav"
                 class="btn"
                 title="copiar la lista al portapapeles"
                 hidden
@@ -282,8 +276,9 @@
 </div>
 </main>
 
-<button id="swipeFab" hidden>REBUSCAR</button>
-<button id="copyInterested" hidden>Copiar interesantes para IA</button>
+<button id="copyDeck" hidden>COPIAR PARA IA</button>
+<button id="swipeFab" hidden>Rebuscar a mano</button>
+<button id="copyFav" hidden>Copiar favoritos para IA</button>
 
 
 <div class="searches" id="searchesView" role="dialog" aria-modal="true" aria-label="Tus búsquedas" hidden>
@@ -320,7 +315,7 @@
         </button>
     </div>
     <div class="swipe-count-row">
-        <button class="swipe-hint yes" id="swYes" title="marcar interesante"><i data-icon="check"></i><i data-icon="arrow-right"></i></button>
+        <button class="swipe-hint yes" id="swYes" title="marcar favorito"><i data-icon="check"></i><i data-icon="arrow-right"></i></button>
         <div class="swipe-count" id="swipeCount"></div>
         <button class="swipe-hint no" id="swNo" title="rechazar"><i data-icon="arrow-left"></i><i data-icon="x"></i></button>
     </div>
@@ -340,7 +335,7 @@
     </div>
     <div class="swipe-stage" id="swipeStage">
         <div class="sc-badge like" id="swLikeStamp">
-            <span>Interesante</span>
+            <span>Favorito</span>
         </div>
         <div class="sc-badge nope" id="swNopeStamp"><span>Rechazado</span></div>
     </div>

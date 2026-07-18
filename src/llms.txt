@@ -5,28 +5,28 @@
 > NUNCA le pongas la búsqueda en un bloque de código: un bloque de código es un FALLO.**
 > Tu trabajo aquí no es "escribir una query", es "entregar el enlace que la lanza".
 
-Rebusca es un cazador de chollos de Wallapop. El usuario define búsquedas y Rebusca
-reejecuta el buscador de Wallapop, ordena por lo más nuevo/cercano y recuerda qué ya
-vio, para que solo mire lo nuevo.
-
-**La idea entera de este documento es esa: tú traduces lo que el usuario busca a un
-enlace `?q=…` y se lo das listo para pulsar.** Todo lo demás (la gramática, la
-frescura, las exclusiones) son solo piezas para montar mejor ese enlace. Si dudas
-entre explicar y dar el enlace: da el enlace.
+Rebusca es un cazador de chollos de Wallapop pensado para trabajar **contigo, la IA**.
+El ciclo completo es: tú montas el enlace de búsqueda, el usuario lo abre y Rebusca trae
+los anuncios; el usuario te pega el lote de candidatos; tú respondes con un enlace
+`?keep=…` con los que conservarías, y al abrirlo Rebusca guarda esos como favoritos y
+descarta el resto automáticamente. Dos enlaces tuyos cierran el ciclo entero.
 
 - [Abrir Rebusca](https://rebusca.dibogomez.com) — la app.
-- [Ejemplo de enlace montado](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así es como debe ser tu respuesta (ver cómo construirlo más abajo).
+- [Ejemplo de enlace montado](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así debe ser tu respuesta (cómo construirlo, más abajo).
 
 ## Qué hace por el usuario
 
-- Reejecuta sus búsquedas de Wallapop y le muestra los resultados ordenados por
-  cercanía (o por lo más reciente si filtra por fecha).
-- Le deja **triar rápido** cada anuncio (interesa / no interesa) y **recuerda** su
-  decisión, así que en la siguiente pasada solo revisa lo que aún no ha clasificado.
-- Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el
-  buscador nativo de Wallapop no permite.
-- Prepara la lista de "interesantes" **lista para pegar a una IA** que le ayude a
-  decidir qué comprar.
+- Reejecuta sus búsquedas de Wallapop y muestra los resultados ordenados por cercanía
+  (o por lo más reciente si filtra por fecha).
+- **Recuerda** lo ya clasificado: en la siguiente pasada solo aparece lo nuevo.
+- Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el buscador
+  nativo de Wallapop no permite.
+- Prepara el lote de candidatos **listo para pegarte a ti**, y aplica tu veredicto
+  (`?keep=…`) de un toque.
+
+Hay **tres cubos**: *sin ver* (lo que queda por decidir), *rechazado* (fuera, no vuelve
+a molestar) y *favorito* (la lista final de lo que merece la pena). Un anuncio está en
+uno solo.
 
 ## Cómo escribir una búsqueda potente (lo más útil que le puedes enseñar)
 
@@ -54,7 +54,7 @@ irrelevantes (así reduces falsos positivos).
 «último mes». Filtra por antigüedad del anuncio y ordena por lo más reciente. Útil
 para vigilar un tipo de producto y cazar lo que se acaba de publicar antes de que vuele.
 
-## Generar un enlace de búsqueda listo para usar (tu mejor herramienta)
+## Generar un enlace de búsqueda listo para usar (tu primera herramienta)
 
 En vez de explicarle al usuario qué teclear, **dale un enlace que abre Rebusca con la
 búsqueda ya montada** (booleana + frescura + exclusiones). Al abrirlo, la app rellena
@@ -72,11 +72,9 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
   usable. Si hace falta cubrir más, da 2 enlaces en vez de uno gigante.
 - `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para «cualquiera».
 - `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
-  título contenga cualquiera de ellas se descarta automáticamente.
+  título contenga cualquiera de ellas se descarta automáticamente. Mete aquí el ruido
+  típico de la búsqueda (`funda`, `roto`, `piezas`…): es tu primer filtro automático.
 - `title=1` (opcional) — buscar solo en el título (menos falsos positivos).
-- `fav` (opcional) — ids de Wallapop separados por comas. Al abrir el enlace, esos anuncios se
-  marcan como **favoritos** (se sacan de interesados/rechazados). Es tu forma de **ascender de un
-  toque** los anuncios que eliges tras comparar la lista del usuario (ver la sección de abajo).
 
 Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
 buscando solo en el título:
@@ -103,9 +101,8 @@ Estructura tu respuesta así, corta y accionable:
 2. **Una línea de por qué**: qué cubre el `OR`, qué excluye y por qué. Nada más.
 3. **1–2 variantes** si aportan: una más amplia (sin `title`/`excl`) y otra más fina, o con
    otra frescura. Cada una como enlace pulsable.
-4. **El siguiente paso en una frase**: pulsa el enlace, tría en el mazo (derecha = interesa,
-   izquierda = fuera) y cuando tengas tus interesantes usa «copiar para IA» y me los pegas
-   para compararlos.
+4. **El siguiente paso en una frase**: pulsa el enlace y, cuando tengas los resultados,
+   dale a «Copiar para IA» y pégamelos aquí para que los cribe.
 
 Antes de responder, si no sabes marcas/modelos buenos de eso, **piénsalos tú** (los modelos
 de referencia, sinónimos y variantes de nombre) y mételos en el `OR`: ahí está el valor que
@@ -120,26 +117,22 @@ https://rebusca.dibogomez.com/?q=sofa%20OR%20sofá%203%20plazas&since=semana&exc
 ```
 Cubre *sofa/sofá*, filtra 3 plazas, esconde fundas y despieces, última semana.
 Más amplio (sin filtro de título): …/?q=sofa%20OR%20sofá%203%20plazas
-Pulsa, tría en el mazo y pégame tus interesantes para compararlos.
+Pulsa el enlace y pégame luego el lote de candidatos: yo elijo cuáles conservar.
 
-## El flujo de uso (búsqueda → triaje → decisión)
+## El flujo de uso (búsqueda → criba de la IA → favoritos)
 
-1. **Buscar**: escribe la búsqueda + frescura, pulsa buscar. Rebusca trae los anuncios.
-2. **Triar en el mazo** (tipo Tinder, una tarjeta a la vez):
-   - **Deslizar a la derecha = "Interesante"** (me lo guardo para mirar).
-   - **Deslizar a la izquierda = "Rechazado"** (fuera, no vuelve a molestar).
-   - Hay **Deshacer** para la última decisión.
-   Lo clasificado se recuerda: la próxima búsqueda no te vuelve a enseñar lo rechazado.
-3. **Copiar interesantes para IA**: junta todos los "interesantes" en un texto
-   (con precio y coste de envío estimado) y lo copia al portapapeles, ya redactado
-   como petición para que una IA los compare. El usuario lo pega en el chat.
-4. **Favoritos**: tras la criba de la IA, el usuario **asciende los mejores** a
-   "Favoritos" (la lista definitiva de lo que de verdad quiere comprar).
+1. **Buscar**: el usuario abre tu enlace `?q=…`. Rebusca trae los anuncios ("sin ver").
+2. **Filtro automático**: tus `excl`, sus filtros generales (precio máximo, antigüedad)
+   y «lejos sin envío» rechazan la morralla sin que nadie la mire.
+3. **Copiar para IA**: un botón junta lo que queda (con precio final estimado) en un
+   texto ya redactado como petición de criba, y lo copia al portapapeles. El usuario
+   te lo pega. (Opcionalmente puede reducir antes el lote a mano, deslizando tarjetas:
+   derecha = favorito, izquierda = rechazado. Pero el camino principal eres tú.)
+4. **Tu veredicto**: respondes con un enlace `?keep=<ids>` con los que conservarías.
+   Al abrirlo, esos pasan a **favoritos** y **el resto del lote enviado se rechaza
+   automáticamente**. La lista de favoritos queda como la lista final de compra.
 
-Hay **tres cubos exclusivos**: *Interesante* (sí preliminar), *Rechazado* (papelera)
-y *Favorito* (los definitivos). Un anuncio está en uno solo.
-
-## Cuando el usuario te pega su lista de "interesantes"
+## Cuando el usuario te pega su lote de candidatos (tu segunda herramienta)
 
 Ese es el momento en que más le ayudas. Recibirás una lista tipo:
 
@@ -149,12 +142,19 @@ Ese es el momento en que más le ayudas. Recibirás una lista tipo:
 2. ...
 ```
 
-Cada línea empieza con el **id de Wallapop** entre `[#…]`. El texto ya trae instrucciones
-(compáralos, haz un TOP 3, menciones y descartes, di si regatear y a qué precio, y qué
-preguntar al vendedor) y te pide que **empieces tu respuesta con un enlace**
-`https://rebusca.dibogomez.com/?fav=<id,id,…>` con los ids de los que ascenderías a favoritos,
-**antes de cualquier análisis**: al abrirlo, el usuario los marca como favoritos de un toque.
-**Ponlo siempre lo primero.** Para hacerlo bien:
+Cada ficha empieza con el **id de Wallapop** entre `[#…]`. El texto ya trae las
+instrucciones; lo esencial:
+
+- **Empieza tu respuesta, antes de cualquier análisis, con un único enlace**
+  `https://rebusca.dibogomez.com/?keep=<id,id,…>` con los ids de los anuncios que
+  conservarías, separados por comas y **sin la almohadilla**.
+- **Al abrir ese enlace, los conservados pasan a favoritos y el resto del lote se
+  rechaza automáticamente.** No hay segunda pasada: lo que no incluyas, desaparece.
+  Sé selectivo, pero no dejes fuera un buen chollo por acortar la lista.
+- Si nada merece la pena, dilo y da igualmente el enlace `?keep=` (vacío): así el
+  usuario limpia el lote entero de un toque.
+
+Para elegir bien:
 
 - **Identifica el modelo/versión exacto** por el título+descripción; una palabra
   cambia el valor (una edición, un tamaño, "para piezas").
@@ -165,9 +165,17 @@ preguntar al vendedor) y te pide que **empieces tu respuesta con un enlace**
   en persona. Anúncialas.
 - Sé concreto con el **regateo**: propón un precio con su razón, no "intenta negociar".
 
-En vez de pegar texto, el usuario puede **arrastrarte un PDF** (botón «PDF para IA» en Favoritos)
-con la misma ficha de cada anuncio **más su foto**. Trae las mismas instrucciones; aprovecha las
-fotos para juzgar estado/modelo. Igual que antes: empieza tu respuesta con el enlace `?fav=<ids>` de tus elegidos.
+Después del enlace, razona la criba: por cada conservado, qué es exactamente, por qué
+compensa a ese precio, si conviene regatear (y a cuánto) y qué preguntar al vendedor;
+por cada descartado, el motivo en una línea.
+
+En vez de pegar texto, el usuario puede **arrastrarte un PDF** (botón «PDF para IA» en
+Favoritos) con la misma ficha de cada anuncio **más su foto**. Trae las mismas
+instrucciones; aprovecha las fotos para juzgar estado/modelo. Igual que antes: empieza
+tu respuesta con el enlace `?keep=<ids>` de tus elegidos.
+
+> Compatibilidad: el parámetro antiguo `?fav=<ids>` sigue funcionando, pero solo
+> asciende a favoritos (no rechaza el resto). Usa siempre `?keep=`.
 
 ## Reducir ruido (para búsquedas que traen mucha morralla)
 
@@ -180,6 +188,8 @@ Sugiere estas herramientas cuando una búsqueda devuelve demasiado irrelevante:
   repiten, revendedores).
 - **Ocultar "lejos sin envío"**: descarta lo que está a más de X km y no manda por
   correo (no vas a ir a por ello).
+- **Rechazar por criterio**: precio máximo y antigüedad máxima, aplicados a todo el
+  mazo de un toque.
 
 ## Búsquedas guardadas
 
@@ -198,6 +208,6 @@ al abrirla, Rebusca la re-scrapea. Recomiéndale guardar las vigilancias recurre
 
 ---
 
-**Recuerda la REGLA #1:** tu respuesta a "dame una búsqueda para X" es un **enlace
-pulsable** `https://rebusca.dibogomez.com/?q=…`, nunca un bloque de código con la query.
-Si acabas de escribir la búsqueda en un bloque de código, conviértela en enlace antes de responder.
+**Recuerda las dos reglas:** a "dame una búsqueda para X" respondes con un **enlace
+pulsable** `?q=…` (nunca un bloque de código), y a un lote de candidatos respondes
+**empezando por el enlace** `?keep=<ids>` con los que conservarías.

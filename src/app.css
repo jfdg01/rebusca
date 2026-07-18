@@ -290,7 +290,7 @@
   .list-head-bar .note .help-pop { position: absolute; left: 0; top: 2rem; right: auto;
     width: min(19rem, 82vw); z-index: 20; }
   /* "Copiar para IA" empujado al extremo derecho */
-  .list-head-bar #exportInterested { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
+  .list-head-bar #exportFav { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   /* pills de orden: una sola fila, segmentadas a ancho equitativo (caben las 4 en 320px) */
@@ -352,11 +352,6 @@
   .btn.quitar { color: var(--ink-soft); }
   .btn.quitar:hover { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
-  /* Favorito = ascender de interesantes: ámbar relleno */
-  .btn.destacar { background: var(--amber); border-color: var(--amber); color: #fff; box-shadow: 0 2px 6px rgba(217,154,0,.38); }
-  .btn.destacar:hover { background: var(--amber-ink); border-color: var(--amber-ink); box-shadow: 0 3px 9px rgba(217,154,0,.44); }
-  .btn.destacar .icon { width: 1em; height: 1em; fill: currentColor; stroke: none; }
-
   /* ── tarjeta de lista: la foto es el escaparate; el precio, su etiqueta ──
      media a sangre (ancho card + los dos paddings), la foto absoluta debajo de los overlays */
   .li-media { position: relative; margin: -1.2rem -1.2rem .8rem; aspect-ratio: 16/9;
@@ -447,12 +442,16 @@
   .help-pop code { font: 11px var(--mono); background: var(--surface-2);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
 
-  #swipeFab, #copyInterested { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
+  #copyDeck, #swipeFab, #copyFav { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover, #copyInterested:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
-  #swipeFab:active, #copyInterested:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
-  #copyInterested { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
+  #copyDeck:hover, #copyFav:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
+  #copyDeck:active, #copyFav:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
+  #copyFav { font-size: 1.05rem; }   /* etiqueta más larga que COPIAR PARA IA */
+  /* swipear a mano es el plan B: botón secundario (borde, sin relleno) bajo el de la IA */
+  #swipeFab { background: transparent; border-color: var(--pine); color: var(--pine-ink);
+    box-shadow: none; font-size: 1.05rem; margin-top: .6rem; }
+  #swipeFab:hover { background: rgba(16,168,150,.08); }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;

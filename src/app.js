@@ -30,16 +30,16 @@ function parseCSV(text) {
 }
 // ── estado persistente: localStorage (offline) + servidor (compartido) ──
 const load = (k) => new Set(JSON.parse(localStorage.getItem(k) || "[]"));
-const BUCKET_NAMES = ["rejected", "interested", "favorite"]; // los 3 "ficheros" de cada cajón
+const BUCKET_NAMES = ["rejected", "favorite"]; // los "ficheros" de cada cajón (sin ver = el resto)
 const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
-// cache de filas por id (objeto {columna:valor}). Permite ver interesantes/favoritos aunque su
+// cache de filas por id (objeto {columna:valor}). Permite ver favoritos aunque su
 // CSV no esté cargado; guarda _csv (cajón de origen) para migrar el modelo global viejo.
 let rowCache = {};
 try { rowCache = JSON.parse(localStorage.getItem("wp_rows") || "{}"); } catch {}
 // ── cubos POR CAJÓN (búsqueda): cada csv tiene sus propios ficheros, sin fugas entre cajones.
-// buckets[nombre] = {csv: Set<id>}. `rejected/interested/favorite` apuntan al cajón activo (curCsv)
+// buckets[nombre] = {csv: Set<id>}. `rejected/favorite` apuntan al cajón activo (curCsv)
 // vía pointBuckets(), así el resto del código sigue usando `.has/.add/.delete` sin cambios.
-const buckets = { rejected: {}, interested: {}, favorite: {} };
+const buckets = { rejected: {}, favorite: {} };
 // Array = formato global viejo → reparte por origen (rowCache._csv). {csv:[ids]} = ya por cajón.
 const toMap = (val) => {
   const map = {};
@@ -48,12 +48,15 @@ const toMap = (val) => {
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
+const mergeInto = (into, from) => { for (const c in from) { const s = into[c] ||= new Set(); from[c].forEach((id) => s.add(id)); } };
 for (const n of BUCKET_NAMES) buckets[n] = toMap(JSON.parse(localStorage.getItem("wp_" + n) || "null"));
-let rejected = new Set(), interested = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
-function pointBuckets(csv) { // reapunta las 3 vars al cajón `csv` (créalo vacío si no existe)
+// migración: el cubo "interesantes" desaparece; sus ids ascienden a favoritos (y la clave se retira)
+mergeInto(buckets.favorite, toMap(JSON.parse(localStorage.getItem("wp_interested") || "null")));
+localStorage.removeItem("wp_interested");
+let rejected = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
+function pointBuckets(csv) { // reapunta las vars al cajón `csv` (créalo vacío si no existe)
   const c = csv || "";
   rejected = buckets.rejected[c] ||= new Set();
-  interested = buckets.interested[c] ||= new Set();
   favorite = buckets.favorite[c] ||= new Set();
 }
 const save = (k, _set) => {
@@ -61,13 +64,28 @@ const save = (k, _set) => {
   else localStorage.setItem(k, JSON.stringify([..._set]));
   pushEstado();
 };
-const aiseen = load("wp_aiseen"); // ids ya copiados a la IA: "copiar para IA" solo manda los nuevos
+// último lote copiado/exportado a la IA: {csv, ids}. Su respuesta es un enlace ?keep=<ids>:
+// esos ids se conservan como favoritos y el RESTO del lote se rechaza de una vez.
+const aisent = () => { try { return JSON.parse(localStorage.getItem("wp_aisent") || "null"); } catch { return null; } };
+function setAisent(rows) {
+  // recuerda el lote y cachea sus filas: el veredicto puede llegar en otra sesión, sin CSV cargado
+  const ids = [];
+  for (const r of rows) {
+    const id = col(r, "id");
+    if (!id) continue;
+    ids.push(id);
+    rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" };
+  }
+  localStorage.setItem("wp_aisent", JSON.stringify({ csv: curCsv || "", ids }));
+  localStorage.setItem("wp_rows", JSON.stringify(rowCache));
+}
 const bucketed = (id) => BUCKET_NAMES.some((n) => Object.values(buckets[n]).some((s) => s.has(id))); // en algún cajón
 const rowToObj = (r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
 const objToRow = (o) => headers.map((h) => o[h] ?? ""); // reconstruye fila posicional con el esquema actual
 function saveRows() {
   for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" }; } // refresca con lo cargado; recuerda de qué búsqueda salió
-  for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cajón
+  const sentIds = new Set(aisent()?.ids || []); // el lote enviado a la IA se retiene hasta su veredicto
+  for (const id in rowCache) if (!bucketed(id) && !sentIds.has(id)) delete rowCache[id]; // poda el resto
   localStorage.setItem("wp_rows", JSON.stringify(rowCache));
 }
 // filas del cubo activo = las de `data` + las que solo viven en cache (item vendido/expirado)
@@ -137,7 +155,6 @@ function pushEstado() {
     estadoKey(),
     JSON.stringify({
       rejected: fromMap(buckets.rejected),
-      interested: fromMap(buckets.interested),
       favorite: fromMap(buckets.favorite),
       blockSel: [...blockSel],
       excl: exclMap,
@@ -158,14 +175,14 @@ function hydrateEstado() {
     {
       // ponytail: doble bloque solo para conservar la indentación del cuerpo original intacta
       for (const n of BUCKET_NAMES) buckets[n] = toMap(e[n]); // reparte por cajón (o migra el global viejo)
-      // cubos exclusivos POR CAJÓN: papelera > favoritos > interesantes.
-      const cajones = new Set([...Object.keys(buckets.rejected), ...Object.keys(buckets.favorite), ...Object.keys(buckets.interested)]);
+      mergeInto(buckets.favorite, toMap(e.interested)); // migración: interesantes viejos ascienden a favoritos
+      // cubos exclusivos POR CAJÓN: papelera > favoritos.
+      const cajones = new Set([...Object.keys(buckets.rejected), ...Object.keys(buckets.favorite)]);
       for (const c of cajones) {
-        const rej = buckets.rejected[c], fav = buckets.favorite[c], intr = buckets.interested[c];
+        const rej = buckets.rejected[c], fav = buckets.favorite[c];
         if (fav) for (const k of fav) if (rej?.has(k)) fav.delete(k);
-        if (intr) for (const k of intr) if (rej?.has(k) || fav?.has(k)) intr.delete(k);
       }
-      pointBuckets(curCsv); // reapunta rejected/interested/favorite al cajón activo
+      pointBuckets(curCsv); // reapunta rejected/favorite al cajón activo
       blockSel.clear();
       (e.blockSel || []).forEach((x) => blockSel.add(x));
       localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
@@ -202,13 +219,13 @@ function hydrateEstado() {
 
 const HIDE = new Set(["id", "cp", "url", "vendedor", "imagen", "imagenes"]); // no se muestran como columna (url va en el boton Ver; vendedor/imagen(es) se usan en la tarjeta/dossier)
 // esquema fijo del scraper (== FIELDS de scrape.js). Sirve de headers por defecto para poder
-// renderizar favoritos/interesantes desde el cache aunque no se haya scrapeado nada esta sesión.
+// renderizar favoritos desde el cache aunque no se haya scrapeado nada esta sesión.
 const DEFAULT_HEADERS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
   "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
 let headers = DEFAULT_HEADERS.slice(),
   data = [],
   sortKeys = [],
-  view = ""; // view: '' mazo | 'rejected' papelera | 'interested' interesantes | 'favorite' favoritos
+  view = ""; // view: '' mazo | 'rejected' papelera | 'favorite' favoritos
 const rejectedSel = new Set(); // selección en masa de la papelera (keys); solo viva en view==='rejected'
 let iId = headers.indexOf("id"),
   iUrl = headers.indexOf("url"),
@@ -390,8 +407,8 @@ function fillCard(el, r) {
   // cuándo se clasificó: línea sutil encima del título (solo papelera/destacados con marca de tiempo)
   if (view !== "" && stamp[key(r)])
     add(
-      "li-when" + (view === "interested" || view === "favorite" ? " interested" : ""),
-      `${view === "favorite" ? "Favorito" : view === "interested" ? "Interesante" : "Rechazado"} ${ago(stamp[key(r)])}`,
+      "li-when" + (view === "favorite" ? " interested" : ""),
+      `${view === "favorite" ? "Favorito" : "Rechazado"} ${ago(stamp[key(r)])}`,
     );
 
   add("li-title", col(r, "titulo"));
@@ -502,7 +519,7 @@ let listSort = "",
   listSortDir = -1; // por defecto: recién añadido arriba
 function sortList(rows) {
   if (!listSort) {
-    const order = [...(view === "rejected" ? rejected : view === "favorite" ? favorite : interested)]; // orden de llegada a la lista
+    const order = [...(view === "rejected" ? rejected : favorite)]; // orden de llegada a la lista
     const pos = new Map(order.map((k, i) => [k, i]));
     rows.sort(
       (a, b) =>
@@ -519,14 +536,14 @@ function sortList(rows) {
 function deckRows() {
   return data.filter((r) => {
     const k = key(r);
-    return !interested.has(k) && !rejected.has(k) && !favorite.has(k) && !isExcluded(r);
+    return !rejected.has(k) && !favorite.has(k) && !isExcluded(r);
   });
 }
 function filteredRows() {
-  const listView = view === "rejected" || view === "interested" || view === "favorite";
+  const listView = view === "rejected" || view === "favorite";
   if (listView) {
     const q = norm(listQ); // el filtro solo aplica en vista de lista
-    const set = view === "rejected" ? rejected : view === "interested" ? interested : favorite;
+    const set = view === "rejected" ? rejected : favorite;
     const rows = bucketRows(set).filter((r) => {
       // "#123" fuerza id; cualquier otra cosa casa título O id (id sin # también vale)
       if (q) {
@@ -560,7 +577,7 @@ function enforceLejos() {
   let changed = false;
   for (const r of data) {
     const k = key(r);
-    if (!interested.has(k) && !rejected.has(k) && !favorite.has(k) && isLejos(r)) {
+    if (!rejected.has(k) && !favorite.has(k) && isLejos(r)) {
       rejected.add(k);
       stampNow(k);
       changed = true;
@@ -577,7 +594,7 @@ function render() {
   const frag = document.createDocumentFragment();
   for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
   tbody.append(frag);
-  const listView = view === "rejected" || view === "interested" || view === "favorite";
+  const listView = view === "rejected" || view === "favorite";
   return finishRender(rows, listView);
 }
 function rowTr(r) {
@@ -616,25 +633,15 @@ function rowTr(r) {
     quit.onclick = () =>
       view === "rejected"
         ? restore(k)
-        : view === "favorite"
-          ? unfavorite(k) // favoritos → interesantes
-          : reject(k, r[iTitulo]);
-    if (view === "interested") {
-      // en interesantes: botón para ascender a favoritos (tras el veredicto de la IA)
-      const pr = document.createElement("button");
-      pr.className = "btn destacar";
-      pr.innerHTML = ic("favorite") + "Favorito";
-      pr.title = "pasar a favoritos";
-      pr.onclick = () => toFavorite(k);
-      act.append(ver, pr, quit);
-    } else act.append(ver, quit);
+        : reject(k, r[iTitulo]); // en favoritos, quitar = rechazar (los cubos son sin ver / rechazados / favoritos)
+    act.append(ver, quit);
     tr.append(act);
 
     tr.append(listBody(r));
     return tr;
 }
 function finishRender(rows, listView) {
-  $("table").hidden = !(listView && headers.length); // la tabla es la vista de lista editable (interesantes/favoritos/papelera)
+  $("table").hidden = !(listView && headers.length); // la tabla es la vista de lista editable (favoritos/papelera)
   // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
   document.querySelector("header").classList.toggle("pinned", listView); // fija la barra solo en modo lista (ver CSS)
   $(".brand").hidden = listView;
@@ -657,35 +664,32 @@ function finishRender(rows, listView) {
     $("#listTitle").textContent =
       view === "favorite"
         ? "Favoritos"
-        : view === "interested"
-          ? "Interesantes"
-          : listSeller
-            ? "Rechazados del vendedor"
-            : "Rechazados";
-  // copiar para la IA + precio exacto: solo sobre interesantes (el paso previo a decidir favoritos)
-  $("#exportInterested").hidden = !(view === "interested" && rows.length);
+        : listSeller
+          ? "Rechazados del vendedor"
+          : "Rechazados";
+  // copiar/PDF para la IA: sobre los favoritos (su veredicto vuelve como enlace ?keep=…)
+  $("#exportFav").hidden = !(view === "favorite" && rows.length);
   $("#dossierFav").hidden = !(view === "favorite" && rows.length);
-  const interestedConEnvio =
-    view === "interested" && rows.some((r) => col(r, "envio") === "True");
-  $("#priceNote").hidden = !interestedConEnvio; // la nota explica ese precio final: mismo criterio que el botón
+  const favConEnvio =
+    view === "favorite" && rows.some((r) => col(r, "envio") === "True");
+  $("#priceNote").hidden = !favConEnvio; // la nota explica ese precio final: mismo criterio que el botón
   const hasRows = headers.length && rows.length;
+  // en el mazo mandan dos botones: copiar el mazo a la IA (primario) y el swipe manual (secundario)
+  $("#copyDeck").hidden = !hasRows || listView;
   $("#swipeFab").hidden = !hasRows || listView; // en modo lista se edita en la tabla, no se hace swipe
-  if (!listView && hasRows) $("#swipeFab").textContent = "REBUSCAR";
-  const interestedN = data.filter((r) => interested.has(key(r))).length;
-  const showCopy = !listView && headers.length && !rows.length && interestedN; // ya rebuscado todo y hay destacados: ofrece exportarlos a una IA
-  $("#copyInterested").hidden = !showCopy;
-  $("#empty").hidden = !!hasRows || showCopy; // el botón ocupa el hueco de REBUSCAR (mismo sitio); sin "Nada que revisar" que lo empuje abajo
+  const favN = data.filter((r) => favorite.has(key(r))).length;
+  const showCopy = !listView && headers.length && !rows.length && favN; // mazo agotado y hay favoritos: ofrece mandarlos a la IA
+  $("#copyFav").hidden = !showCopy;
+  $("#empty").hidden = !!hasRows || showCopy; // el botón ocupa el hueco del mazo (mismo sitio); sin "Nada que revisar" que lo empuje abajo
   if (headers.length && !rows.length)
     $("#empty").textContent =
       listView && listQ
         ? "Nada coincide con el filtro."
         : view === "rejected"
           ? "No hay rechazados."
-          : view === "interested"
-            ? "Sin interesantes todavía."
-            : view === "favorite"
-              ? "Sin favoritos todavía."
-              : "Nada que revisar.";
+          : view === "favorite"
+            ? "Sin favoritos todavía."
+            : "Nada que revisar.";
   paintStat();
   paintSellerBanner();
   paintListSort();
@@ -794,9 +798,7 @@ function paintStat() {
     $("#stat").innerHTML = "";
     return;
   }
-  const clasif = (r) =>
-    interested.has(key(r)) || rejected.has(key(r)) || favorite.has(key(r)); // ya en algún cubo
-  const interestedRows = data.filter((r) => interested.has(key(r))).length;
+  const clasif = (r) => rejected.has(key(r)) || favorite.has(key(r)); // ya en algún cubo
   const favoriteCount = data.filter((r) => favorite.has(key(r))).length;
   const disc = data.filter((r) => rejected.has(key(r))).length;
   const hasExcl = exclTerms().length || catExclTerms().length; // ad-hoc: palabra en título o categoría
@@ -806,7 +808,7 @@ function paintStat() {
   const lejos = data.filter(
     (r) => !clasif(r) && !isExcluded(r) && isLejos(r),
   ).length;
-  const sinVer = data.length - interestedRows - favoriteCount - disc - vetados; // "vistos" = interestedRows + favoriteCount + disc; vetados salen aparte. Los lejos SÍ cuentan (están en el mazo); su línea es solo atajo para rechazarlos en bloque
+  const sinVer = data.length - favoriteCount - disc - vetados; // "vistos" = favoriteCount + disc; vetados salen aparte. Los lejos SÍ cuentan (están en el mazo); su línea es solo atajo para rechazarlos en bloque
   $("#stat").innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados
@@ -818,11 +820,6 @@ function paintStat() {
     `<span><b>${disc}</b> rechazados ` +
     (disc || view === "rejected"
       ? `· <span class="link" id="toggleTrash">${view === "rejected" ? "volver" : "ver rechazados"}</span>`
-      : "") +
-    `</span>` +
-    `<span><b>${interestedRows}</b> interesantes ` +
-    (interestedRows || view === "interested"
-      ? `· <span class="link" id="toggleInterested">${view === "interested" ? "volver" : "ver interesantes"}</span>`
       : "") +
     `</span>` +
     `<span><b>${favoriteCount}</b> favoritos ` +
@@ -842,8 +839,6 @@ function paintStat() {
   };
   const t = $("#toggleTrash");
   if (t) t.onclick = toggle("rejected");
-  const f = $("#toggleInterested");
-  if (f) f.onclick = toggle("interested");
   const st = $("#toggleFavorite");
   if (st) st.onclick = toggle("favorite");
   const el = $("#rejectedLejos");
@@ -859,7 +854,7 @@ function rejectedLejos() {
   const ks = data
     .filter(
       (r) =>
-        !interested.has(key(r)) && !rejected.has(key(r)) && !favorite.has(key(r)) && isLejos(r),
+        !rejected.has(key(r)) && !favorite.has(key(r)) && isLejos(r),
     )
     .map(key);
   if (!ks.length) return;
@@ -883,7 +878,6 @@ function rejectedExcluded() {
   const ks = data
     .filter(
       (r) =>
-        !interested.has(key(r)) &&
         !rejected.has(key(r)) &&
         !favorite.has(key(r)) &&
         isExcluded(r),
@@ -1046,7 +1040,6 @@ function enforceBlocks() {
     if (!s || !blockSel.has(s)) continue;
     const k = key(r);
     if (!rejected.has(k)) {
-      interested.delete(k);
       favorite.delete(k);
       rejected.add(k);
       stampNow(k);
@@ -1054,7 +1047,6 @@ function enforceBlocks() {
     }
   }
   if (changed) {
-    save("wp_interested", interested);
     save("wp_favorite", favorite);
     save("wp_rejected", rejected);
   }
@@ -1069,7 +1061,7 @@ function sellerCandidates() {
     if (!s) continue;
     const k = key(r);
     if (rejected.has(k)) rej[s] = (rej[s] || 0) + 1;
-    else if (!interested.has(k) && !isExcluded(r) && !isLejos(r))
+    else if (!favorite.has(k) && !isExcluded(r) && !isLejos(r))
       (fresh[s] = fresh[s] || []).push(r);
   }
   return Object.keys(rej)
@@ -1086,12 +1078,10 @@ function blockSeller(s) {
   saveBlockSel();
   const wereFavorite = newly.filter((k) => favorite.has(k)); // para restaurar su cubo al deshacer
   newly.forEach((k) => {
-    interested.delete(k);
     favorite.delete(k);
     rejected.add(k);
     stampNow(k);
   });
-  save("wp_interested", interested);
   save("wp_favorite", favorite);
   save("wp_rejected", rejected);
   render();
@@ -1166,20 +1156,20 @@ function paintSellerBanner() {
 // ── descartar / restaurar con deshacer claro ──
 let snackTimer;
 function reject(k, titulo) {
-  const wasInterested = interested.has(k); // al descartar sale de interesantes (cubos exclusivos)
-  interested.delete(k);
+  const wasFavorite = favorite.has(k); // al rechazar sale de favoritos (cubos exclusivos)
+  favorite.delete(k);
   rejected.add(k);
   stampNow(k);
-  save("wp_interested", interested);
+  save("wp_favorite", favorite);
   save("wp_rejected", rejected);
   render();
   snack(`Rechazado: ${(titulo || "").slice(0, 40)}`, () => {
     rejected.delete(k);
-    if (wasInterested) {
-      interested.add(k);
+    if (wasFavorite) {
+      favorite.add(k);
       stampNow(k);
     } else unstamp(k);
-    save("wp_interested", interested);
+    save("wp_favorite", favorite);
     save("wp_rejected", rejected);
     render();
   });
@@ -1196,41 +1186,6 @@ function restore(k) {
     stampNow(k);
     reblock(unblocked);
     save("wp_rejected", rejected);
-    render();
-  });
-}
-// ── interesantes ⇄ favoritos ──
-function toFavorite(k) {
-  // interesantes → favoritos (el veredicto de la IA)
-  interested.delete(k);
-  favorite.add(k);
-  stampNow(k);
-  save("wp_interested", interested);
-  save("wp_favorite", favorite);
-  render();
-  snack("A favoritos", () => {
-    favorite.delete(k);
-    interested.add(k);
-    stampNow(k);
-    save("wp_interested", interested);
-    save("wp_favorite", favorite);
-    render();
-  });
-}
-function unfavorite(k) {
-  // favoritos → interesantes (deshacer el ascenso)
-  favorite.delete(k);
-  interested.add(k);
-  stampNow(k);
-  save("wp_interested", interested);
-  save("wp_favorite", favorite);
-  render();
-  snack("De vuelta a interesantes", () => {
-    interested.delete(k);
-    favorite.add(k);
-    stampNow(k);
-    save("wp_interested", interested);
-    save("wp_favorite", favorite);
     render();
   });
 }
@@ -1539,7 +1494,8 @@ function setLoading(on, n) {
   } // render() recoloca #empty/botón al cargar el CSV
   $("#empty").hidden = true;
   $("#swipeFab").hidden = true;
-  $("#copyInterested").hidden = true;
+  $("#copyDeck").hidden = true;
+  $("#copyFav").hidden = true;
   box.hidden = false;
   $("#loadingCount").textContent = n ? `${n} encontrados` : "Buscando…";
 }
@@ -1817,36 +1773,48 @@ lejosKmEl.onchange = () => {
   localStorage.setItem("wp_lejoskm", lejosKm);
   render();
 };
-// deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1&fav=<id,id>
+// deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1&keep=<id,id>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:
 // booleana (OR/grupos/comillas van tal cual en q) + exclusiones. Devuelve true si disparó.
-// ?fav=<ids> marca esos anuncios como FAVORITOS en el cajón de ?q= (o el activo si no hay q):
-// así la IA, tras comparar la lista de esa búsqueda, asciende sus elegidos de un toque.
+// ?keep=<ids> es el veredicto de la IA sobre el último lote copiado (wp_aisent): esos ids
+// se conservan como FAVORITOS y el resto del lote se rechaza automáticamente.
+// ?fav=<ids> queda como alias legado que solo asciende (no rechaza nada).
 function fromURL() {
   const p = new URLSearchParams(location.search);
-  const favIds = [...new Set((p.get("fav") || "").split(",").map((s) => s.trim()).filter(Boolean))];
+  const isKeep = p.has("keep");
+  const keepIds = [...new Set((p.get("keep") || p.get("fav") || "").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean))];
   const q = (p.get("q") || "").trim();
   const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
-  if (favIds.length) {
-    // cubos POR CAJÓN: cada fav va al cajón de ?q= o, sin q, al de ORIGEN del item (rowCache._csv).
-    // Meterlos en el activo (o "" al boot, curCsv=null) los perdía al abrir su búsqueda real.
-    for (const id of favIds) {
+  let sentCsv = "", outN = 0;
+  if (keepIds.length || isKeep) {
+    // cubos POR CAJÓN: cada conservado va al cajón de ?q= o, sin q, al de ORIGEN del item
+    // (rowCache._csv). Meterlos en el activo (o "" al boot, curCsv=null) los perdía después.
+    for (const id of keepIds) {
       pointBuckets(q ? csvNameOf(q, since) : (rowCache[id]?._csv || curCsv || ""));
-      interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id);
+      rejected.delete(id); favorite.add(id); stampNow(id);
     }
-    save("wp_interested", interested); save("wp_rejected", rejected); save("wp_favorite", favorite);
+    const sent = isKeep ? aisent() : null; // ?keep = veredicto sobre el último lote enviado
+    if (sent) {
+      sentCsv = sent.csv || "";
+      const keep = new Set(keepIds);
+      pointBuckets(sentCsv);
+      for (const id of sent.ids)
+        if (!keep.has(id)) { favorite.delete(id); rejected.add(id); stampNow(id); outN++; }
+      localStorage.removeItem("wp_aisent"); // veredicto consumido: el lote queda resuelto
+    }
+    save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
   if (!q) {
-    if (favIds.length) {
-      curCsv = rowCache[favIds[0]]?._csv || curCsv || ""; // muestra el cajón de origen de los favs
+    if (keepIds.length || isKeep) {
+      curCsv = rowCache[keepIds[0]]?._csv || sentCsv || curCsv || ""; // cajón de origen del lote
       pointBuckets(curCsv);
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
       view = "favorite"; // muéstralos ya: se pintan desde el cache, sin re-scrapear
       render();
-      snack(`${favIds.length} añadidos a favoritos`, null);
+      snack(outN ? `${keepIds.length} favoritos · ${outN} rechazados` : `${keepIds.length} añadidos a favoritos`, null);
       return true; // ya hay algo en pantalla; no dispares restoreLastCsv()
     }
-    return false; // sin fav ni q: deja que restoreLastCsv() cargue la última vista
+    return false; // sin keep/fav ni q: deja que restoreLastCsv() cargue la última vista
   }
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
   if (words.length) { exclMap[csvNameOf(q, since)] = words; saveExcl(); } // se aplican al renderizar
@@ -1867,7 +1835,7 @@ queueMicrotask(() => {
   if (!fromURL()) restoreLastCsv(); // ?q=… dispara su búsqueda; si no, la última vista
 });
 
-// ── modo swipe (tinder): una tarjeta a la vez; arrastra ← descartar / → interesa ──
+// ── modo swipe (tinder): una tarjeta a la vez; arrastra ← rechazar / → favorito ──
 const swipeView = $("#swipeView"),
   swipeStage = $("#swipeStage"),
   swipeCount = $("#swipeCount");
@@ -2021,21 +1989,21 @@ function fling(dir) {
   undoStack.push({
     di,
     k,
-    wasInterested: interested.has(k),
+    wasFavorite: favorite.has(k),
     wasRejected: rejected.has(k),
     wasStamp: stamp[k],
   }); // estado previo para deshacer
   if (dir > 0) {
-    interested.add(k);
+    favorite.add(k);
     rejected.delete(k);
     likeStamp.style.opacity = 1;
   } else {
     rejected.add(k);
-    interested.delete(k);
+    favorite.delete(k);
     nopeStamp.style.opacity = 1;
   } // clasifica en un cubo exclusivo; sello a tope
   stampNow(k);
-  save("wp_interested", interested);
+  save("wp_favorite", favorite);
   save("wp_rejected", rejected);
   card.style.transition = "transform .25s ease, opacity .25s ease";
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`;
@@ -2050,8 +2018,8 @@ function fling(dir) {
 function swUndo() {
   const h = undoStack.pop();
   if (!h) return;
-  if (h.wasInterested) interested.add(h.k);
-  else interested.delete(h.k);
+  if (h.wasFavorite) favorite.add(h.k);
+  else favorite.delete(h.k);
   if (h.wasRejected) rejected.add(h.k);
   else rejected.delete(h.k);
   if (h.wasStamp === undefined) unstamp(h.k);
@@ -2059,7 +2027,7 @@ function swUndo() {
     stamp[h.k] = h.wasStamp;
     localStorage.setItem("wp_stamp", JSON.stringify(stamp));
   }
-  save("wp_interested", interested);
+  save("wp_favorite", favorite);
   save("wp_rejected", rejected);
   di = h.di;
   nextCard(); // vuelve a la tarjeta que se había swipeado
@@ -2094,7 +2062,6 @@ $("#listBack").onclick = (e) => {
   } // volver justo a donde vino: swipe + ajustes abiertos (frena el "cerrar al tocar fuera")
   render();
 };
-$("#exportInterested").onclick = (e) => copyInterested(e.currentTarget); // misma ficha para la IA que el botón del mazo vacío
 // precio a copiar/mostrar: final estimado al comprador si lleva envío (con '(aprox)' si no hay peso real), si no el del anuncio
 function priceLabel(r) {
   const precio = col(r, "precio");
@@ -2116,8 +2083,8 @@ function pricePair(r) {
 }
 // frase que explica a la IA de dónde sale "precio para mí" (envío + comisión estimados)
 const PRICE_NOTE =
-  "El «precio para mí» es una estimación del coste final para el comprador " +
-  "(incluye el envío y la comisión de protección de Wallapop); el «precio anunciado» es el que pide el vendedor. ";
+  "En cada anuncio, el «precio para mí» estima el coste total que acabaría pagando " +
+  "(artículo + envío + comisión de protección de Wallapop) y el «precio anunciado» es el que pide el vendedor. ";
 // quita emojis (y sus modificadores/uniones) del texto a copiar: fichas limpias para la IA y notas
 const EMOJI_RE =
   /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u200D\uFE0F\u20E3]/gu;
@@ -2135,20 +2102,20 @@ console.assert(
 
 // instrucción de cabecera para la IA (la misma para el texto de "copiar" y para el PDF dossier)
 const promptIntro = () =>
-  "Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. " +
+  "Estoy buscando en Wallapop y he reunido los candidatos de abajo. Ayúdame a decidir cuáles merecen la pena de verdad. " +
   PRICE_NOTE +
-  "EMPIEZA tu respuesta, antes de cualquier análisis, con un enlace https://rebusca.dibogomez.com/?fav=<ids> " +
-  "con los ids ([#...]) de los que ascenderías a favoritos (TOP 3 y menciones que valgan la pena), separados por comas; " +
-  "al abrirlo los marco como favoritos de un toque. Ese enlace va SIEMPRE lo primero.\n\n" +
-  "Luego investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
-  "y clasifícalos en tres listas:\n" +
-  "a) TOP 3: los tres mejores calidad/precio, ordenados del mejor al tercero, cada uno con el porqué en detalle.\n" +
-  "b) MENCIONES: los que no llegan al top 3 pero siguen mereciendo la pena, con una línea de por qué destacan.\n" +
-  "c) DESCARTES: los que descartarías, con el motivo breve.\n" +
-  "Para los del TOP 3 y las MENCIONES, dime además si debería intentar regatear el precio y, si es así, a qué precio propondrías, " +
-  "y si lo ves necesario dime qué preguntar al vendedor:";
-// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
-function interestedPrompt(rows) {
+  "\n\nEmpieza tu respuesta, antes de cualquier análisis, con un único enlace con este formato:\n" +
+  "https://rebusca.dibogomez.com/?keep=<ids>\n" +
+  "sustituyendo <ids> por los ids de los anuncios que conservarías (el número entre [#…] de cada ficha), " +
+  "separados por comas y sin la almohadilla. Al abrir ese enlace, esos anuncios se guardan como favoritos " +
+  "y el resto del lote se descarta automáticamente, así que sé selectivo: incluye solo los que de verdad recomendarías comprar.\n\n" +
+  "Después del enlace, razona tu criba:\n" +
+  "— De cada conservado: qué es exactamente (modelo y versión), por qué compensa a ese precio frente a su valor típico " +
+  "nuevo y de segunda mano, si conviene regatear (y con qué contraoferta concreta) y qué preguntarle al vendedor antes de comprar.\n" +
+  "— De cada descartado: el motivo, en una línea.\n\n" +
+  "Los candidatos:";
+// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada anuncio (precio final estimado)
+function aiPrompt(rows) {
   const items = rows
     .map((r, i) => {
       const lines = [
@@ -2175,25 +2142,18 @@ function copyAsync(makeText) {
     .then(makeText)
     .then((t) => navigator.clipboard.writeText(t)); // fallback sin ClipboardItem
 }
-// copiar interesantes para una IA (precio exacto por peso real). Por defecto copia SOLO los NUEVOS
-// (no enviados aún): tras la criba de la IA, los ya revisados que quedan en interesantes son ruido.
-// all=true copia todos (fallback desde el menú ⚙).
-function copyInterested(btn, all) {
-  let rows = bucketRows(interested);
-  if (!all) rows = rows.filter((r) => !aiseen.has(col(r, "id")));
-  if (!rows.length)
-    return snack(
-      all ? "No tienes interesantes que copiar" : "No hay interesantes nuevos (usa ⚙ para copiar todos)",
-      null,
-    );
+// copia un lote de filas como prompt para la IA y lo registra (wp_aisent): su veredicto
+// vuelve como enlace ?keep=<ids> que conserva esos como favoritos y rechaza el resto del lote.
+// ponytail: precio ESTIMADO (sin fetchPesos): el bucle de peso exacto es demasiado para un mazo de cientos; feature aparcada.
+function copyForAI(btn, rows, vacio) {
+  if (!rows.length) return snack(vacio, null);
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Preparando…";
-  copyAsync(() => interestedPrompt(rows)) // ponytail: precio estimado; fetchPesos aparcado (sin linkear)
+  copyAsync(() => aiPrompt(rows))
     .then(() => {
-      rows.forEach((r) => { const id = col(r, "id"); if (id) aiseen.add(id); }); // márcalos como enviados
-      localStorage.setItem("wp_aiseen", JSON.stringify([...aiseen]));
-      snack(`Copiados ${rows.length} ${all ? "interesantes" : "nuevos"} para la IA`, null);
+      setAisent(rows);
+      snack(`${rows.length} anuncios copiados — pégaselos a tu IA`, null);
     })
     .catch(() => snack("No se pudo copiar", null))
     .finally(() => {
@@ -2201,31 +2161,9 @@ function copyInterested(btn, all) {
       btn.textContent = prev;
     });
 }
-$("#copyInterested").onclick = (e) => copyInterested(e.currentTarget);
-$("#copyInterestedOpt").onclick = (e) => {
-  opts.open = false;
-  copyInterested(e.currentTarget, true); // menú ⚙: copia TODOS (aunque ya se enviaran)
-}; // cierra el menú para que se vea el snack
-// copia TODO el mazo (sin clasificar) para que la IA elija, sin swipear.
-// ponytail: precio ESTIMADO (sin fetchPesos): el bucle de peso exacto es demasiado para un mazo de cientos; feature aparcada.
-function copyDeck(btn) {
-  const rows = deckRows();
-  if (!rows.length) return snack("El mazo está vacío", null);
-  const prev = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Preparando…";
-  copyAsync(() => interestedPrompt(rows))
-    .then(() => snack(`Copiadas ${rows.length} cartas del mazo para la IA`, null))
-    .catch(() => snack("No se pudo copiar", null))
-    .finally(() => {
-      btn.disabled = false;
-      btn.textContent = prev;
-    });
-}
-$("#copyDeckOpt").onclick = (e) => {
-  opts.open = false;
-  copyDeck(e.currentTarget);
-};
+$("#copyDeck").onclick = (e) => copyForAI(e.currentTarget, deckRows(), "El mazo está vacío");
+$("#copyFav").onclick = (e) => copyForAI(e.currentTarget, bucketRows(favorite), "No tienes favoritos que copiar");
+$("#exportFav").onclick = (e) => copyForAI(e.currentTarget, bucketRows(favorite), "No tienes favoritos que copiar");
 $("#rejectByCrit").onclick = () => {
   opts.open = false;
   rejectByCriteria();
@@ -2272,6 +2210,7 @@ async function dossierFav(btn) {
         im.complete ? null : new Promise((res) => (im.onload = im.onerror = res)),
       ),
     );
+    setAisent(rows); // el PDF también es un lote enviado: su ?keep resuelve el resto
     window.print();
   } finally {
     btn.disabled = false;
@@ -2345,12 +2284,11 @@ function cardText(r) {
   const desc = col(r, "descripcion");
   if (desc) lines.push("", stripEmoji(desc));
   return (
-    "Este es un artículo de segunda mano de Wallapop que estoy pensando en comprar. " +
+    "Estoy valorando comprar este artículo de segunda mano en Wallapop y me gustaría una segunda opinión. " +
     PRICE_NOTE +
-    "Investígalo a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
-    "y dime si es buena compra por ese precio. " +
-    "Además dime si debería intentar regatear el precio y, si es así, a qué precio propondrías, " +
-    "y si lo ves necesario dime qué preguntar al vendedor:\n\n" +
+    "Identifica el modelo o versión exacta, revisa sus especificaciones y su estado, compáralo con su precio típico " +
+    "nuevo y de segunda mano, y dime si a este precio es buena compra. Si conviene regatear, propón una contraoferta " +
+    "concreta; y si hay dudas importantes, dime qué le preguntarías al vendedor:\n\n" +
     lines.join("\n")
   );
 }
@@ -2487,3 +2425,4 @@ document.addEventListener("keydown", (e) => {
     e.target.click();
   }
 });
+
