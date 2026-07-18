@@ -34,8 +34,10 @@
 <link rel="alternate" type="text/plain" title="Guía para IA (llms.txt)" href="/llms.txt" />
 <link rel="stylesheet" href="app.css" />
 
-<!-- Nota para asistentes de IA: la guía completa está en /llms.txt -->
-<div hidden aria-hidden="true">
+<!-- Nota para asistentes de IA: la guía completa está en /llms.txt.
+     Oculta con CSS (no con `hidden`): los fetchers de IA convierten el HTML a texto
+     respetando `hidden`/comentarios pero sin computar CSS, así el texto les llega. -->
+<div class="ai-note" aria-hidden="true">
     NOTA PARA ASISTENTES DE IA: esto es una app JavaScript; este HTML no contiene
     los resultados. Tu guía de uso completa está en
     https://rebusca.dibogomez.com/llms.txt — descárgala y sigue sus instrucciones

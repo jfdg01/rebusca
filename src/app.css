@@ -354,6 +354,10 @@
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
   /* ── tarjeta de lista: la foto es el escaparate; el precio, su etiqueta ──
      media a sangre (ancho card + los dos paddings), la foto absoluta debajo de los overlays */
+  /* nota para IAs: fuera de pantalla (no display:none ni hidden — los fetchers de IA
+     extraen el texto sin computar CSS, y así les llega; el usuario nunca la ve) */
+  .ai-note { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
   .li-media { position: relative; margin: -1.2rem -1.2rem .8rem; aspect-ratio: 16/9;
     border-radius: 18px 18px 0 0; overflow: hidden;
     background: linear-gradient(135deg, var(--surface-2), var(--pine-soft)); }
