@@ -512,6 +512,13 @@ function sortList(rows) {
   rows.sort((a, b) => cmpCell(a[c], b[c]) * listSortDir);
 }
 
+// cartas del mazo: sin clasificar y sin vetar (base de swipe, copiar-todo y rechazo por criterio; los lejos-sin-envío también entran)
+function deckRows() {
+  return data.filter((r) => {
+    const k = key(r);
+    return !interested.has(k) && !rejected.has(k) && !favorite.has(k) && !isExcluded(r);
+  });
+}
 function filteredRows() {
   const listView = view === "rejected" || view === "interested" || view === "favorite";
   if (listView) {
@@ -530,10 +537,7 @@ function filteredRows() {
     sortList(rows); // las listas ordenan con su barra (#listSort)
     return rows;
   }
-  const rows = data.filter((r) => {
-    const k = key(r);
-    return !interested.has(k) && !rejected.has(k) && !favorite.has(k) && !isExcluded(r); // mazo: sin clasificar y sin vetar (los lejos-sin-envío también entran)
-  });
+  const rows = deckRows();
   if (sortKeys.length)
     rows.sort((a, b) => {
       // mazo/swipe: orden multinivel
@@ -899,6 +903,48 @@ function rejectedExcluded() {
       render();
     },
   );
+}
+
+// ¿la carta supera algún límite? p/d = celdas precio/dias; NaN en un límite = ignora ese criterio.
+// dias es la edad congelada al scrapear; elapsed la corrige a la edad real de ahora (como adAge()).
+const overLimit = (p, d, maxP, maxD, elapsed) =>
+  (!isNaN(maxP) && isNum(p) && +p > maxP) ||
+  (!isNaN(maxD) && isNum(d) && +d + elapsed > maxD);
+console.assert(
+  overLimit("120", "3", 100, NaN, 0) === true &&
+    overLimit("80", "3", 100, NaN, 0) === false &&
+    overLimit("80", "10", NaN, 17, 8) === true && // 10 + 8 = 18 > 17
+    overLimit("80", "10", NaN, 17, 0) === false &&
+    overLimit("", "", 100, 17, 0) === false, // celdas vacías: no se tocan
+  "overLimit roto",
+);
+// manda al mazo lo que supere precio y/o antigüedad máximos del menú ⚙ (deshacer: los saca)
+function rejectByCriteria() {
+  const maxP = parseFloat($("#maxPrecio").value);
+  const maxD = parseFloat($("#maxDias").value);
+  if (isNaN(maxP) && isNaN(maxD))
+    return snack("Pon un precio o unos días máximos", null);
+  const elapsed = curCsvScrape
+    ? Math.max(0, (Date.now() - curCsvScrape) / 86400000)
+    : 0;
+  const ks = deckRows()
+    .filter((r) => overLimit(col(r, "precio"), col(r, "dias"), maxP, maxD, elapsed))
+    .map(key);
+  if (!ks.length) return snack("Nada supera esos límites", null);
+  ks.forEach((k) => {
+    rejected.add(k);
+    stampNow(k);
+  });
+  save("wp_rejected", rejected);
+  render();
+  snack(`${ks.length} a la papelera`, () => {
+    ks.forEach((k) => {
+      rejected.delete(k);
+      unstamp(k);
+    });
+    save("wp_rejected", rejected);
+    render();
+  });
 }
 
 // restaurar un item de vendedor bloqueado exige desbloquearlo: si no, enforceBlocks lo re-rechaza
@@ -2081,15 +2127,16 @@ console.assert(
 const promptIntro = () =>
   "Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. " +
   PRICE_NOTE +
-  "Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
+  "EMPIEZA tu respuesta, antes de cualquier análisis, con un enlace https://rebusca.dibogomez.com/?fav=<ids> " +
+  "con los ids ([#...]) de los que ascenderías a favoritos (TOP 3 y menciones que valgan la pena), separados por comas; " +
+  "al abrirlo los marco como favoritos de un toque. Ese enlace va SIEMPRE lo primero.\n\n" +
+  "Luego investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
   "y clasifícalos en tres listas:\n" +
   "a) TOP 3: los tres mejores calidad/precio, ordenados del mejor al tercero, cada uno con el porqué en detalle.\n" +
   "b) MENCIONES: los que no llegan al top 3 pero siguen mereciendo la pena, con una línea de por qué destacan.\n" +
   "c) DESCARTES: los que descartarías, con el motivo breve.\n" +
   "Para los del TOP 3 y las MENCIONES, dime además si debería intentar regatear el precio y, si es así, a qué precio propondrías, " +
-  "y si lo ves necesario dime qué preguntar al vendedor.\n" +
-  "Al final, dame un enlace https://rebusca.dibogomez.com/?fav=<ids> con los ids ([#...]) de los que ascenderías a favoritos " +
-  "(TOP 3 y menciones que valgan la pena), separados por comas; al abrirlo los marco como favoritos de un toque:";
+  "y si lo ves necesario dime qué preguntar al vendedor:";
 // mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
 function interestedPrompt(rows) {
   const items = rows
@@ -2132,10 +2179,7 @@ function copyInterested(btn, all) {
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Preparando…";
-  copyAsync(async () => {
-    await fetchPesos(rows).catch(() => {});
-    return interestedPrompt(rows);
-  }) // si falla el peso, se copia con el estimado
+  copyAsync(() => interestedPrompt(rows)) // ponytail: precio estimado; fetchPesos aparcado (sin linkear)
     .then(() => {
       rows.forEach((r) => { const id = col(r, "id"); if (id) aiseen.add(id); }); // márcalos como enviados
       localStorage.setItem("wp_aiseen", JSON.stringify([...aiseen]));
@@ -2152,6 +2196,30 @@ $("#copyInterestedOpt").onclick = (e) => {
   opts.open = false;
   copyInterested(e.currentTarget, true); // menú ⚙: copia TODOS (aunque ya se enviaran)
 }; // cierra el menú para que se vea el snack
+// copia TODO el mazo (sin clasificar) para que la IA elija, sin swipear.
+// ponytail: precio ESTIMADO (sin fetchPesos): el bucle de peso exacto es demasiado para un mazo de cientos; feature aparcada.
+function copyDeck(btn) {
+  const rows = deckRows();
+  if (!rows.length) return snack("El mazo está vacío", null);
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Preparando…";
+  copyAsync(() => interestedPrompt(rows))
+    .then(() => snack(`Copiadas ${rows.length} cartas del mazo para la IA`, null))
+    .catch(() => snack("No se pudo copiar", null))
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = prev;
+    });
+}
+$("#copyDeckOpt").onclick = (e) => {
+  opts.open = false;
+  copyDeck(e.currentTarget);
+};
+$("#rejectByCrit").onclick = () => {
+  opts.open = false;
+  rejectByCriteria();
+};
 
 // ── PDF dossier de favoritos: fotos + fichas en un archivo para arrastrar a la IA ──
 // Truco CORS: cdn.wallapop.com NO da Access-Control-Allow-Origin, así que fetch/canvas de
@@ -2185,7 +2253,7 @@ async function dossierFav(btn) {
   btn.disabled = true;
   btn.textContent = "Preparando…";
   try {
-    await fetchPesos(rows).catch(() => {}); // precio exacto si se puede
+    // ponytail: precio estimado; fetchPesos aparcado (sin linkear)
     const box = $("#dossier");
     box.innerHTML = dossierHTML(rows);
     // espera a que carguen las fotos (o fallen) antes de imprimir, si no salen en blanco

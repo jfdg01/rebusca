@@ -40,8 +40,39 @@
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
                 <button id="copyInterestedOpt" class="chip">
-                    Copiar TODOS los interesantes para IA
+                    Copiar interesantes para IA
                 </button>
+                <button id="copyDeckOpt" class="chip">
+                    Copiar todo el mazo para IA
+                </button>
+                <div class="opt-group">
+                    <span class="opt-row">Rechazar del mazo lo que supere…</span>
+                    <label class="opt-row num sub">
+                        <span>Precio máx.</span>
+                        <span class="num-ctl"
+                            ><input
+                                type="number"
+                                id="maxPrecio"
+                                min="0"
+                                step="1"
+                            />
+                            €</span
+                        >
+                    </label>
+                    <label class="opt-row num sub">
+                        <span>Antigüedad máx.</span>
+                        <span class="num-ctl"
+                            ><input
+                                type="number"
+                                id="maxDias"
+                                min="0"
+                                step="1"
+                            />
+                            días</span
+                        >
+                    </label>
+                    <button id="rejectByCrit" class="chip">Rechazar ahora</button>
+                </div>
                 <div class="opt-group">
                     <label class="opt-row check"
                         ><input type="checkbox" id="autoExclLejos" /> Excluir

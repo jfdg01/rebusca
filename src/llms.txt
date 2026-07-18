@@ -151,9 +151,10 @@ Ese es el momento en que más le ayudas. Recibirás una lista tipo:
 
 Cada línea empieza con el **id de Wallapop** entre `[#…]`. El texto ya trae instrucciones
 (compáralos, haz un TOP 3, menciones y descartes, di si regatear y a qué precio, y qué
-preguntar al vendedor) y te pide que **al final devuelvas un enlace**
-`https://rebusca.dibogomez.com/?fav=<id,id,…>` con los ids de los que ascenderías a favoritos:
-al abrirlo, el usuario los marca como favoritos de un toque. **Hazlo siempre.** Para hacerlo bien:
+preguntar al vendedor) y te pide que **empieces tu respuesta con un enlace**
+`https://rebusca.dibogomez.com/?fav=<id,id,…>` con los ids de los que ascenderías a favoritos,
+**antes de cualquier análisis**: al abrirlo, el usuario los marca como favoritos de un toque.
+**Ponlo siempre lo primero.** Para hacerlo bien:
 
 - **Identifica el modelo/versión exacto** por el título+descripción; una palabra
   cambia el valor (una edición, un tamaño, "para piezas").
@@ -166,7 +167,7 @@ al abrirlo, el usuario los marca como favoritos de un toque. **Hazlo siempre.** 
 
 En vez de pegar texto, el usuario puede **arrastrarte un PDF** (botón «PDF para IA» en Favoritos)
 con la misma ficha de cada anuncio **más su foto**. Trae las mismas instrucciones; aprovecha las
-fotos para juzgar estado/modelo. Termina igual: un enlace `?fav=<ids>` con tus elegidos.
+fotos para juzgar estado/modelo. Igual que antes: empieza tu respuesta con el enlace `?fav=<ids>` de tus elegidos.
 
 ## Reducir ruido (para búsquedas que traen mucha morralla)
 
