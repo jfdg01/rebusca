@@ -1554,6 +1554,7 @@ async function runScrape(kw, since, titleOnly) {
     setLoading(false);
   }
 }
+let urlCrit = false; // ?maxp=/&maxd= pendientes de aplicar tras el próximo scrape (deep-link)
 $("#scrape").onclick = async () => {
   const kw = $("#kw").value.trim();
   if (!kw) return;
@@ -1567,6 +1568,7 @@ $("#scrape").onclick = async () => {
     await refreshCsvs();
     selectQueryUI(csv); // el CSV ya está cargado: solo sincroniza el combobox, sin re-scrapear
     render(); // curCsv ya fijado: re-render para aplicar/pintar lo que depende de él (exclusiones del deep-link)
+    if (urlCrit) { urlCrit = false; rejectByCriteria(); } // topes del deep-link (?maxp/?maxd)
   } catch (e) {
     if (e.name !== "AbortError") snack("No se pudo buscar: " + e.message, null);
   } finally {
@@ -1818,6 +1820,12 @@ function fromURL() {
   }
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
   if (words.length) { exclMap[csvNameOf(q, since)] = words; saveExcl(); } // se aplican al renderizar
+  // ?maxp=/&maxd= (precio/antigüedad máximos): rellenan el menú ⚙ y, tras el scrape,
+  // rejectByCriteria() manda lo que supere a la papelera (mismo camino que el botón).
+  const maxp = parseFloat(p.get("maxp")), maxd = parseFloat(p.get("maxd"));
+  if (!isNaN(maxp)) $("#maxPrecio").value = maxp;
+  if (!isNaN(maxd)) $("#maxDias").value = maxd;
+  urlCrit = !isNaN(maxp) || !isNaN(maxd);
   $("#kw").value = q;
   $("#since").value = since;
   $("#titleOnly").checked = p.get("title") === "1";

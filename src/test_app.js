@@ -254,6 +254,11 @@ async function main() {
     fail("?keep: el resto del lote no se rechazó, salió " + kp.wp_rejected);
   if ("wp_aisent" in kp) fail("?keep: no consumió wp_aisent");
 
+  // 9. deep-link con topes ?maxp/?maxd: no crashea al boot (rejectByCriteria corre tras
+  //    el scrape real; aquí solo cubrimos el parseo/relleno del menú en fromURL)
+  errs = await boot({}, "?q=kindle&maxp=80&maxd=30");
+  if (errs.length) fail("deep-link ?maxp/?maxd lanzó: " + (errs[0].message || errs[0]));
+
   // 5. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

@@ -7,8 +7,9 @@
 >
 > **REGLA #2: el enlace tiene que ir ACOTADO. Un `?q=<palabra>` a secas es un FALLO.**
 > Todo lo que le dirías al usuario que configure a mano (excluir palabras, buscar solo
-> en título, frescura) va **dentro del enlace** (`excl=`, `title=1`, `since=`): tu
-> trabajo es entregarlo ya filtrado, no darle deberes.
+> en título, frescura, precio máximo, antigüedad máxima) va **dentro del enlace**
+> (`excl=`, `title=1`, `since=`, `maxp=`, `maxd=`): tu trabajo es entregarlo ya
+> filtrado, no darle deberes.
 >
 > **REGLA #3: los enlaces, en formato markdown con texto descriptivo** —
 > `[Kindle Paperwhite ≤80 € (última semana, sin fundas ni rotos)](https://rebusca.dibogomez.com/?q=…)` —
@@ -72,7 +73,7 @@ el formulario y lanza la búsqueda sola.
 Formato:
 
 ```
-https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&title=1
+https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&title=1&maxp=<€>&maxd=<días>
 ```
 
 - `q` (obligatorio) — la búsqueda, con toda la gramática de arriba (`OR`, `( )`,
@@ -89,6 +90,11 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
 - `title=1` — buscar solo en el título. **Ponlo siempre que la palabra sea genérica o
   salga de pasada en descripciones** (p. ej. "kindle" aparece en anuncios de fundas y
   tablets); quítalo solo para una segunda pasada más amplia.
+- `maxp` — precio máximo en €: lo que lo supere se rechaza automáticamente tras la
+  búsqueda. Si sabes el precio razonable de segunda mano del producto (o el usuario
+  te dio presupuesto), **ponlo**.
+- `maxd` — antigüedad máxima del anuncio en días (más fino que `since`): lo más viejo
+  se rechaza automáticamente.
 
 Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
 buscando solo en el título:
@@ -105,7 +111,7 @@ un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
 Anti-ejemplo — «quiero un kindle barato»:
 
 - ❌ `…/?q=kindle` y decirle que active filtros a mano → FALLO (enlace sin acotar).
-- ✅ `…/?q=kindle%20OR%20paperwhite&title=1&excl=funda,cargador,cable,soporte,roto,piezas&since=mes`
+- ✅ `…/?q=kindle%20OR%20paperwhite&title=1&excl=funda,cargador,cable,soporte,roto,piezas&since=mes&maxp=80`
 
 ## Cómo responder cuando te pide ayuda para buscar
 
@@ -142,8 +148,8 @@ Pulsa el enlace y pégame luego el lote de candidatos: yo elijo cuáles conserva
 ## El flujo de uso (búsqueda → criba de la IA → favoritos)
 
 1. **Buscar**: el usuario abre tu enlace `?q=…`. Rebusca trae los anuncios ("sin ver").
-2. **Filtro automático**: tus `excl`, sus filtros generales (precio máximo, antigüedad)
-   y «lejos sin envío» rechazan la morralla sin que nadie la mire.
+2. **Filtro automático**: tus `excl`/`maxp`/`maxd` y su filtro «lejos sin envío»
+   rechazan la morralla sin que nadie la mire.
 3. **Copiar para IA**: un botón junta lo que queda (con precio final estimado) en un
    texto ya redactado como petición de criba, y lo copia al portapapeles. El usuario
    te lo pega. (Opcionalmente puede reducir antes el lote a mano, deslizando tarjetas:
