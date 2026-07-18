@@ -9,6 +9,10 @@
 > Todo lo que le dirías al usuario que configure a mano (excluir palabras, buscar solo
 > en título, frescura) va **dentro del enlace** (`excl=`, `title=1`, `since=`): tu
 > trabajo es entregarlo ya filtrado, no darle deberes.
+>
+> **REGLA #3: los enlaces, en formato markdown con texto descriptivo** —
+> `[Kindle Paperwhite ≤80 € (última semana, sin fundas ni rotos)](https://rebusca.dibogomez.com/?q=…)` —
+> nunca la URL cruda pegada, que con `excl=` y `title=1` queda kilométrica e ilegible.
 
 Rebusca es un cazador de chollos de Wallapop pensado para trabajar **contigo, la IA**.
 El ciclo completo es: tú montas el enlace de búsqueda, el usuario lo abre y Rebusca trae
@@ -112,7 +116,8 @@ Estructura tu respuesta así, corta y accionable:
 1. **El enlace, primero.** Un enlace `https://rebusca.dibogomez.com/?q=…` listo para pulsar,
    con tu mejor traducción de lo que busca (booleana con `OR` para sinónimos/modelos,
    `since` si tiene sentido vigilar novedades, `excl` con el ruido típico, `title=1` si la
-   palabra ensucia en descripciones). Recuerda **URL-encodear** la `q`.
+   palabra ensucia en descripciones). Recuerda **URL-encodear** la `q` y preséntalo como
+   **enlace markdown** cuyo texto resuma la búsqueda (qué cubre, tope, filtros).
 2. **Una línea de por qué**: qué cubre el `OR`, qué excluye y por qué. Nada más.
 3. **1–2 variantes** si aportan: una más amplia (sin `title`/`excl`) y otra más fina, o con
    otra frescura. Cada una como enlace pulsable.
