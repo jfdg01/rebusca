@@ -35,9 +35,9 @@
 <link rel="stylesheet" href="app.css" />
 
 <!-- Nota para asistentes de IA: la guía completa está en /llms.txt.
-     Oculta con CSS (no con `hidden`): los fetchers de IA convierten el HTML a texto
-     respetando `hidden`/comentarios pero sin computar CSS, así el texto les llega. -->
-<div class="ai-note" aria-hidden="true">
+     Oculta SOLO con CSS externo: los extractores de los fetchers de IA podan `hidden`,
+     `aria-hidden` y estilos inline, pero no computan hojas de estilo, así el texto les llega. -->
+<div class="ai-note">
     NOTA PARA ASISTENTES DE IA: esto es una app JavaScript; este HTML no contiene
     los resultados. Tu guía de uso completa está en
     https://rebusca.dibogomez.com/llms.txt — descárgala y sigue sus instrucciones
@@ -371,6 +371,11 @@
     <span id="snackmsg"></span>
     <button id="undo">Deshacer</button>
 </div>
+
+<!-- enlace visible (discreto) a la guía: garantiza que cualquier extractor de IA lo vea -->
+<footer class="ai-foot">
+    <a href="https://rebusca.dibogomez.com/llms.txt">guía para IA (llms.txt)</a>
+</footer>
 
 <!-- dossier: fichas+fotos de favoritos, solo visible al imprimir (window.print -> Guardar como PDF) -->
 <div id="dossier" aria-hidden="true"></div>

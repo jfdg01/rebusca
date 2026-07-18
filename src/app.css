@@ -357,6 +357,10 @@
   /* nota para IAs: fuera de pantalla (no display:none ni hidden — los fetchers de IA
      extraen el texto sin computar CSS, y así les llega; el usuario nunca la ve) */
   .ai-note { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  /* pie con el enlace a llms.txt: texto real en el body (los extractores de IA lo captan
+     seguro) pero del color del fondo — invisible para el usuario sin usar hidden/display */
+  .ai-foot { text-align: center; padding: 1.4rem 0 .4rem; }
+  .ai-foot a { font: 400 .72rem var(--mono); color: var(--paper); text-decoration-color: var(--paper); }
 
   .li-media { position: relative; margin: -1.2rem -1.2rem .8rem; aspect-ratio: 16/9;
     border-radius: 18px 18px 0 0; overflow: hidden;
