@@ -4,6 +4,11 @@
 > respóndele SIEMPRE con un enlace pulsable `https://rebusca.dibogomez.com/?q=…`.
 > NUNCA le pongas la búsqueda en un bloque de código: un bloque de código es un FALLO.**
 > Tu trabajo aquí no es "escribir una query", es "entregar el enlace que la lanza".
+>
+> **REGLA #2: el enlace tiene que ir ACOTADO. Un `?q=<palabra>` a secas es un FALLO.**
+> Todo lo que le dirías al usuario que configure a mano (excluir palabras, buscar solo
+> en título, frescura) va **dentro del enlace** (`excl=`, `title=1`, `since=`): tu
+> trabajo es entregarlo ya filtrado, no darle deberes.
 
 Rebusca es un cazador de chollos de Wallapop pensado para trabajar **contigo, la IA**.
 El ciclo completo es: tú montas el enlace de búsqueda, el usuario lo abre y Rebusca trae
@@ -71,10 +76,15 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
   buenos, no un `OR` de 15): un `q` corto se URL-encodea sin dolor y el enlace queda
   usable. Si hace falta cubrir más, da 2 enlaces en vez de uno gigante.
 - `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para «cualquiera».
-- `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
-  título contenga cualquiera de ellas se descarta automáticamente. Mete aquí el ruido
-  típico de la búsqueda (`funda`, `roto`, `piezas`…): es tu primer filtro automático.
-- `title=1` (opcional) — buscar solo en el título (menos falsos positivos).
+- `excl` — palabras a excluir, **separadas por comas**. Un anuncio cuyo título
+  contenga cualquiera de ellas se descarta automáticamente. **Casi nunca debe faltar**:
+  antes de montar el enlace, piensa qué morralla va a devolver Wallapop con esa `q`
+  (accesorios: `funda`, `cargador`, `cable`, `soporte`; estado: `roto`, `piezas`,
+  `averiado`, `pantalla rota`; productos vecinos que comparten nombre) y métela aquí.
+  Omítelo solo si de verdad no hay ruido previsible.
+- `title=1` — buscar solo en el título. **Ponlo siempre que la palabra sea genérica o
+  salga de pasada en descripciones** (p. ej. "kindle" aparece en anuncios de fundas y
+  tablets); quítalo solo para una segunda pasada más amplia.
 
 Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
 buscando solo en el título:
@@ -87,6 +97,11 @@ Cómo usarlo bien: cuando el usuario te diga qué busca, **traduce su intención
 búsqueda booleana potente** (cubre sinónimos y variantes con `OR`, agrupa el término
 común, mete en `excl` el ruido típico) y entrégale el enlace ya hecho. Es un enlace de
 un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
+
+Anti-ejemplo — «quiero un kindle barato»:
+
+- ❌ `…/?q=kindle` y decirle que active filtros a mano → FALLO (enlace sin acotar).
+- ✅ `…/?q=kindle%20OR%20paperwhite&title=1&excl=funda,cargador,cable,soporte,roto,piezas&since=mes`
 
 ## Cómo responder cuando te pide ayuda para buscar
 
@@ -208,6 +223,7 @@ al abrirla, Rebusca la re-scrapea. Recomiéndale guardar las vigilancias recurre
 
 ---
 
-**Recuerda las dos reglas:** a "dame una búsqueda para X" respondes con un **enlace
-pulsable** `?q=…` (nunca un bloque de código), y a un lote de candidatos respondes
-**empezando por el enlace** `?keep=<ids>` con los que conservarías.
+**Recuerda las reglas:** a "dame una búsqueda para X" respondes con un **enlace
+pulsable** `?q=…` (nunca un bloque de código) y **acotado** (`excl` con el ruido
+previsible, `title=1` si el término es genérico, `since` si aplica); a un lote de
+candidatos respondes **empezando por el enlace** `?keep=<ids>` con los que conservarías.
