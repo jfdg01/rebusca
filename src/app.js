@@ -408,6 +408,9 @@ function fillCard(el, r) {
 
   const desc = col(r, "descripcion");
   if (desc) add("li-desc", desc);
+
+  const id = col(r, "id");
+  if (id) add("li-id", "#" + id); // id de Wallapop, para buscarlo/copiarlo
 }
 function listBody(r) {
   const td = document.createElement("td");
@@ -525,11 +528,12 @@ function filteredRows() {
     const q = norm(listQ); // el filtro solo aplica en vista de lista
     const set = view === "rejected" ? rejected : view === "interested" ? interested : favorite;
     const rows = bucketRows(set).filter((r) => {
-      // "#123" filtra por id de Wallapop; cualquier otra cosa, por título
+      // "#123" fuerza id; cualquier otra cosa casa título O id (id sin # también vale)
       if (q) {
+        const id = String(col(r, "id") || "").toLowerCase();
         if (q.startsWith("#")) {
-          if (!String(col(r, "id") || "").includes(q.slice(1).trim())) return false;
-        } else if (!norm(col(r, "titulo") || "").includes(q)) return false;
+          if (!id.includes(q.slice(1).trim())) return false;
+        } else if (!norm(col(r, "titulo") || "").includes(q) && !id.includes(q)) return false;
       }
       if (view === "rejected" && listSeller && col(r, "vendedor") !== listSeller) return false;
       return true; // pertenencia al cubo ya garantizada por bucketRows

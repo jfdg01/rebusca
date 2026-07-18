@@ -388,6 +388,9 @@
   .li-desc { font: 12.5px/1.5 var(--sans); color: var(--ink-soft); margin-top: .55rem; overflow-wrap: anywhere;
     white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 
+  .li-id { margin-top: .4rem; font: 10px var(--mono); letter-spacing: .04em;
+    color: var(--ink-soft); opacity: .65; user-select: all; }
+
   .empty { color: var(--ink-soft); font: 13px var(--sans); padding: 3rem 0; text-align: center; }
 
   /* ── overlay de carga: spinner + contador de encontrados ── */
