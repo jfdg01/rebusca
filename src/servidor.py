@@ -106,5 +106,6 @@ if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "demo":
         demo()
     else:
-        print(f"Rebusca en http://0.0.0.0:{PORT}  (Ctrl-C para parar)")
-        ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
+        port = int(sys.argv[1]) if len(sys.argv) == 2 else PORT  # arg posicional gana al env
+        print(f"Rebusca en http://0.0.0.0:{port}  (Ctrl-C para parar)")
+        ThreadingHTTPServer(("0.0.0.0", port), H).serve_forever()
