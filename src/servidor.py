@@ -39,7 +39,10 @@ def stamp_versions(html, mtimes):
     # cambiar la URL en cada deploy, el móvil ve la versión nueva al recargar sin tocar Cloudflare.
     for f, v in mtimes.items():
         html = html.replace(f'"{f}"', f'"{f}?v={v}"')
-    return html
+    # llms.txt: su URL va en texto plano (nota para IAs) y en hrefs absolutos; versionarla
+    # bustea la cache del FETCHER de la IA (leía guías viejas días después de un deploy).
+    lv = int((HERE / "llms.txt").stat().st_mtime) if (HERE / "llms.txt").is_file() else 0
+    return html.replace("/llms.txt", f"/llms.txt?v={lv}") if lv else html
 
 
 def stamped_mtimes(html):
@@ -91,6 +94,8 @@ def demo():
     assert stamp_versions('<link href="app.css"><script src="app.js"><script src="scrape.js">',
                           {"app.css": 5, "app.js": 9, "scrape.js": 3}) \
         == '<link href="app.css?v=5"><script src="app.js?v=9"><script src="scrape.js?v=3">'
+    # la URL de llms.txt (texto plano o href) sale versionada -> bustea la cache del fetcher IA
+    assert "llms.txt?v=" in stamp_versions('lee https://x.com/llms.txt <a href="/llms.txt">', {})
     # descubrimiento: coge locales existentes (servidor.py existe en HERE); ignora http/absolutas/ancla
     m = stamped_mtimes('<link href="servidor.py"><a href="https://x/y"><img src="/logo.png"><a href="#z">')
     assert list(m) == ["servidor.py"], m
