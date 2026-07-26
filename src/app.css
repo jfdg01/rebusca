@@ -175,6 +175,18 @@
   button.primary:active { box-shadow: 0 1px 3px rgba(16,168,150,.3); }
   :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 
+  /* CTA del flujo principal: mandar el mazo entero a la IA sin triarlo a mano */
+  .ai-cta {
+    display: flex; flex-direction: column; gap: .1rem; width: 100%; margin-top: .8rem;
+    padding: .7rem .7rem; text-align: center;
+    background: var(--pine); border: 1px solid var(--pine); border-radius: 9px;
+    color: #fff; box-shadow: 0 2px 6px rgba(16,168,150,.35);
+  }
+  .ai-cta b { font: 800 15px/1.25 var(--sans); }
+  .ai-cta small { font: 11px/1.25 var(--sans); opacity: .85; }
+  .ai-cta:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 3px 9px rgba(16,168,150,.4); }
+  .ai-cta:disabled { opacity: .6; cursor: progress; }
+
   /* resumen: contadores en su propia zona con caja separadora */
   .stat {
     font: 11.5px/1.3 var(--mono); color: var(--ink-soft);
@@ -235,6 +247,12 @@
      input[type=search] se volvía ALTURA y el max-width:320px capaba el ancho (caja alta y estrecha) */
   /* placeholder/texto en sans, igual que #kw y #pick — no mono (era la barra distinta) */
   .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-size: 14px; }
+
+  /* topes numéricos del cajón: tres cajas iguales en una fila */
+  .lims { display: flex; gap: .4rem; }
+  .lims label { flex: 1; display: flex; align-items: center; gap: .3rem;
+    font: 600 11px var(--mono); color: var(--ink-soft); }
+  .lims input { width: 100%; min-width: 0; min-height: 2.15rem; font-size: 14px; }
 
   .cats { margin-top: .8rem; }
   .cats summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
@@ -354,6 +372,7 @@
   /* envío + distancia: metadato en una línea bajo el título */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; }
   .li-flags .ship.no { color: var(--ship-no); font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
+  .li-id { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }  /* id de Wallapop: toque = copiar */
   /* cuándo se clasificó: eyebrow en versalitas sobre el título (interested/favorite en teal, papelera en gris) */
   .li-when { display: block; margin: 0 0 .28rem; font: 600 10px var(--mono);
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
@@ -394,13 +413,21 @@
   .chip.empty:hover { filter: none; border-color: var(--pine); }
 
   /* ── modo swipe (tinder): el swipe es la interfaz principal (la tabla queda [hidden]) ── */
-  .titleonly { display: flex; align-items: center; gap: .4rem; margin-top: .5rem;
-    font: 600 12px var(--sans); color: var(--ink-soft); cursor: pointer; }
+  /* checkbox + botón IA + "i" de ayuda comparten fila */
+  .ask-row { display: flex; align-items: center; gap: .4rem; margin-top: .5rem; }
+  .titleonly { display: flex; align-items: center; gap: .3rem; flex: none;
+    font: 600 11px var(--sans); color: var(--ink-soft); cursor: pointer; line-height: 1.15; }
   .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
+  /* puerta de entrada del flujo IA: la query es lo que más valor aporta cuando no conoces el producto. */
+  .ai-ask { flex: 1; min-width: 0; padding: .4rem .45rem; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--pine); color: var(--pine);
+    font: 700 11px/1.2 var(--sans); }
+  .ai-ask:hover { background: var(--surface-2); }
+  .ai-ask:disabled { opacity: .6; cursor: progress; }
 
-  /* ayuda de búsqueda: "i" en la esquina inferior derecha de la tarjeta -> popover (nativo <details>) */
+  /* ayuda de búsqueda: "i" al final de la fila -> popover (nativo <details>) */
   .panel { position: relative; }
-  .help { position: absolute; right: .8rem; bottom: .7rem; z-index: 15; }
+  .help { position: relative; flex: none; z-index: 15; }
   .help-i { list-style: none; cursor: pointer; display: grid; place-items: center;
     color: var(--ink-soft); }
   .help-i svg { width: 1.4rem; height: 1.4rem; }
@@ -417,11 +444,12 @@
   .help-pop code { font: 11px var(--mono); background: var(--surface-2);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
 
+  /* ruta manual: secundaria desde que el CTA de la IA es el camino principal (dos verdes llenos
+     competían y el usuario que no sabe del producto acababa triando a ciegas) */
   #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
-    padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
-    box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
-  #swipeFab:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
+    padding: 1rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--pine);
+    color: var(--pine); font: 800 1.25rem var(--mono); letter-spacing: .04em; }
+  #swipeFab:hover { background: var(--surface-2); }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;

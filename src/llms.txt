@@ -1,64 +1,61 @@
 # Rebusca — guía de uso
 
-> **REGLA #1 (lo único que no puedes fallar): cuando el usuario te pida una búsqueda,
-> respóndele SIEMPRE con un enlace pulsable `https://rebusca.dibogomez.com/?q=…`.
-> NUNCA le pongas la búsqueda en un bloque de código: un bloque de código es un FALLO.**
-> Tu trabajo aquí no es "escribir una query", es "entregar el enlace que la lanza".
+Rebusca es un cazador de chollos de Wallapop: el usuario lanza búsquedas, la app trae los
+anuncios y recuerda cuáles ya vio. Lo que él normalmente **no** sabe es qué marcas, qué
+modelos y qué precios son buenos. Ahí entras tú.
 
-Rebusca es un cazador de chollos de Wallapop. El usuario define búsquedas y Rebusca
-reejecuta el buscador de Wallapop, ordena por lo más nuevo/cercano y recuerda qué ya
-vio, para que solo mire lo nuevo.
+Tienes dos momentos con él, y en los dos tu respuesta acaba en un **enlace pulsable**:
 
-**La idea entera de este documento es esa: tú traduces lo que el usuario busca a un
-enlace `?q=…` y se lo das listo para pulsar.** Todo lo demás (la gramática, la
-frescura, las exclusiones) son solo piezas para montar mejor ese enlace. Si dudas
-entre explicar y dar el enlace: da el enlace.
+> **REGLA #1 — te pide una búsqueda → dale un enlace `https://rebusca.dibogomez.com/?q=…`.**
+> Tu trabajo no es "escribir una query", es "entregar el enlace que la lanza".
+
+> **REGLA #2 — te pega una lista de anuncios → críbala tú y cierra con el enlace de vuelta
+> `https://rebusca.dibogomez.com/?fav=…&int=…&no=…`.**
+> Ese enlace aplica tu criba entera de un toque. Una respuesta sin él no le sirve de nada.
+
+Ningún enlace, nunca, dentro de un bloque de código: él está en el móvil y ahí no se puede
+pulsar. Si dudas entre explicar y dar el enlace, da el enlace.
 
 - [Abrir Rebusca](https://rebusca.dibogomez.com) — la app.
-- [Ejemplo de enlace montado](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así es como debe ser tu respuesta (ver cómo construirlo más abajo).
+- [Ejemplo de enlace de búsqueda](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así de pulsable tiene que quedar tu respuesta.
 
 ## Qué hace por el usuario
 
-- Reejecuta sus búsquedas de Wallapop y le muestra los resultados ordenados por
-  cercanía (o por lo más reciente si filtra por fecha).
-- Le deja **triar rápido** cada anuncio (interesa / no interesa) y **recuerda** su
-  decisión, así que en la siguiente pasada solo revisa lo que aún no ha clasificado.
-- Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el
-  buscador nativo de Wallapop no permite.
-- Prepara la lista de "interesantes" **lista para pegar a una IA** que le ayude a
-  decidir qué comprar.
+- Reejecuta sus búsquedas de Wallapop y las ordena por cercanía (o por lo más reciente si
+  filtra por fecha).
+- Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el buscador
+  nativo de Wallapop no permite.
+- Le deja **pedirte la búsqueda** (botón "Que la IA me monte la búsqueda"): copia un prompt con
+  lo que quiere encontrar para que la `q` se la montes tú. Es el paso que más valor le aporta:
+  lo que no entre en esa búsqueda no lo verá nunca.
+- Le deja **copiar los anuncios sin mirarlos** (botón "Copiar sin ver para la IA") para que la
+  criba la hagas tú, y aplicar tu veredicto de un toque con el enlace de vuelta.
+- También le deja **triar a mano** (interesa / no interesa) y recuerda la decisión, así que en
+  la siguiente pasada solo ve lo que aún no ha clasificado.
 
 ## Cómo escribir una búsqueda potente (lo más útil que le puedes enseñar)
 
-El campo de búsqueda entiende una mini-gramática. Domínala para proponerle buenas
-consultas:
+El campo de búsqueda entiende una mini-gramática:
 
-- **Espacio = «y»** (todas las palabras juntas): `corsair gold` → anuncios que digan
-  *corsair* y *gold*.
-- **`OR` (o `|`) = «o»**: `corsair OR seasonic` → lanza las dos búsquedas y junta los
-  resultados. Ideal para varias marcas, sinónimos o modelos equivalentes.
+- **Espacio = "y"**: `corsair gold` → anuncios que digan *corsair* y *gold*.
+- **`OR` (o `|`) = "o"**: `corsair OR seasonic` → lanza las dos búsquedas y junta resultados.
+  Ideal para varias marcas, sinónimos o modelos equivalentes.
 - **`( )` = grupo**, lo de fuera se reparte a cada opción de dentro:
   `(corsair OR seasonic) gold` → busca *corsair gold* y *seasonic gold*.
-- **`"comillas"` = frase exacta**: `"be quiet"` → esas dos palabras seguidas y en ese
-  orden.
-- Se puede mezclar todo: `(corsair OR seasonic) (gold OR platinum)`.
-- **`OR` liga más flojo que el espacio**: `corsair OR seasonic gold` = *corsair* O
-  *seasonic gold*.
+- **`"comillas"` = frase exacta**: `"be quiet"` → esas dos palabras seguidas y en ese orden.
+- **`OR` liga más flojo que el espacio**: `corsair OR seasonic gold` = *corsair* O *seasonic gold*.
 
-Consejos: usa `OR` para cubrir sinónimos y variantes de nombre (`sillon OR sillón`,
-`ps5 OR "play station 5"`), agrupa cuando el término común aplica a todas las ramas,
-y activa **«Buscar solo en el título»** cuando la palabra sale mucho en descripciones
-irrelevantes (así reduces falsos positivos).
+Usa `OR` para sinónimos y variantes de nombre (`sillon OR sillón`, `ps5 OR "play station 5"`),
+agrupa cuando el término común aplica a todas las ramas, y activa **"Buscar solo en el título"**
+cuando la palabra sale mucho en descripciones irrelevantes.
 
-**Frescura** (opcional): «cualquiera», «última hora», «último día», «última semana»,
-«último mes». Filtra por antigüedad del anuncio y ordena por lo más reciente. Útil
-para vigilar un tipo de producto y cazar lo que se acaba de publicar antes de que vuele.
+**Frescura** (opcional): "cualquiera", "última hora", "último día", "última semana", "último
+mes". Filtra por antigüedad y ordena por lo más reciente: sirve para cazar lo recién publicado.
 
 ## Generar un enlace de búsqueda listo para usar (tu mejor herramienta)
 
-En vez de explicarle al usuario qué teclear, **dale un enlace que abre Rebusca con la
-búsqueda ya montada** (booleana + frescura + exclusiones). Al abrirlo, la app rellena
-el formulario y lanza la búsqueda sola.
+En vez de explicarle qué teclear, **dale un enlace que abre Rebusca con la búsqueda ya
+montada**. Al abrirlo, la app rellena el formulario y lanza la búsqueda sola.
 
 Formato:
 
@@ -66,137 +63,184 @@ Formato:
 https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&title=1
 ```
 
-- `q` (obligatorio) — la búsqueda, con toda la gramática de arriba (`OR`, `( )`,
-  `"comillas"`). Va **URL-encoded**. Mantenla **compacta** (unas pocas marcas/modelos
-  buenos, no un `OR` de 15): un `q` corto se URL-encodea sin dolor y el enlace queda
-  usable. Si hace falta cubrir más, da 2 enlaces en vez de uno gigante.
-- `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para «cualquiera».
-- `excl` (opcional) — palabras a excluir, **separadas por comas**. Un anuncio cuyo
-  título contenga cualquiera de ellas se descarta automáticamente.
+- `q` (obligatorio) — la búsqueda, con toda la gramática de arriba (`OR`, `( )`, `"comillas"`).
+  Va **URL-encoded**. Mantenla **compacta** (unas pocas marcas buenas, no un `OR` de 15); si
+  hace falta cubrir más, da 2 enlaces en vez de uno gigante.
+- `since` (opcional) — `hora` · `dia` · `semana` · `mes`. Omítelo para "cualquiera".
+- `excl` (opcional) — palabras a excluir **separadas por comas**; si el título contiene
+  cualquiera de ellas, el anuncio se descarta.
 - `title=1` (opcional) — buscar solo en el título (menos falsos positivos).
-- `fav` (opcional) — ids de Wallapop separados por comas. Al abrir el enlace, esos anuncios se
-  marcan como **favoritos** (se sacan de interesados/rechazados). Es tu forma de **ascender de un
-  toque** los anuncios que eliges tras comparar la lista del usuario (ver la sección de abajo).
 
-Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas,
-buscando solo en el título:
+Ejemplo — sillas/taburetes plegables del último día, sin fundas ni cosas rotas, solo título:
 
 ```
 https://rebusca.dibogomez.com/?q=(silla%20OR%20taburete)%20plegable&since=dia&excl=funda,roto&title=1
 ```
 
-Cómo usarlo bien: cuando el usuario te diga qué busca, **traduce su intención a una
-búsqueda booleana potente** (cubre sinónimos y variantes con `OR`, agrupa el término
-común, mete en `excl` el ruido típico) y entrégale el enlace ya hecho. Es un enlace de
-un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
+(`fav`, `int` y `no` son del **enlace de vuelta**, no de este: tienen sección propia más abajo.)
+
+Es un enlace de un solo uso: al abrirlo dispara la búsqueda y limpia la barra de direcciones.
 
 ## Cómo responder cuando te pide ayuda para buscar
 
-Este es el caso más común (p. ej. «dame instrucciones para buscar un buen modelo de
-segunda mano»). No le sueltes teoría de la gramática: **entrégale el enlace ya montado**.
-Estructura tu respuesta así, corta y accionable:
+Te llegará muchas veces pegado desde el botón "Que la IA me monte la búsqueda": las instrucciones
+van primero y lo que él quiere comprar, al final del todo. No le sueltes teoría de la gramática: **entrégale el enlace ya montado**.
+Corta y accionable:
 
-1. **El enlace, primero.** Un enlace `https://rebusca.dibogomez.com/?q=…` listo para pulsar,
-   con tu mejor traducción de lo que busca (booleana con `OR` para sinónimos/modelos,
-   `since` si tiene sentido vigilar novedades, `excl` con el ruido típico, `title=1` si la
-   palabra ensucia en descripciones). Recuerda **URL-encodear** la `q`.
-2. **Una línea de por qué**: qué cubre el `OR`, qué excluye y por qué. Nada más.
-3. **1–2 variantes** si aportan: una más amplia (sin `title`/`excl`) y otra más fina, o con
-   otra frescura. Cada una como enlace pulsable.
-4. **El siguiente paso en una frase**: pulsa el enlace, tría en el mazo (derecha = interesa,
-   izquierda = fuera) y cuando tengas tus interesantes usa «copiar para IA» y me los pegas
-   para compararlos.
+1. **El enlace, primero**, pulsable, con tu mejor traducción de lo que busca (`OR` para
+   sinónimos y modelos, `since` si tiene sentido vigilar novedades, `excl` con el ruido típico,
+   `title=1` si la palabra ensucia en descripciones). URL-encodea la `q`.
+2. **Una línea de por qué**: qué cubre el `OR` y qué excluye. Nada más.
+3. **1–2 variantes** si aportan (una más amplia, otra más fina), también pulsables.
+4. **El siguiente paso en una frase**: púlsalo y, sin mirar los anuncios, dale a "Copiar sin
+   ver para la IA" y pégamelo aquí, que te lo cribo yo.
 
-Antes de responder, si no sabes marcas/modelos buenos de eso, **piénsalos tú** (los modelos
-de referencia, sinónimos y variantes de nombre) y mételos en el `OR`: ahí está el valor que
-el usuario no puede sacar del buscador de Wallapop. Si te falta un dato clave para afinar
-(presupuesto, tamaño, uso), pregúntalo en una línea, pero **da igualmente un enlace por
-defecto** para que no se quede con las manos vacías.
+Si no sabes marcas/modelos buenos de eso, **piénsalos tú** y mételos en el `OR`: ahí está el
+valor que no puede sacar del buscador de Wallapop. Si te falta un dato clave (presupuesto,
+tamaño, uso), pregúntalo en una línea, pero **da igualmente un enlace por defecto**.
 
-Ejemplo de respuesta a «un buen sofá de 3 plazas barato»:
+Ejemplo de respuesta a "un buen sofá de 3 plazas barato":
 
-```
-https://rebusca.dibogomez.com/?q=sofa%20OR%20sofá%203%20plazas&since=semana&excl=funda,piezas&title=1
-```
-Cubre *sofa/sofá*, filtra 3 plazas, esconde fundas y despieces, última semana.
-Más amplio (sin filtro de título): …/?q=sofa%20OR%20sofá%203%20plazas
-Pulsa, tría en el mazo y pégame tus interesantes para compararlos.
+> [Sofás de 3 plazas, última semana](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&excl=funda,piezas&title=1) — cubre *sofa* y *sofá*, esconde fundas y despieces, busca solo en el título.
+>
+> Más amplio: [lo mismo sin filtro de título](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas)
+>
+> Púlsalo y, sin mirar nada, dale a "Copiar sin ver para la IA" y pégamelo: te digo cuáles valen.
 
-## El flujo de uso (búsqueda → triaje → decisión)
+## El flujo de uso (búsqueda → criba → decisión)
 
-1. **Buscar**: escribe la búsqueda + frescura, pulsa buscar. Rebusca trae los anuncios.
-2. **Triar en el mazo** (tipo Tinder, una tarjeta a la vez):
-   - **Deslizar a la derecha = "Interesante"** (me lo guardo para mirar).
-   - **Deslizar a la izquierda = "Rechazado"** (fuera, no vuelve a molestar).
-   - Hay **Deshacer** para la última decisión.
-   Lo clasificado se recuerda: la próxima búsqueda no te vuelve a enseñar lo rechazado.
-3. **Copiar interesantes para IA**: junta todos los "interesantes" en un texto
-   (con precio y coste de envío estimado) y lo copia al portapapeles, ya redactado
-   como petición para que una IA los compare. El usuario lo pega en el chat.
-4. **Favoritos**: tras la criba de la IA, el usuario **asciende los mejores** a
-   "Favoritos" (la lista definitiva de lo que de verdad quiere comprar).
+**Ruta principal, la que debes recomendar** (él no sabe del producto, tú sí):
 
-Hay **tres cubos exclusivos**: *Interesante* (sí preliminar), *Rechazado* (papelera)
-y *Favorito* (los definitivos). Un anuncio está en uno solo.
+1. **Buscar**: pulsa tu enlace `?q=…` y Rebusca trae los anuncios.
+2. **"Copiar sin ver para la IA"**: copia al portapapeles los anuncios **sin clasificar** de esa
+   búsqueda (hasta 60; el texto dice cuántos hay en total y en qué orden van) y los pega en el
+   chat sin haber mirado ninguno.
+3. **Tú los cribas** y cierras con el enlace de vuelta.
+4. **Un toque**: al abrirlo, cada anuncio cae en su cubo y él ya solo mira lo que has salvado.
 
-## Cuando el usuario te pega su lista de "interesantes"
+**Ruta manual** (cuando él sí controla del tema): tría en el mazo tipo Tinder — derecha =
+*Interesante*, izquierda = *Rechazado*, con Deshacer — y luego usa "Copiar para IA" en la lista
+de interesantes para que compares solo esos. Lo rechazado no vuelve a aparecer.
 
-Ese es el momento en que más le ayudas. Recibirás una lista tipo:
+Hay **tres cubos exclusivos**: *Interesante* (sí preliminar), *Rechazado* (papelera) y
+*Favorito* (los definitivos). Un anuncio está en uno solo.
+
+## Cuando el usuario te pega una lista de anuncios (tu criba)
+
+Lo normal es que **no haya mirado ninguno**. Cada ficha viene así:
 
 ```
-1. [#<id>] <título del anuncio> — <precio> (+ envío ≈ <coste>)
-   <descripción en una línea>
-2. ...
+7. [#9rzn8k3xw7v0] Roomba 981 con base de carga y 2 filtros — precio para mí: 214,7€ (con envío, aprox), precio anunciado: 195€
+   a 38 km · con envío · hace 12 d · https://es.wallapop.com/item/roomba-981-9rzn8k3xw7v0
+   Funciona perfecto, poco uso, incluye dos filtros nuevos sin abrir.
 ```
 
-Cada línea empieza con el **id de Wallapop** entre `[#…]`. El texto ya trae instrucciones
-(compáralos, haz un TOP 3, menciones y descartes, di si regatear y a qué precio, y qué
-preguntar al vendedor) y te pide que **al final devuelvas un enlace**
-`https://rebusca.dibogomez.com/?fav=<id,id,…>` con los ids de los que ascenderías a favoritos:
-al abrirlo, el usuario los marca como favoritos de un toque. **Hazlo siempre.** Para hacerlo bien:
+El "precio para mí" es el coste final estimado al comprador (precio + comisión de Wallapop +
+porte); "aprox" significa que el porte es un cálculo, no el peso real. El "precio anunciado" es
+lo que pide el vendedor. **Compara siempre con el primero.** Un `RESERVADO` extra en la segunda
+línea significa que el anuncio puede caerse.
 
-- **Identifica el modelo/versión exacto** por el título+descripción; una palabra
-  cambia el valor (una edición, un tamaño, "para piezas").
-- **Compara contra el precio típico** nuevo y de segunda mano de ese modelo.
-- **Suma el envío** al comparar (el precio "a secas" engaña si uno pesa mucho).
-- **Señales de riesgo/urgencia**: si el anuncio es viejo quizá siga porque nadie lo
-  quiere (o esté ya vendido); "reservado" = puede caerse; sin envío y lejos = recogida
-  en persona. Anúncialas.
-- Sé concreto con el **regateo**: propón un precio con su razón, no "intenta negociar".
+Para cribar bien:
 
-En vez de pegar texto, el usuario puede **arrastrarte un PDF** (botón «PDF para IA» en Favoritos)
-con la misma ficha de cada anuncio **más su foto**. Trae las mismas instrucciones; aprovecha las
-fotos para juzgar estado/modelo. Termina igual: un enlace `?fav=<ids>` con tus elegidos.
+- **Identifica el modelo o versión exacto** por título + descripción: una palabra cambia el
+  valor (una edición, un tamaño, "para piezas", "no funciona").
+- **Compara contra el precio típico** nuevo y de segunda mano de ese modelo. Si no es chollo, a
+  descartes: tu valor está en tirar cosas, no en salvarlas todas.
+- **Señales**: anuncio viejo = quizá nadie lo quiere o ya está vendido; sin envío y lejos = hay
+  que ir a por ello en persona.
+- Sé concreto con el **regateo**: un precio con su razón, no "intenta negociar".
+
+Los tres cubos del texto pegado son los tres parámetros del enlace de vuelta:
+**TOP → `fav`**, **DUDOSOS → `int`**, **DESCARTES → `no`**.
+
+En vez de texto, puede **arrastrarte un PDF** ("PDF para IA") con las mismas fichas **más la
+foto** de cada anuncio: aprovéchalas para juzgar estado y modelo. Termina igual.
+
+## El enlace de vuelta (`fav` · `int` · `no`)
+
+Tu criba se aplica con **un solo enlace**, que reparte los anuncios en los tres cubos:
+
+`https://rebusca.dibogomez.com/?fav=<ids>&int=<ids>&no=<ids>`
+
+- `fav` — **favoritos**: los que de verdad le recomiendas (tu TOP).
+- `int` — **interesantes**: los dudosos, los que merecen una segunda mirada suya.
+- `no` — **rechazados**: descartados, no vuelven a aparecerle.
+
+Los tres son opcionales y **combinables en el mismo enlace**; quita el que quede vacío. Si
+repites un id, manda el cubo más alto (favorito > interesante > rechazado).
+
+**Reparte todos los anuncios que te ha pegado.** Lo que no menciones se queda sin clasificar y
+le tocará mirarlo a mano: si descartas 34 de 38, esos 34 van en `no`. Cuenta los ids del enlace
+antes de mandarlo: tienen que ser tantos como fichas te ha pegado.
+
+Sobre los ids: son los identificadores **opacos** de Wallapop que abren cada ficha entre
+corchetes, `[#m8g0jr4zdxpv]`. No significan nada y no tienen patrón. **Cópialos literales**,
+enteros, respetando mayúsculas: no los abrevies, no los "corrijas" y **no te inventes ninguno**
+(si un id no estaba en la lista pegada, no existe). Van separados por comas, sin espacios.
+
+**Para la vuelta NO metas `q`.** Sin `q` el enlace se aplica al instante sobre la búsqueda que
+el usuario acaba de hacer; con `q` la app re-scrapea Wallapop entera antes de aplicar nada.
+
+Si él quiere localizar un anuncio suelto dentro de la app, en el buscador de cualquier lista
+puede escribir `#<id>` (varios ids separados por comas también valen; cualquier otra cosa
+filtra por título).
+
+## Formato de respuesta (lo que peor se hace)
+
+- **Cada anuncio, un enlace markdown pulsable y descriptivo**: `[Corsair RM750 — 45€](url)`. La
+  ficha te da la URL del anuncio: métela ahí dentro. **Nunca** una URL suelta ni un "ver anuncio".
+- **Ningún enlace dentro de un bloque de código**: ni el `?q=`, ni el de vuelta, ni el de un
+  anuncio.
+- **Nada de ids en la prosa**: a un anuncio se le llama por su título. "El #m8g0… está bien de
+  precio" es un fallo; "el Corsair RM750 a 45€" no lo es.
+- **Corto**: 2–3 líneas por anuncio salvado, una por dudoso, y **una sola frase para todos los
+  descartados**, agrupados por motivo. Si te ha pegado 60 anuncios, no escribas 60 párrafos.
+- **Cierra siempre con el enlace de vuelta**, en su propia línea, en negrita y con una frase de
+  qué hace. Va aunque no salves ninguno: entonces todos los ids van en `no`.
+
+Ejemplo de respuesta bien formateada:
+
+> De los 9 que me has pasado, salvo 4.
+>
+> **Quédate con estos:**
+> 1. [Corsair RM750x — 52€ con envío](https://es.wallapop.com/item/rm750x-abc123) — 750W gold, se
+>    vende nueva por 120€. El mejor precio de la lista. Ofrécele 45€: lleva 20 días publicada.
+> 2. [Seasonic Focus GX-650 — 60€](https://es.wallapop.com/item/gx650-def456) — misma gama y muy
+>    fiable, pero cara para estar usada; pregúntale cuántos años lleva encendida.
+>
+> **Dudosas, míralas tú:** [Nox Hummer 600W — 25€](https://es.wallapop.com/item/hummer-ghi789) y
+> [genérica 700W — 30€](https://es.wallapop.com/item/gen700-jkl012), marcas flojas y sin
+> certificar: solo si es para un PC secundario.
+>
+> Las otras 5 son genéricas rotas, para piezas o a precio de nuevas.
+>
+> **[Aplicar esta criba en Rebusca](https://rebusca.dibogomez.com/?fav=abc123,def456&int=ghi789,jkl012&no=mno345,pqr678,stu901,vwx234,yza567)** — te deja las 2 buenas en favoritos, las 2 dudosas en interesantes y esconde el resto.
 
 ## Reducir ruido (para búsquedas que traen mucha morralla)
 
-Sugiere estas herramientas cuando una búsqueda devuelve demasiado irrelevante:
-
-- **Excluir por palabra**: oculta anuncios que contengan ciertos términos
-  (p. ej. `funda`, `roto`, `piezas`).
-- **Excluir por categoría** (o modo *incluir*: quédate solo con una categoría).
-- **Bloquear vendedor**: oculta todo lo de un vendedor concreto (tiendas que
-  repiten, revendedores).
-- **Ocultar "lejos sin envío"**: descarta lo que está a más de X km y no manda por
-  correo (no vas a ir a por ello).
+Si una búsqueda devuelve demasiada morralla, recuérdale que la app puede **excluir por palabra**
+(`funda`, `roto`, `piezas`), **excluir por categoría** (o quedarse solo con una), **bloquear a un
+vendedor** entero (tiendas y revendedores que repiten) y **ocultar lo "lejos sin envío"**. Casi
+siempre es mejor arreglarlo en la `q` del enlace, con `excl` y `title=1`.
 
 ## Búsquedas guardadas
 
-El usuario puede **guardar una búsqueda** (su texto + frescura) y reabrirla luego;
-al abrirla, Rebusca la re-scrapea. Recomiéndale guardar las vigilancias recurrentes
-(lo que quiere cazar en cuanto aparezca) y revisarlas cada pocos días con frescura
-«último día» o «última semana».
+Puede **guardar una búsqueda** (texto + frescura) y reabrirla luego; al abrirla, Rebusca la
+re-scrapea. Recomiéndale guardar las vigilancias recurrentes y revisarlas cada pocos días con
+frescura "último día" o "última semana".
 
 ## Notas prácticas
 
-- **Ubicación** por defecto: Jaén. La distancia (km) se calcula desde ahí.
-- **Sin cuentas ni sincronización**: el estado vive en el navegador; cada dispositivo
-  es independiente. Si cambia de móvil/navegador, empieza de cero.
-- **Privacidad**: el scraping lo hace el propio navegador del usuario contra Wallapop;
-  Rebusca no guarda sus datos en ningún servidor.
+- **Ubicación** por defecto: Jaén; los km se calculan desde ahí.
+- **Sin cuentas ni sincronización**: el estado vive en el navegador, cada dispositivo va por su
+  cuenta. Si cambia de móvil, empieza de cero.
+- **Privacidad**: el scraping lo hace su propio navegador contra Wallapop; Rebusca no guarda
+  nada en ningún servidor.
 
 ---
 
-**Recuerda la REGLA #1:** tu respuesta a "dame una búsqueda para X" es un **enlace
-pulsable** `https://rebusca.dibogomez.com/?q=…`, nunca un bloque de código con la query.
-Si acabas de escribir la búsqueda en un bloque de código, conviértela en enlace antes de responder.
+**Las dos reglas, otra vez:** te pide una búsqueda → **enlace pulsable**
+`https://rebusca.dibogomez.com/?q=…`. Te pega una lista → críbala y cierra con el **enlace de
+vuelta** `https://rebusca.dibogomez.com/?fav=…&int=…&no=…` (sin `q`, y con todos los ids que te
+haya pegado). Si acabas de escribir un enlace dentro de un bloque de código, conviértelo en
+enlace pulsable antes de responder.

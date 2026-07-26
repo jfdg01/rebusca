@@ -164,6 +164,16 @@ const saveExcl = () => {
   setLS("wp_excl", JSON.stringify(exclMap));
   pushEstado();
 };
+// topes numéricos por cajón: lo que pase de precio/antigüedad/distancia sale del mazo solo,
+// igual que una palabra vetada (y con el mismo atajo "mandar a rechazados" en el stat).
+// Se guardan por búsqueda, así se re-aplican en cada re-scrape sin volver a teclearlos.
+const LIMITS = [["precio", "€"], ["dias", "días"], ["km", "km"]];
+let limMap = JSON.parse(localStorage.getItem("wp_lim") || "{}"); // {cajon: {precio, dias, km}}
+const limits = () => (curCsv && limMap[curDrawer()]) || {};
+const saveLimits = () => {
+  setLS("wp_lim", JSON.stringify(limMap));
+  pushEstado();
+};
 let catExclMap = JSON.parse(localStorage.getItem("wp_catexcl") || "{}"); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
 const catExclTerms = () => (curCsv && catExclMap[curDrawer()]) || [];
 const saveCatExcl = () => {
@@ -208,6 +218,7 @@ function pushEstado() {
       excl: exclMap,
       catExcl: catExclMap,
       catMode: catModeMap,
+      lim: limMap,
       alias: aliasMap,
       stamp,
     }),
@@ -239,6 +250,8 @@ function hydrateEstado() {
       exclMap = foldDrawers(obj(e.excl), uni); // {cajon:[palabras]}
       catExclMap = foldDrawers(obj(e.catExcl), uni); // {cajon:[categorias]}
       catModeMap = foldDrawers(obj(e.catMode), (a, b) => a || b); // {cajon:"incluir"}
+      limMap = foldDrawers(obj(e.lim), (a, b) => ({ ...b, ...a })); // {cajon:{precio,dias,km}}
+      setLS("wp_lim", JSON.stringify(limMap));
       aliasMap =
         e.alias && typeof e.alias === "object" && !Array.isArray(e.alias)
           ? e.alias
@@ -271,7 +284,9 @@ let headers = DEFAULT_HEADERS.slice(),
 // `headers.length` es truthy desde el primer render y NO sirve de señal: por eso un usuario nuevo
 // veía "Nada que revisar." y cuatro contadores a 0 en vez de la bienvenida.
 let loadedCsv = null;
-const WELCOME = "Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar.";
+const WELCOME =
+  "Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar. " +
+  '¿No sabes qué modelos buscar? Dale a "Que la IA me monte la búsqueda".';
 let fabAction = () => openSwipe(); // el botón grande cambia de destino según el paso del embudo
 const rejectedSel = new Set(); // selección en masa de la papelera (keys); solo viva en view==='rejected'
 let iId = headers.indexOf("id"),
@@ -470,6 +485,18 @@ function fillCard(el, r) {
   ship.textContent = conEnvio ? "Con envío" : "Sin envío";
   flags.append(ship);
   if (where) flags.append(document.createTextNode(`, ${where}`));
+  // id de Wallapop: el mismo [#...] que la IA maneja. Visible solo en las listas (donde se cotejan
+  // sus veredictos); un toque lo copia, y pegándolo en el filtro (#id) se localiza el anuncio.
+  const id = col(r, "id");
+  if (view !== "" && id) {
+    const chip = document.createElement("span");
+    chip.className = "li-id";
+    chip.textContent = "#" + id;
+    chip.title = "copiar el id";
+    chip.onclick = () =>
+      navigator.clipboard.writeText(id).then(() => snack("Id copiado", null)).catch(() => {});
+    flags.append(document.createTextNode(" · "), chip);
+  }
 
   const desc = col(r, "descripcion");
   if (desc) add("li-desc", desc);
@@ -532,7 +559,17 @@ document
 // filas visibles con el orden actual (compartido por tabla y modo swipe)
 let listQ = ""; // filtro de texto de la pantalla de lista (papelera/destacados)
 let listSeller = ""; // filtro por vendedor en la papelera (desde el banner: "ver" rechazados de un vendedor)
+// ponytail: compara el precio del anuncio, no el "precio para mí" (comisión+envío); es el número
+// que el usuario ve al poner el tope. Vacío o no numérico nunca cae por un tope.
+const overMax = (v, max) => max != null && isNum(v) && +v > max;
+console.assert(
+  overMax("120", 100) && !overMax("100", 100) && !overMax("", 100) && !overMax("x", 100) &&
+    !overMax("120", undefined),
+  "overMax() roto",
+);
+const overLimit = (r) => LIMITS.some(([c]) => overMax(col(r, c), limits()[c]));
 const isExcluded = (r) => {
+  if (overLimit(r)) return true; // pasa de precio/antigüedad/distancia máximos del cajón
   // vetada por la query activa: categoría exacta o palabra en el título
   const cats = catExclTerms();
   if (cats.length) {
@@ -583,10 +620,13 @@ function filteredRows() {
     const q = norm(listQ); // el filtro solo aplica en vista de lista
     const set = view === "rejected" ? rejected : view === "interested" ? interested : favorite;
     const rows = bucketRows(set).filter((r) => {
-      // "#123" filtra por id de Wallapop; cualquier otra cosa, por título
+      // "#id" filtra por id de Wallapop (varios separados por comas/espacios: pega tal cual la lista
+      // que te haya dado la IA); cualquier otra cosa, por título
       if (q) {
         if (q.startsWith("#")) {
-          if (!String(col(r, "id") || "").includes(q.slice(1).trim())) return false;
+          const want = q.slice(1).split(/[,\s]+/).filter(Boolean);
+          const id = norm(col(r, "id") || "");
+          if (!want.some((w) => id.includes(w))) return false;
         } else if (!norm(col(r, "titulo") || "").includes(q)) return false;
       }
       if (view === "rejected" && listSeller && col(r, "vendedor") !== listSeller) return false;
@@ -716,6 +756,8 @@ function finishRender(rows, listView) {
   // copiar para la IA + precio exacto: solo sobre interesantes (el paso previo a decidir favoritos)
   $("#exportInterested").hidden = !(view === "interested" && rows.length);
   $("#dossierFav").hidden = !(view === "favorite" && rows.length);
+  // CTA principal: mandar el mazo sin triar a la IA. Solo con mazo cargado y algo sin ver.
+  $("#copyUnseen").hidden = !(!listView && loadedCsv && rows.length);
   const interestedConEnvio =
     view === "interested" && rows.some((r) => col(r, "envio") === "True");
   $("#priceNote").hidden = !interestedConEnvio; // la nota explica ese precio final: mismo criterio que el botón
@@ -853,7 +895,20 @@ function renderExcl() {
   if (!box) return;
   box.hidden = !(loadedCsv && view === "" && curCsv);
   fillExclChips($("#exclChips"), render);
+  for (const [c] of LIMITS) $("#lim_" + c).value = limits()[c] ?? "";
 }
+// topes máximos del cajón: vacío o 0 = sin tope
+for (const [c] of LIMITS)
+  $("#lim_" + c).onchange = (e) => {
+    if (!curCsv) return;
+    const v = +e.target.value,
+      m = (limMap[curDrawer()] ||= {});
+    if (v > 0) m[c] = v;
+    else delete m[c];
+    if (!Object.keys(m).length) delete limMap[curDrawer()];
+    saveLimits();
+    render();
+  };
 
 function paintStat() {
   if (!loadedCsv) {
@@ -865,7 +920,7 @@ function paintStat() {
   const interestedRows = data.filter((r) => interested.has(key(r))).length;
   const favoriteCount = data.filter((r) => favorite.has(key(r))).length;
   const disc = data.filter((r) => rejected.has(key(r))).length;
-  const hasExcl = exclTerms().length || catExclTerms().length; // ad-hoc: palabra en título o categoría
+  const hasExcl = exclTerms().length || catExclTerms().length || Object.keys(limits()).length; // ad-hoc: palabra en título, categoría o tope numérico
   const vetados = hasExcl
     ? data.filter((r) => !clasif(r) && isExcluded(r)).length
     : 0;
@@ -1885,36 +1940,60 @@ lejosKmEl.onchange = () => {
   setLS("wp_lejoskm", lejosKm);
   render();
 };
-// deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1&fav=<id,id>
+// deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1
+//            &fav=<ids>&int=<ids>&no=<ids>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:
 // booleana (OR/grupos/comillas van tal cual en q) + exclusiones. Devuelve true si disparó.
-// ?fav=<ids> marca esos anuncios como FAVORITOS en el cajón de ?q= (o el activo si no hay q):
-// así la IA, tras comparar la lista de esa búsqueda, asciende sus elegidos de un toque.
+// fav/int/no reparten anuncios en los 3 cubos del cajón de ?q= (o el activo si no hay q): así la
+// IA, tras cribar la lista que el usuario le pegó, aplica su criba entera de un toque. Se pueden
+// combinar en un solo enlace; si un id se repite manda el cubo más alto (favorito > interesante).
+const TRIAGE = [["no", "rejected"], ["int", "interested"], ["fav", "favorite"]]; // orden = prioridad ascendente
+const BUCKET_LABEL = { rejected: "rechazados", interested: "interesantes", favorite: "favoritos" };
+// "3 a favoritos, 5 a interesantes y 40 a rechazados" — resumen de lo que aplicó el enlace de la IA
+const triageMsg = (picks) => {
+  const parts = [...picks].reverse().map(([b, ids]) => `${ids.length} a ${BUCKET_LABEL[b]}`);
+  return parts.length > 1 ? parts.slice(0, -1).join(", ") + " y " + parts.at(-1) : parts[0];
+};
+console.assert(
+  triageMsg([["rejected", ["a"]], ["favorite", ["b", "c"]]]) === "2 a favoritos y 1 a rechazados" &&
+    triageMsg([["favorite", ["b"]]]) === "1 a favoritos",
+  "triageMsg roto",
+);
 function fromURL() {
   const p = new URLSearchParams(location.search);
-  const favIds = [...new Set((p.get("fav") || "").split(",").map((s) => s.trim()).filter(Boolean))];
+  const idsOf = (k) => [...new Set((p.get(k) || "").split(",").map((s) => s.trim()).filter(Boolean))];
+  const picks = TRIAGE.map(([param, bucket]) => [bucket, idsOf(param)]).filter(([, ids]) => ids.length);
+  const nPicks = picks.reduce((n, [, ids]) => n + ids.length, 0);
   const q = (p.get("q") || "").trim();
   const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
-  let dest = ""; // cajón donde caen los ?fav=
-  if (favIds.length) {
+  let dest = ""; // cajón donde cae la criba
+  if (nPicks) {
     // OJO: sin ?q=, `curCsv` aún es null (fromURL corre ANTES de restoreLastCsv) → el cajón salía ""
     // y los favoritos de la IA caían en un cajón fantasma invisible. Cae al origen del propio anuncio
     // (rowCache) o a la última búsqueda abierta.
-    dest = q ? csvNameOf(q, since) : curCsv || rowCache[favIds[0]]?._csv || localStorage.getItem(lastCsvKey()) || "";
+    const anyId = picks[0][1][0];
+    dest = q ? csvNameOf(q, since) : curCsv || rowCache[anyId]?._csv || localStorage.getItem(lastCsvKey()) || "";
     pointBuckets(dest);
-    for (const id of favIds) { interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id); }
+    const sets = { rejected, interested, favorite };
+    for (const [bucket, ids] of picks)
+      for (const id of ids) {
+        for (const n of BUCKET_NAMES) sets[n].delete(id); // cubos exclusivos: sale de los otros dos
+        sets[bucket].add(id);
+        stampNow(id);
+      }
     save("wp_interested", interested); save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
   if (!q) {
-    if (favIds.length) {
+    if (nPicks) {
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
-      view = "favorite"; // muéstralos ya: se pintan desde el cache, sin re-scrapear
+      // muestra el cubo más alto que haya tocado: se pinta desde el cache, sin re-scrapear
+      view = picks.at(-1)[0] === "rejected" ? "" : picks.at(-1)[0];
       if (dest) selectQueryUI(dest); // fija curCsv al cajón: sin esto la vista sale vacía
       render();
-      snack(`${favIds.length} añadidos a favoritos`, null);
+      snack(triageMsg(picks), null);
       return true; // ya hay algo en pantalla; no dispares restoreLastCsv()
     }
-    return false; // sin fav ni q: deja que restoreLastCsv() cargue la última vista
+    return false; // sin criba ni q: deja que restoreLastCsv() cargue la última vista
   }
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
   if (words.length) { exclMap[drawerOf(csvNameOf(q, since))] = words; saveExcl(); } // se aplican al renderizar
@@ -1923,6 +2002,7 @@ function fromURL() {
   $("#titleOnly").checked = p.get("title") === "1";
   history.replaceState(null, "", location.pathname); // enlace de un solo uso: refrescar no re-dispara
   $("#scrape").click();
+  if (nPicks) snack(triageMsg(picks), null); // con ?q= la criba se aplica igual, pero se re-scrapea
   return true;
 }
 
@@ -2184,8 +2264,8 @@ function pricePair(r) {
 }
 // frase que explica a la IA de dónde sale "precio para mí" (envío + comisión estimados)
 const PRICE_NOTE =
-  "El «precio para mí» es una estimación del coste final para el comprador " +
-  "(incluye el envío y la comisión de protección de Wallapop); el «precio anunciado» es el que pide el vendedor. ";
+  "El \"precio para mí\" es una estimación del coste final para el comprador " +
+  "(incluye el envío y la comisión de protección de Wallapop); el \"precio anunciado\" es el que pide el vendedor. ";
 // quita emojis (y sus modificadores/uniones) del texto a copiar: fichas limpias para la IA y notas
 const EMOJI_RE =
   /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u200D\uFE0F\u20E3]/gu;
@@ -2201,33 +2281,65 @@ console.assert(
   "stripEmoji roto",
 );
 
+// Reglas del enlace de vuelta: lo único que la IA hace mal por defecto (ids inventados, cubos a
+// medias, enlace olvidado). Van inline en los dos prompts porque llms.txt puede no leerse.
+const LINK_RULES = (n) =>
+  "Cada anuncio que nombres va como enlace markdown pulsable a la URL de su ficha, con título y precio " +
+  "dentro del texto del enlace: [Roomba 981 — 195€ (215€ para mí)](https://es.wallapop.com/item/...). " +
+  "Nunca pegues una URL suelta, nunca escribas un id en el texto, y nunca metas un enlace dentro de un " +
+  "bloque de código: estoy en el móvil y ahí no se puede pulsar.\n\n" +
+  "Termina SIEMPRE con esta línea, aunque no salves ninguno:\n\n" +
+  "**[Aplicar tu criba en Rebusca](https://rebusca.dibogomez.com/?fav=<ids TOP>&int=<ids DUDOSOS>&no=<ids DESCARTES>)** " +
+  "— más una frase de qué hace al pulsarlo.\n\n" +
+  "Los ids son los [#...] de las fichas de abajo, copiados enteros y literales: son códigos opacos, no los " +
+  "acortes, no cambies mayúsculas, no uses ninguno que no esté abajo y no te inventes ninguno. Van separados " +
+  `por comas, sin espacios, y cada id en un solo parámetro. Entre los tres parámetros tienen que ir los ${n} ` +
+  "ids, ni uno menos: lo que no metas se queda sin clasificar y me toca mirarlo a mano. Quita el parámetro " +
+  "que quede vacío. No añadas ?q=: me obligaría a repetir la búsqueda.";
+console.assert(
+  LINK_RULES(7).includes("?fav=<ids TOP>&int=<ids DUDOSOS>&no=<ids DESCARTES>") &&
+    LINK_RULES(7).includes("los 7 ids"),
+  "LINK_RULES roto",
+);
 // instrucción de cabecera para la IA (la misma para el texto de "copiar" y para el PDF dossier)
-const promptIntro = () =>
-  "Estos son artículos de segunda mano de Wallapop que quiero comparar antes de comprar. " +
+const promptIntro = (n) =>
+  "Contexto de la app, si no la conoces: https://rebusca.dibogomez.com/llms.txt\n\n" +
+  `Abajo van ${n} artículos de segunda mano de Wallapop que he marcado como interesantes y quiero comparar ` +
+  "antes de comprar. Compara siempre contra el \"precio para mí\". " +
   PRICE_NOTE +
-  "Investiga cada uno a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
-  "y clasifícalos en tres listas:\n" +
-  "a) TOP 3: los tres mejores calidad/precio, ordenados del mejor al tercero, cada uno con el porqué en detalle.\n" +
-  "b) MENCIONES: los que no llegan al top 3 pero siguen mereciendo la pena, con una línea de por qué destacan.\n" +
-  "c) DESCARTES: los que descartarías, con el motivo breve.\n" +
-  "Para los del TOP 3 y las MENCIONES, dime además si debería intentar regatear el precio y, si es así, a qué precio propondrías, " +
-  "y si lo ves necesario dime qué preguntar al vendedor.\n" +
-  "Al final, dame un enlace https://rebusca.dibogomez.com/?fav=<ids> con los ids ([#...]) de los que ascenderías a favoritos " +
-  "(TOP 3 y menciones que valgan la pena), separados por comas; al abrirlo los marco como favoritos de un toque:";
-// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
-function interestedPrompt(rows) {
-  const items = rows
-    .map((r, i) => {
-      const lines = [
-        `${i + 1}. [#${col(r, "id")}] ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
-      ];
-      const desc = col(r, "descripcion");
-      if (desc) lines.push("   " + stripEmoji(desc.replace(/\s*\n\s*/g, " ")));
-      return lines.join("\n");
-    })
-    .join("\n\n");
-  return promptIntro() + "\n\n" + items;
+  "\n\nSaca el modelo o versión exacta de cada uno por el título + la descripción y compáralo con su precio " +
+  "típico nuevo y de segunda mano. Luego repártelos TODOS en tres cubos:\n" +
+  "- TOP: los mejores calidad/precio, máximo 3 y ordenados de mejor a peor (si solo hay uno bueno, uno; si no " +
+  "hay ninguno decente, ninguno y me lo dices). Dos o tres líneas cada uno: por qué, qué riesgo tiene, a qué " +
+  "precio regatear y qué preguntar al vendedor.\n" +
+  "- DUDOSOS: los que no llegan al TOP pero siguen mereciendo la pena. Una línea cada uno.\n" +
+  "- DESCARTES: los que tiraría. Una o dos frases para el conjunto, agrupando por motivo.\n\n" +
+  LINK_RULES(n);
+// ficha de un anuncio para la IA: id + título + precios + señales de decisión + enlace + descripción.
+// El enlace es lo que la IA convierte en link pulsable para el usuario; el [#id] es solo de máquina
+// (vuelve en ?fav=/?int=/?no=). maxDesc recorta descripciones kilométricas cuando van muchas fichas.
+function ficha(r, i, maxDesc) {
+  const km = col(r, "km"),
+    dias = col(r, "dias");
+  const meta = [];
+  if (isNum(km)) meta.push(`a ${Math.round(+km)} km`);
+  meta.push(col(r, "envio") === "True" ? "con envío" : "sin envío");
+  if (isNum(dias)) meta.push(`hace ${Math.round(+dias)} d`);
+  if (col(r, "reservado") === "True") meta.push("RESERVADO");
+  const url = col(r, "url");
+  if (url) meta.push(url);
+  const lines = [
+    `${i + 1}. [#${col(r, "id")}] ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
+    "   " + meta.join(" · "),
+  ];
+  let desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
+  if (maxDesc && desc.length > maxDesc) desc = desc.slice(0, maxDesc).trimEnd() + "…";
+  if (desc) lines.push("   " + desc);
+  return lines.join("\n");
 }
+const fichas = (rows, maxDesc) => rows.map((r, i) => ficha(r, i, maxDesc)).join("\n\n");
+// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada destacado (precio final estimado)
+const interestedPrompt = (rows) => promptIntro(rows.length) + "\n\n" + fichas(rows);
 // copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
 function copyAsync(makeText) {
   if (window.ClipboardItem && navigator.clipboard.write) {
@@ -2276,6 +2388,114 @@ $("#copyInterestedOpt").onclick = (e) => {
   copyInterested(e.currentTarget, true); // menú ⚙: copia TODOS (aunque ya se enviaran)
 }; // cierra el menú para que se vea el snack
 
+// ── prompt de entrada: que la IA monte la QUERY ─────────────────────────────────
+// Primer paso del flujo y el que más valor aporta: quien no conoce el producto no sabe qué
+// marcas/modelos meter, y lo que no entre en la `q` no lo verá nunca.
+// La intención del usuario va SIEMPRE al final, tras una línea en blanco: pega y sigue escribiendo
+// ahí mismo sin tener que colarse en medio del texto.
+const askPrompt = (intent) =>
+  "Lee https://rebusca.dibogomez.com/llms.txt antes de responder: es la guía de Rebusca, un cazador de " +
+  "chollos de Wallapop. Ahí tienes la gramática de búsqueda (OR, paréntesis, comillas) y el formato de los " +
+  "enlaces con los que me tienes que contestar.\n\n" +
+  "Quiero comprar algo de segunda mano y te lo describo al final. No sé qué marcas ni qué modelos son " +
+  "buenos, ni qué precio es normal aquí: eso lo pones tú. Piensa los modelos de referencia, sus variantes " +
+  "de nombre y los sinónimos, y métemelos en la búsqueda con OR. Esa query es lo más importante de todo el " +
+  "proceso: lo que no entre en ella no lo veré.\n\n" +
+  "Contéstame así:\n" +
+  "1. Un enlace pulsable https://rebusca.dibogomez.com/?q=... con tu mejor búsqueda: OR para modelos y " +
+  "sinónimos, ( ) para agrupar, excl con el ruido típico (funda, roto, piezas...), title=1 si la palabra " +
+  "ensucia en las descripciones y since si merece la pena vigilar solo lo nuevo. URL-encodea la q y " +
+  "mantenla compacta.\n" +
+  "2. Una línea de por qué: qué cubre el OR y qué excluye.\n" +
+  "3. Una o dos variantes pulsables si aportan (una más amplia, otra más fina).\n" +
+  "4. Si te falta un dato para afinar (presupuesto, tamaño, uso), pregúntamelo en una línea, pero dame " +
+  "igualmente el enlace por defecto.\n\n" +
+  "Nunca me pongas la búsqueda en un bloque de código ni una URL suelta: estoy en el móvil y necesito " +
+  "pulsar el enlace. Cuando lo abra, Rebusca lanza la búsqueda sola; luego le doy a \"Copiar sin ver para " +
+  "la IA\" y te pego los anuncios para que los cribes tú.\n\n" +
+  "Esto es lo que busco:\n\n" +
+  intent;
+console.assert(
+  askPrompt("teclado para principiantes").endsWith("Esto es lo que busco:\n\nteclado para principiantes") &&
+    askPrompt("").endsWith("Esto es lo que busco:\n\n"),
+  "askPrompt roto",
+);
+$("#copyAskPrompt").onclick = (e) => {
+  const btn = e.currentTarget;
+  const intent = $("#kw").value.trim(); // lo ya tecleado va como intención; si está vacío, el usuario escribe al final
+  btn.disabled = true;
+  copyAsync(() => askPrompt(intent))
+    .then(() =>
+      snack(
+        intent
+          ? `Prompt copiado con \"${intent}\". Pégalo en tu IA.`
+          : "Prompt copiado. Pégalo en tu IA y describe qué buscas.",
+        null,
+      ),
+    )
+    .catch(() => snack("No se pudo copiar", null))
+    .finally(() => (btn.disabled = false));
+};
+
+// ── "copiar sin ver": el mazo entero a la IA, sin triar ─────────────────────────
+// Flujo principal para quien no conoce el mercado del producto: en vez de triar a ciegas,
+// le pasa a la IA todo lo que no ha clasificado y esta le devuelve la criba en un enlace.
+// ponytail: sin fetchPesos (sería 1 request por anuncio, ~40s con 60 fichas) → precios "aprox".
+const UNSEEN_CAP = 60; // más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
+const UNSEEN_DESC = 200; // descripciones más largas hinchan el pegado sin aportar a la criba
+// orden activo del mazo, en cristiano: la IA se lo cita al usuario ("ordenados por …")
+function ordenLabel() {
+  if (!sortKeys.length) return "el orden en que los devuelve Wallapop";
+  const { col: c, dir } = sortKeys[0];
+  const n = headers[c] || "";
+  const base = { precio: "precio", km: "distancia", dias: "antigüedad" }[n] || n;
+  return `${base} ${dir > 0 ? "ascendente" : "descendente"}`;
+}
+function unseenPrompt(rows, total) {
+  const { kw, since } = queryParts(loadedCsv || "");
+  const n = rows.length;
+  return (
+    "Lee https://rebusca.dibogomez.com/llms.txt antes de responder: es la guía de Rebusca (gramática de " +
+    "búsqueda y formato de los enlaces con los que me contestas).\n\n" +
+    `He buscado \"${kw}\" en Wallapop con Rebusca (frescura: ${SINCE_LABEL[since] || "cualquiera"}) y no he ` +
+    "mirado ni un anuncio: no sé de marcas, ni de modelos, ni de qué es un precio justo aquí. La criba la " +
+    `haces tú. Abajo van ${n} anuncios sin clasificar de ${total}, ordenados por ${ordenLabel()}.\n\n` +
+    "Saca el modelo o versión exacta de cada uno por el título + la descripción, no opines por el título, y " +
+    "compáralo con su precio típico nuevo y de segunda mano. Compara siempre contra el \"precio para mí\": es " +
+    "el coste final estimado para el comprador (precio + comisión de protección de Wallapop + envío calculado " +
+    "a bulto, por eso \"aprox\"); el \"precio anunciado\" es lo que pide el vendedor.\n\n" +
+    "Repártelos TODOS en tres cubos:\n" +
+    "- TOP: los que compraría ya. Máximo 3, y solo si lo valen: si solo hay uno bueno, uno; si no hay ninguno " +
+    "decente, ninguno y me lo dices. Dos o tres líneas cada uno: por qué, qué riesgo tiene (reservado, anuncio " +
+    "viejo, sin envío y lejos), a qué precio regatear y qué preguntar al vendedor.\n" +
+    "- DUDOSOS: los que valen pero no ganan, o los que dependen de un dato que me falta. Una línea cada uno.\n" +
+    "- DESCARTES: todo lo demás. Una o dos frases para el conjunto, agrupando por motivo. No los listes uno a uno.\n\n" +
+    LINK_RULES(n) +
+    "\n\n" +
+    fichas(rows, UNSEEN_DESC)
+  );
+}
+function copyUnseen(btn) {
+  const all = filteredRows(); // vista de mazo: sin clasificar, sin excluidos, con el orden activo
+  if (!all.length) return snack("No hay anuncios sin ver", null);
+  const rows = all.slice(0, UNSEEN_CAP);
+  const prev = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "<b>Copiando…</b>";
+  copyAsync(() => unseenPrompt(rows, all.length))
+    .then(() => {
+      rows.forEach((r) => { const id = col(r, "id"); if (id) aiseen.add(id); }); // ya vistos por la IA
+      setLS("wp_aiseen", JSON.stringify([...aiseen]));
+      snack(`Copiados ${rows.length} anuncios. Pégalos en tu IA.`, null);
+    })
+    .catch(() => snack("No se pudo copiar", null))
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = prev;
+    });
+}
+$("#copyUnseen").onclick = (e) => copyUnseen(e.currentTarget);
+
 // ── PDF dossier de favoritos: fotos + fichas en un archivo para arrastrar a la IA ──
 // Truco CORS: cdn.wallapop.com NO da Access-Control-Allow-Origin, así que fetch/canvas de
 // la imagen fallan; pero un <img> cross-origin SÍ se muestra e imprime (solo se bloquea leer
@@ -2299,7 +2519,7 @@ function dossierHTML(rows) {
         `</div></div>`;
     })
     .join("");
-  return `<pre class="dsr-intro">${esc(promptIntro())}</pre>${cards}`;
+  return `<pre class="dsr-intro">${esc(promptIntro(rows.length))}</pre>${cards}`;
 }
 async function dossierFav(btn) {
   const rows = bucketRows(favorite);
@@ -2392,10 +2612,11 @@ function cardText(r) {
   return (
     "Este es un artículo de segunda mano de Wallapop que estoy pensando en comprar. " +
     PRICE_NOTE +
-    "Investígalo a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de segunda mano) " +
-    "y dime si es buena compra por ese precio. " +
-    "Además dime si debería intentar regatear el precio y, si es así, a qué precio propondrías, " +
-    "y si lo ves necesario dime qué preguntar al vendedor:\n\n" +
+    "\n\nInvestígalo a fondo (modelo o versión exacta, especificaciones, estado, y su precio típico nuevo y de " +
+    "segunda mano) y dime en la primera línea si es buena compra por ese precio: sí, no, o de qué depende. " +
+    "Luego, corto: el porqué, a qué precio regatear y qué preguntarle al vendedor si hace falta.\n\n" +
+    "Si de lo que averigües sale una búsqueda mejor (otro modelo, otras marcas), dámela como enlace pulsable " +
+    "a Rebusca siguiendo https://rebusca.dibogomez.com/llms.txt:\n\n" +
     lines.join("\n")
   );
 }
@@ -2495,3 +2716,4 @@ document.addEventListener("keydown", (e) => {
     e.target.click();
   }
 });
+
