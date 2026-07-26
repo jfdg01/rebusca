@@ -81,7 +81,7 @@
   .opts .menu { position: absolute; top: calc(100% + .3rem); left: 0; z-index: 30;
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     box-shadow: 0 8px 24px rgba(27,33,30,.18); padding: .7rem; }
-  .opts .menu .chip { white-space: nowrap; align-self: stretch; justify-content: center; padding-block: .5rem; }
+  .opts .menu .chip { white-space: normal; text-align: center; align-self: stretch; justify-content: center; padding-block: .5rem; line-height: 1.3; }
   .opts .menu { display: flex; flex-direction: column; gap: .5rem; min-width: 14rem; max-width: 15.5rem; }
   .opts .menu .opt-group { display: flex; flex-direction: column; gap: .55rem;
     border-top: 1px solid var(--line); margin-top: .35rem; padding-top: .8rem; }
@@ -175,17 +175,6 @@
   button.primary:active { box-shadow: 0 1px 3px rgba(16,168,150,.3); }
   :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 
-  /* CTA del flujo principal: mandar el mazo entero a la IA sin triarlo a mano */
-  .ai-cta {
-    display: flex; flex-direction: column; gap: .1rem; width: 100%; margin-top: .8rem;
-    padding: .7rem .7rem; text-align: center;
-    background: var(--pine); border: 1px solid var(--pine); border-radius: 9px;
-    color: #fff; box-shadow: 0 2px 6px rgba(16,168,150,.35);
-  }
-  .ai-cta b { font: 800 15px/1.25 var(--sans); }
-  .ai-cta small { font: 11px/1.25 var(--sans); opacity: .85; }
-  .ai-cta:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 3px 9px rgba(16,168,150,.4); }
-  .ai-cta:disabled { opacity: .6; cursor: progress; }
 
   /* resumen: contadores en su propia zona con caja separadora */
   .stat {
@@ -281,7 +270,7 @@
   .list-head-bar .note .help-pop { position: absolute; left: 0; top: 2rem; right: auto;
     width: min(19rem, 82vw); z-index: 20; }
   /* "Copiar para IA" empujado al extremo derecho */
-  .list-head-bar #exportInterested { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
+  .list-head-bar #exportFav { flex: 0 0 auto; margin-left: auto; padding: .4rem .8rem; white-space: nowrap; }
   /* flex:none: en un .list-head en columna, el flex-basis 180px de input[type=search] se volvía ALTURA (caja gigante en desktop) */
   .list-head #listFilter { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
   /* pills de orden: una sola fila, segmentadas a ancho equitativo (caben las 4 en 320px) */
@@ -343,13 +332,16 @@
   .btn.quitar { color: var(--ink-soft); }
   .btn.quitar:hover { color: #fff; background: #b03024; border-color: #b03024;
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
-  /* Favorito = ascender de interesantes: ámbar relleno */
-  .btn.destacar { background: var(--amber); border-color: var(--amber); color: #fff; box-shadow: 0 2px 6px rgba(217,154,0,.38); }
-  .btn.destacar:hover { background: var(--amber-ink); border-color: var(--amber-ink); box-shadow: 0 3px 9px rgba(217,154,0,.44); }
-  .btn.destacar .icon { width: 1em; height: 1em; fill: currentColor; stroke: none; }
-
   /* ── tarjeta de lista: la foto es el escaparate; el precio, su etiqueta ──
      media a sangre (ancho card + los dos paddings), la foto absoluta debajo de los overlays */
+  /* nota para IAs: fuera de pantalla (no display:none ni hidden — los fetchers de IA
+     extraen el texto sin computar CSS, y así les llega; el usuario nunca la ve) */
+  .ai-note { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  /* pie con el enlace a llms.txt: texto real en el body (los extractores de IA lo captan
+     seguro) pero del color del fondo — invisible para el usuario sin usar hidden/display */
+  .ai-foot { text-align: center; padding: 1.4rem 0 .4rem; }
+  .ai-foot a { font: 400 .72rem var(--mono); color: var(--paper); text-decoration-color: var(--paper); }
+
   .li-media { position: relative; margin: -1.2rem -1.2rem .8rem; aspect-ratio: 16/9;
     border-radius: 18px 18px 0 0; overflow: hidden;
     background: linear-gradient(135deg, var(--surface-2), var(--pine-soft)); }
@@ -379,6 +371,9 @@
   .li-when.interested { color: var(--pine-ink); }
   .li-desc { font: 12.5px/1.5 var(--sans); color: var(--ink-soft); margin-top: .55rem; overflow-wrap: anywhere;
     white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+  .li-id { margin-top: .4rem; font: 10px var(--mono); letter-spacing: .04em;
+    color: var(--ink-soft); opacity: .65; user-select: all; }
 
   .empty { color: var(--ink-soft); font: 13px var(--sans); padding: 3rem 0; text-align: center; }
 
@@ -444,12 +439,16 @@
   .help-pop code { font: 11px var(--mono); background: var(--surface-2);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
 
-  /* ruta manual: secundaria desde que el CTA de la IA es el camino principal (dos verdes llenos
-     competían y el usuario que no sabe del producto acababa triando a ciegas) */
-  #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
-    padding: 1rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--pine);
-    color: var(--pine); font: 800 1.25rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover { background: var(--surface-2); }
+  #copyDeck, #swipeFab, #copyFav { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
+    padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
+    box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
+  #copyDeck:hover, #copyFav:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
+  #copyDeck:active, #copyFav:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
+  #copyFav { font-size: 1.05rem; }   /* etiqueta más larga que COPIAR PARA IA */
+  /* swipear a mano es el plan B: botón secundario (borde, sin relleno) bajo el de la IA */
+  #swipeFab { background: transparent; border-color: var(--pine); color: var(--pine-ink);
+    box-shadow: none; font-size: 1.05rem; margin-top: .6rem; }
+  #swipeFab:hover { background: rgba(16,168,150,.08); }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;

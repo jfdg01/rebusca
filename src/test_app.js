@@ -117,7 +117,7 @@ function makeContext(store, opts = {}) {
     cancelAnimationFrame: noop,
     fetch: () => new Promise(() => {}), // no resuelve; en boot no se llama
     navigator: { userAgent: "test", clipboard: { writeText: () => Promise.resolve() } },
-    location: { reload: noop, href: "", search: opts.search || "", assign: noop },
+    location: { reload: noop, href: "", search: opts.search || "", pathname: "/", assign: noop },
     history: { pushState: noop, replaceState: noop },
     matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
     getComputedStyle: () => makeAny(),
@@ -275,7 +275,50 @@ async function main() {
   if (deep.wp_favorite !== '{"ford.csv":["999","1000"]}')
     fail("?fav= sin ?q=: los favoritos no cayeron en el cajon de la ultima busqueda, salio " + deep.wp_favorite);
 
-  // 8. el scraper del browser (scrape.js) sigue verde
+  // 8. migración: el cubo "interesantes" desaparece; sus ids ascienden a favoritos
+  const mi = {
+    wp_rows: JSON.stringify({ i1: { id: "i1", _csv: "ford.csv" } }),
+    wp_estado: JSON.stringify({ rejected: {}, favorite: {}, interested: { "ford.csv": ["i1"] } }),
+  };
+  errs = await bootErrs(mi);
+  if (errs.length) fail("boot con interesantes viejos lanzó: " + (errs[0].message || errs[0]));
+  if (mi.wp_favorite !== '{"ford.csv":["i1"]}')
+    fail("migración interesantes: no ascendieron a favoritos, salió " + mi.wp_favorite);
+
+  // 9. deep-link ?keep=<ids> (veredicto de la IA): los conservados van a favoritos y el
+  //    RESTO del lote enviado (wp_aisent) se rechaza; el lote queda consumido.
+  const kp = {
+    wp_rows: JSON.stringify({
+      a1: { id: "a1", _csv: "ps4.csv" },
+      a2: { id: "a2", _csv: "ps4.csv" },
+      a3: { id: "a3", _csv: "ps4.csv" },
+    }),
+    wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2", "a3"] }),
+  };
+  errs = await bootErrs(kp, { search: "?keep=a1" });
+  if (errs.length) fail("deep-link ?keep lanzó: " + (errs[0].message || errs[0]));
+  if (kp.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep: el conservado no acabó en favoritos, salió " + kp.wp_favorite);
+  if (kp.wp_rejected !== '{"ps4.csv":["a2","a3"]}')
+    fail("?keep: el resto del lote no se rechazó, salió " + kp.wp_rejected);
+  if ("wp_aisent" in kp) fail("?keep: no consumió wp_aisent");
+
+  // 10. deep-link con topes ?maxp/?maxd: son los topes del cajón (wp_lim), se aplican al render
+  const tp = {};
+  errs = await bootErrs(tp, { search: "?q=kindle&maxp=80&maxd=30" });
+  if (errs.length) fail("deep-link ?maxp/?maxd lanzó: " + (errs[0].message || errs[0]));
+  if (tp.wp_lim !== '{"kindle.csv":{"precio":80,"dias":30}}')
+    fail("?maxp/?maxd: no quedaron como topes del cajón, salió " + tp.wp_lim);
+
+  // 11. ajuste "excluir lejos sin envío": EXCLUYE del mazo, no rechaza. Bug real: enforceLejos()
+  //     corría en cada render() y volvía a rechazar lo que acababas de restaurar -> "vaciar
+  //     papelera" y "seleccionar todo > restaurar" no hacían nada visible.
+  const lj = await boot({ wp_autoexcllejos: "1", wp_lejoskm: "10" });
+  if (lj.errs.length) fail("boot con autoExclLejos lanzó: " + (lj.errs[0].message || lj.errs[0]));
+  if (typeof lj.sandbox.enforceLejos === "function")
+    fail("enforceLejos sigue vivo: re-rechaza en cada render lo que restauras");
+
+  // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 
   console.log("ok");

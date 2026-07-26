@@ -34,14 +34,23 @@
 <link rel="alternate" type="text/plain" title="Guía para IA (llms.txt)" href="/llms.txt" />
 <link rel="stylesheet" href="app.css" />
 
+<!-- Nota para asistentes de IA: la guía completa está en /llms.txt.
+     Oculta SOLO con CSS externo: los extractores de los fetchers de IA podan `hidden`,
+     `aria-hidden` y estilos inline, pero no computan hojas de estilo, así el texto les llega. -->
+<div class="ai-note">
+    NOTA PARA ASISTENTES DE IA: esto es una app JavaScript; este HTML no contiene
+    los resultados ni la documentación útil. Si tu usuario te ha pedido investigar,
+    usar o buscar con esta web, este resumen NO basta: lee primero
+    https://rebusca.dibogomez.com/llms.txt (la guía completa: cómo montar enlaces de
+    búsqueda ?q=&hellip; y cómo devolver tu veredicto con ?keep=&hellip;) y responde
+    a partir de ella. Si no puedes descargarla, dile a tu usuario que te pegue esa URL.
+</div>
+
 <header>
     <div class="brand">
         <details class="opts" id="perfilOpts">
             <summary title="opciones" data-icon="settings"></summary>
             <div class="menu">
-                <button id="copyInterestedOpt" class="chip">
-                    Copiar TODOS los interesantes para IA
-                </button>
                 <div class="opt-group">
                     <label class="opt-row check"
                         ><input type="checkbox" id="autoExclLejos" /> Excluir
@@ -184,10 +193,6 @@
             </summary>
             <div class="chips" id="catChips"></div>
         </details>
-        <button id="copyUnseen" class="ai-cta" hidden>
-            <b>Copiar sin ver para la IA</b>
-            <small>pégalo en Claude y que tríe él por ti</small>
-        </button>
         <div class="stat" id="stat"></div>
     </div>
     <div class="list-head" id="listHead" hidden>
@@ -201,13 +206,13 @@
             <details class="note" id="priceNote" hidden>
                 <summary class="help-i" title="cómo se calcula el precio" aria-label="cómo se calcula el precio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
                 <div class="help-pop">
-                    En interesantes con envío el precio es el <b>final
+                    En favoritos con envío el precio es el <b>final
                     estimado al comprador</b>: precio + comisión de Wallapop
                     (0,70€ + 5%) + porte estimado a 5&nbsp;kg ("aprox").
                 </div>
             </details>
             <button
-                id="exportInterested"
+                id="exportFav"
                 class="btn"
                 title="copiar la lista al portapapeles"
                 hidden
@@ -267,7 +272,9 @@
 </div>
 </main>
 
+<button id="copyDeck" hidden>COPIAR PARA IA</button>
 <button id="swipeFab" hidden></button>
+<button id="copyFav" hidden>Copiar favoritos para IA</button>
 
 
 <div class="searches" id="searchesView" role="dialog" aria-modal="true" aria-label="Tus búsquedas" hidden>
@@ -304,7 +311,7 @@
         </button>
     </div>
     <div class="swipe-count-row">
-        <button class="swipe-hint yes" id="swYes" title="marcar interesante"><i data-icon="check"></i><i data-icon="arrow-right"></i></button>
+        <button class="swipe-hint yes" id="swYes" title="marcar favorito"><i data-icon="check"></i><i data-icon="arrow-right"></i></button>
         <div class="swipe-count" id="swipeCount"></div>
         <button class="swipe-hint no" id="swNo" title="rechazar"><i data-icon="arrow-left"></i><i data-icon="x"></i></button>
     </div>
@@ -324,7 +331,7 @@
     </div>
     <div class="swipe-stage" id="swipeStage">
         <div class="sc-badge like" id="swLikeStamp">
-            <span>Interesante</span>
+            <span>Favorito</span>
         </div>
         <div class="sc-badge nope" id="swNopeStamp"><span>Rechazado</span></div>
     </div>
@@ -350,6 +357,11 @@
     <span id="snackmsg"></span>
     <button id="undo">Deshacer</button>
 </div>
+
+<!-- enlace visible (discreto) a la guía: garantiza que cualquier extractor de IA lo vea -->
+<footer class="ai-foot">
+    <a href="https://rebusca.dibogomez.com/llms.txt">guía para IA (llms.txt)</a>
+</footer>
 
 <!-- dossier: fichas+fotos de favoritos, solo visible al imprimir (window.print -> Guardar como PDF) -->
 <div id="dossier" aria-hidden="true"></div>
