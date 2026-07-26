@@ -122,33 +122,6 @@
     .brand-title { display: flex; justify-content: center; }
     .brand h1, .brand .logo { justify-self: auto; }
   }
-  /* stepper de tutorial: círculos numerados unidos por una línea + bocadillo por paso */
-  .tut[hidden] { display: none; } /* tutorial oculto por ahora; se rehará bien en el futuro */
-  .tut { position: relative; display: flex; align-items: center; justify-content: space-between;
-    list-style: none; margin: .9rem .2rem .3rem; padding: 0; }
-  .tut li { position: relative; flex: 1 1 0; display: flex; justify-content: center; }
-  .tut li::before { content: ""; position: absolute; top: 50%; right: 50%; left: -50%;
-    height: 2px; background: var(--line); z-index: 0; }
-  .tut li:first-child::before { display: none; }
-  .tut li span { position: relative; z-index: 1; width: 2rem; height: 2rem; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--surface-2); border: 1px solid var(--line); color: var(--pine-ink);
-    font: 700 .9rem var(--mono); }
-  .tut li span { cursor: pointer; }
-  .tut li.on span { background: var(--pine); color: #fff; }
-  .tut-msg { position: absolute; left: .4rem; right: .4rem; z-index: 5;
-    display: flex; align-items: center; gap: .6rem;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: .7rem .85rem; margin: 0; box-shadow: 0 10px 26px #00000024; }
-  .tut-num { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--pine); color: #fff; font: 700 .82rem var(--mono); }
-  .tut-txt { font: 500 .85rem/1.4 var(--sans); color: var(--ink); }
-  /* modo tutorial: velo oscuro sobre toda la pantalla; solo panel + mensaje quedan iluminados */
-  body.tut-on::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; }
-  body.tut-on header { position: relative; z-index: 50; background: transparent; } /* el velo se ve a través: mismo fondo, solo oscurecido */
-  body.tut-on header > * { opacity: .28; pointer-events: none; } /* la parte atenuada se traga los clics */
-  body.tut-on header > .panel:not(.picker), body.tut-on header > .tut-msg { opacity: 1; pointer-events: auto; }
   .menu-row { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
@@ -444,12 +417,11 @@
   .help-pop code { font: 11px var(--mono); background: var(--surface-2);
     border: 1px solid var(--line); border-radius: 4px; padding: 0 .25rem; }
 
-  #swipeFab, #copyInterested { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
+  #swipeFab { display: block; width: 100%; margin: 0 auto; max-width: 22rem;
     padding: 1rem; border-radius: 16px; background: var(--pine); border: 1px solid var(--pine);
     box-shadow: 0 3px 10px rgba(16,168,150,.38); color: #fff; font: 800 1.5rem var(--mono); letter-spacing: .04em; }
-  #swipeFab:hover, #copyInterested:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
-  #swipeFab:active, #copyInterested:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
-  #copyInterested { font-size: 1.05rem; }   /* etiqueta más larga que REBUSCAR */
+  #swipeFab:hover { background: var(--pine-hover); border-color: var(--pine-hover); box-shadow: 0 4px 13px rgba(16,168,150,.44); }
+  #swipeFab:active { box-shadow: 0 1px 4px rgba(16,168,150,.32); }
 
   .swipe { position: fixed; inset: 0; z-index: 45; background: var(--paper);
     display: flex; flex-direction: column; align-items: center; padding: 1rem;
@@ -560,6 +532,7 @@
     color: var(--pine-ink); white-space: nowrap; }
   .sc-realkw { font: 12px var(--mono); color: var(--ink-soft); overflow-wrap: anywhere; margin-top: .2rem; }
   .sc-meta { font: 11.5px var(--mono); color: var(--ink-soft); margin-top: .2rem; }
+  .sc-new { color: var(--pine); }  /* lo único accionable de la ficha: anuncios sin triar */
   .sc-btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
   .sc-btns button { flex: 1 1 45%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }   /* 2 por fila en 320px */
   .sc-btns .danger { color: #fff; background: #b03024; border-color: #b03024;

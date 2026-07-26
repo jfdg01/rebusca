@@ -28,7 +28,70 @@ function parseCSV(text) {
     rows.pop();
   return rows;
 }
-// ── estado persistente: localStorage (offline) + servidor (compartido) ──
+// ── estado persistente: localStorage (índices pequeños) + IndexedDB (lo gordo) ──
+// Escritura a prueba de cuota llena. Antes, un setItem que petaba tiraba la excepción en mitad de
+// fling()/reject(): la carta se quedaba congelada donde la soltó el dedo, sin clasificar ni avanzar
+// ("los botones no funcionan"). Ahora nunca lanza: avisa una vez y sigue.
+// ponytail: una sola red para los ~30 setItem del fichero, en vez de try/catch en cada sitio.
+const csvCacheKey = "wp_csv"; // cache de CSVs viejo (localStorage): solo se lee para migrarlo a IDB
+let lleno = false;
+function setLS(k, v) {
+  try { localStorage.setItem(k, v); return true; } catch {}
+  if (!lleno) { lleno = true; setTimeout(() => snack("Almacenamiento lleno: borra búsquedas viejas en ☰"), 0); }
+  return false;
+}
+// ── IndexedDB: almacén clave/valor para lo que no cabe en localStorage ──
+// localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
+// (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
+// y congelaba el triaje. En localStorage solo quedan listas de ids, unos KB.
+// ponytail: 20 líneas de wrapper en vez de una librería; sin `indexedDB` (tests) cae a un Map.
+const idb = (() => {
+  if (typeof indexedDB === "undefined") {
+    const mem = new Map();
+    return { get: async (k) => mem.get(k) ?? null, set: async (k, v) => void mem.set(k, v), del: async (k) => void mem.delete(k) };
+  }
+  let db;
+  const open = () => (db ||= new Promise((res, rej) => {
+    const r = indexedDB.open("rebusca", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+  const tx = async (mode, fn) => {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const q = fn(d.transaction("kv", mode).objectStore("kv"));
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  };
+  return {
+    // fallar aquí no debe romper nada: el CSV se re-scrapea y las filas se recuperan al cargar
+    get: (k) => tx("readonly", (s) => s.get(k)).catch(() => null),
+    set: (k, v) => tx("readwrite", (s) => s.put(v, k)).catch(() => {}),
+    del: (k) => tx("readwrite", (s) => s.delete(k)).catch(() => {}),
+  };
+})();
+// ── cajón = búsqueda SIN ventana temporal ──
+// "ps4--dia.csv" y "ps4--semana.csv" son la MISMA caza: comparten rechazados, interesantes,
+// favoritos y exclusiones. Antes el `since` iba dentro de la clave, así que cambiar de "semana"
+// a "día" abría un cajón virgen y resucitaba cientos de anuncios ya descartados.
+const drawerOf = (csv) => (csv || "").replace(/--(hora|dia|semana|mes)(?=\.csv$)/, "");
+const curDrawer = () => drawerOf(curCsv);
+// funde las claves de un mapa {csv:…} por cajón; `merge(a,b)` resuelve los choques.
+// Idempotente: una clave ya fundida se mapea a sí misma → no hace falta flag de migración.
+const foldDrawers = (obj, merge) => {
+  const out = {};
+  for (const k in obj || {}) { const d = drawerOf(k); out[d] = d in out ? merge(out[d], obj[k]) : obj[k]; }
+  return out;
+};
+const uni = (a, b) => [...new Set([...a, ...b])];
+console.assert(
+  drawerOf("ps4--semana.csv") === "ps4.csv" && drawerOf("ps4.csv") === "ps4.csv" &&
+    drawerOf("tv--mes--dia.csv") === "tv--mes.csv" && drawerOf(null) === "" &&
+    JSON.stringify(foldDrawers({ "a--dia.csv": ["x"], "a--mes.csv": ["y"] }, uni)) === '{"a.csv":["x","y"]}',
+  "drawerOf()/foldDrawers() roto",
+);
 const load = (k) => new Set(JSON.parse(localStorage.getItem(k) || "[]"));
 const BUCKET_NAMES = ["rejected", "interested", "favorite"]; // los 3 "ficheros" de cada cajón
 const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
@@ -41,24 +104,26 @@ try { rowCache = JSON.parse(localStorage.getItem("wp_rows") || "{}"); } catch {}
 // vía pointBuckets(), así el resto del código sigue usando `.has/.add/.delete` sin cambios.
 const buckets = { rejected: {}, interested: {}, favorite: {} };
 // Array = formato global viejo → reparte por origen (rowCache._csv). {csv:[ids]} = ya por cajón.
+// Las claves se funden por cajón (drawerOf) al leer: fusiona los cajones "--dia"/"--semana" viejos.
 const toMap = (val) => {
   const map = {};
-  if (Array.isArray(val)) for (const id of val) (map[rowCache[id]?._csv || ""] ||= new Set()).add(id);
-  else if (val && typeof val === "object") for (const c in val) map[c] = new Set(val[c]);
+  const add = (c, id) => (map[drawerOf(c)] ||= new Set()).add(id);
+  if (Array.isArray(val)) for (const id of val) add(rowCache[id]?._csv || "", id);
+  else if (val && typeof val === "object") for (const c in val) for (const id of val[c]) add(c, id);
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
 for (const n of BUCKET_NAMES) buckets[n] = toMap(JSON.parse(localStorage.getItem("wp_" + n) || "null"));
 let rejected = new Set(), interested = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
 function pointBuckets(csv) { // reapunta las 3 vars al cajón `csv` (créalo vacío si no existe)
-  const c = csv || "";
+  const c = drawerOf(csv);
   rejected = buckets.rejected[c] ||= new Set();
   interested = buckets.interested[c] ||= new Set();
   favorite = buckets.favorite[c] ||= new Set();
 }
 const save = (k, _set) => {
-  if (BUCKET_KEYS.has(k)) { localStorage.setItem(k, JSON.stringify(fromMap(buckets[k.slice(3)]))); saveRows(); }
-  else localStorage.setItem(k, JSON.stringify([..._set]));
+  if (BUCKET_KEYS.has(k)) { setLS(k, JSON.stringify(fromMap(buckets[k.slice(3)]))); saveRows(); }
+  else setLS(k, JSON.stringify([..._set]));
   pushEstado();
 };
 const aiseen = load("wp_aiseen"); // ids ya copiados a la IA: "copiar para IA" solo manda los nuevos
@@ -66,9 +131,9 @@ const bucketed = (id) => BUCKET_NAMES.some((n) => Object.values(buckets[n]).some
 const rowToObj = (r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]));
 const objToRow = (o) => headers.map((h) => o[h] ?? ""); // reconstruye fila posicional con el esquema actual
 function saveRows() {
-  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curCsv || "" }; } // refresca con lo cargado; recuerda de qué búsqueda salió
+  for (const r of data) { const id = col(r, "id"); if (id && bucketed(id)) rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curDrawer() }; } // refresca con lo cargado; recuerda de qué búsqueda salió
   for (const id in rowCache) if (!bucketed(id)) delete rowCache[id]; // poda lo que ya no está en ningún cajón
-  localStorage.setItem("wp_rows", JSON.stringify(rowCache));
+  idb.set("rows", rowCache); // a IndexedDB: en localStorage se comía la cuota y tumbaba el triaje
 }
 // filas del cubo activo = las de `data` + las que solo viven en cache (item vendido/expirado)
 function bucketRows(set) {
@@ -79,41 +144,41 @@ function bucketRows(set) {
 }
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
 const saveBlockSel = () => {
-  localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
+  setLS("wp_blocksel", JSON.stringify([...blockSel]));
   pushEstado();
 };
 let stamp = JSON.parse(localStorage.getItem("wp_stamp") || "{}"); // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
 const stampNow = (k) => {
   stamp[k] = Date.now();
-  localStorage.setItem("wp_stamp", JSON.stringify(stamp));
+  setLS("wp_stamp", JSON.stringify(stamp));
 };
 const unstamp = (k) => {
   if (k in stamp) {
     delete stamp[k];
-    localStorage.setItem("wp_stamp", JSON.stringify(stamp));
+    setLS("wp_stamp", JSON.stringify(stamp));
   }
 };
 let exclMap = JSON.parse(localStorage.getItem("wp_excl") || "{}"); // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
-const exclTerms = () => (curCsv && exclMap[curCsv]) || []; // palabras vetadas de la query activa
+const exclTerms = () => (curCsv && exclMap[curDrawer()]) || []; // palabras vetadas del cajón activo
 const saveExcl = () => {
-  localStorage.setItem("wp_excl", JSON.stringify(exclMap));
+  setLS("wp_excl", JSON.stringify(exclMap));
   pushEstado();
 };
 let catExclMap = JSON.parse(localStorage.getItem("wp_catexcl") || "{}"); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
-const catExclTerms = () => (curCsv && catExclMap[curCsv]) || [];
+const catExclTerms = () => (curCsv && catExclMap[curDrawer()]) || [];
 const saveCatExcl = () => {
-  localStorage.setItem("wp_catexcl", JSON.stringify(catExclMap));
+  setLS("wp_catexcl", JSON.stringify(catExclMap));
   pushEstado();
 };
 let catModeMap = JSON.parse(localStorage.getItem("wp_catmode") || "{}"); // {csv: "incluir"}: si es "incluir", las categorías marcadas son las ÚNICAS que se conservan (resto a rechazados); por defecto "excluir"
-const catMode = () => (curCsv && catModeMap[curCsv]) || "excluir";
+const catMode = () => (curCsv && catModeMap[curDrawer()]) || "excluir";
 const saveCatMode = () => {
-  localStorage.setItem("wp_catmode", JSON.stringify(catModeMap));
+  setLS("wp_catmode", JSON.stringify(catModeMap));
   pushEstado();
 };
 let aliasMap = JSON.parse(localStorage.getItem("wp_alias") || "{}"); // {csv: "apodo"}: nombre legible por búsqueda; NO toca el CSV ni los keywords reales
 const saveAlias = () => {
-  localStorage.setItem("wp_alias", JSON.stringify(aliasMap));
+  setLS("wp_alias", JSON.stringify(aliasMap));
   pushEstado();
 };
 // App 100% local: un solo usuario por navegador, sin perfiles. Estado en claves fijas.
@@ -126,14 +191,14 @@ const saveAlias = () => {
     for (const b of ["wp_estado", "wp_searches", "wp_lastcsv", "wp_lastseen"])
       if (localStorage.getItem(b) == null) {
         const v = localStorage.getItem(b + "_" + old);
-        if (v != null) localStorage.setItem(b, v);
+        if (v != null) setLS(b, v);
       }
   localStorage.removeItem("wp_perfil");
   localStorage.removeItem("wp_perfiles");
 })();
 const estadoKey = () => "wp_estado"; // estado durable (un usuario por navegador)
 function pushEstado() {
-  localStorage.setItem(
+  setLS(
     estadoKey(),
     JSON.stringify({
       rejected: fromMap(buckets.rejected),
@@ -168,32 +233,25 @@ function hydrateEstado() {
       pointBuckets(curCsv); // reapunta rejected/interested/favorite al cajón activo
       blockSel.clear();
       (e.blockSel || []).forEach((x) => blockSel.add(x));
-      localStorage.setItem("wp_blocksel", JSON.stringify([...blockSel]));
-      exclMap =
-        e.excl && typeof e.excl === "object" && !Array.isArray(e.excl)
-          ? e.excl
-          : {}; // {csv:[palabras]}; ignora formatos viejos
-      catExclMap =
-        e.catExcl && typeof e.catExcl === "object" && !Array.isArray(e.catExcl)
-          ? e.catExcl
-          : {}; // {csv:[categorias]}
-      catModeMap =
-        e.catMode && typeof e.catMode === "object" && !Array.isArray(e.catMode)
-          ? e.catMode
-          : {}; // {csv:"incluir"}
+      setLS("wp_blocksel", JSON.stringify([...blockSel]));
+      // los tres se funden por cajón: "ps4--dia" y "ps4--semana" comparten exclusiones
+      const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}); // ignora formatos viejos
+      exclMap = foldDrawers(obj(e.excl), uni); // {cajon:[palabras]}
+      catExclMap = foldDrawers(obj(e.catExcl), uni); // {cajon:[categorias]}
+      catModeMap = foldDrawers(obj(e.catMode), (a, b) => a || b); // {cajon:"incluir"}
       aliasMap =
         e.alias && typeof e.alias === "object" && !Array.isArray(e.alias)
           ? e.alias
           : {}; // {csv:"apodo"}
-      localStorage.setItem("wp_alias", JSON.stringify(aliasMap));
+      setLS("wp_alias", JSON.stringify(aliasMap));
       stamp =
         e.stamp && typeof e.stamp === "object" && !Array.isArray(e.stamp)
           ? e.stamp
           : {}; // {key:epochMs} cuándo se clasificó
-      localStorage.setItem("wp_stamp", JSON.stringify(stamp));
-      for (const n of BUCKET_NAMES) localStorage.setItem("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
-      localStorage.setItem("wp_excl", JSON.stringify(exclMap));
-      localStorage.setItem("wp_catexcl", JSON.stringify(catExclMap));
+      setLS("wp_stamp", JSON.stringify(stamp));
+      for (const n of BUCKET_NAMES) setLS("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
+      setLS("wp_excl", JSON.stringify(exclMap));
+      setLS("wp_catexcl", JSON.stringify(catExclMap));
       if (data.length) render();
     }
   }
@@ -209,6 +267,12 @@ let headers = DEFAULT_HEADERS.slice(),
   data = [],
   sortKeys = [],
   view = ""; // view: '' mazo | 'rejected' papelera | 'interested' interesantes | 'favorite' favoritos
+// ¿hay un CSV cargado de verdad? OJO: `headers` arranca poblado con DEFAULT_HEADERS, así que
+// `headers.length` es truthy desde el primer render y NO sirve de señal: por eso un usuario nuevo
+// veía "Nada que revisar." y cuatro contadores a 0 en vez de la bienvenida.
+let loadedCsv = null;
+const WELCOME = "Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar.";
+let fabAction = () => openSwipe(); // el botón grande cambia de destino según el paso del embudo
 const rejectedSel = new Set(); // selección en masa de la papelera (keys); solo viva en view==='rejected'
 let iId = headers.indexOf("id"),
   iUrl = headers.indexOf("url"),
@@ -285,6 +349,7 @@ const ICON = {
   favorite: '<path d="M11.5 2.3 8.9 8.6 2.2 9.2c-.9.1-1.2 1.2-.5 1.8l5 4.4-1.5 6.5c-.2.9.7 1.6 1.5 1.1l5.8-3.5 5.8 3.5c.8.5 1.7-.2 1.5-1.1l-1.5-6.5 5-4.4c.7-.6.4-1.7-.5-1.8l-6.7-.6L13 2.3c-.3-.8-1.4-.8-1.7 0Z"/>',
   list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
   rejected:
     '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   external:
@@ -626,16 +691,10 @@ function rowTr(r) {
     return tr;
 }
 function finishRender(rows, listView) {
-  $("table").hidden = !(listView && headers.length); // la tabla es la vista de lista editable (interesantes/favoritos/papelera)
+  $("table").hidden = !(listView && loadedCsv); // la tabla es la vista de lista editable (interesantes/favoritos/papelera)
   // pantalla dedicada: en modo lista se oculta TODO el header de búsqueda y sale la barra de lista
   document.querySelector("header").classList.toggle("pinned", listView); // fija la barra solo en modo lista (ver CSS)
   $(".brand").hidden = listView;
-  $("#tut").hidden = true; // ponytail: tutorial oculto por ahora (se rehará bien en el futuro)
-  if (listView) {
-    tut.querySelector(".on")?.classList.remove("on");
-    tutMsg.hidden = true;
-    document.body.classList.remove("tut-on");
-  }
   document
     .querySelectorAll("header .panel")
     .forEach((p) => (p.hidden = listView)); // varios paneles ahora (perfil, buscar, query activa)
@@ -660,14 +719,26 @@ function finishRender(rows, listView) {
   const interestedConEnvio =
     view === "interested" && rows.some((r) => col(r, "envio") === "True");
   $("#priceNote").hidden = !interestedConEnvio; // la nota explica ese precio final: mismo criterio que el botón
-  const hasRows = headers.length && rows.length;
-  $("#swipeFab").hidden = !hasRows || listView; // en modo lista se edita en la tabla, no se hace swipe
-  if (!listView && hasRows) $("#swipeFab").textContent = "REBUSCAR";
+  const hasRows = loadedCsv && rows.length;
   const interestedN = data.filter((r) => interested.has(key(r))).length;
-  const showCopy = !listView && headers.length && !rows.length && interestedN; // ya rebuscado todo y hay destacados: ofrece exportarlos a una IA
-  $("#copyInterested").hidden = !showCopy;
-  $("#empty").hidden = !!hasRows || showCopy; // el botón ocupa el hueco de REBUSCAR (mismo sitio); sin "Nada que revisar" que lo empuje abajo
-  if (headers.length && !rows.length)
+  // El FAB es el único camino hacia delante, así que dice a dónde lleva. "REBUSCAR" se leía como
+  // "buscar otra vez" (justo lo contrario) y dejaba al recién llegado sin ver ni un anuncio. Con el
+  // mazo terminado deja de ofrecer "copiar para IA" (portapapeles, no lleva a ningura parte) y lleva
+  // a la cosecha; el texto para la IA sigue estando dentro de esa lista (#exportInterested).
+  const toInterested = !listView && loadedCsv && !rows.length && interestedN && view === "";
+  const fab = $("#swipeFab");
+  fab.hidden = listView || !(hasRows || toInterested);
+  if (!fab.hidden) {
+    fabAction = toInterested ? () => { view = "interested"; render(); } : openSwipe;
+    fab.textContent = toInterested
+      ? `Ver mis ${interestedN} interesante${interestedN === 1 ? "" : "s"}`
+      : rows.length === 1
+        ? "Ver el anuncio"
+        : `Ver los ${rows.length} anuncios uno a uno`;
+  }
+  $("#empty").hidden = !!hasRows || !!toInterested; // el botón ocupa el hueco (mismo sitio), sin texto que lo empuje abajo
+  if (!loadedCsv) $("#empty").textContent = WELCOME; // usuario nuevo: bienvenida, no "Nada que revisar."
+  else if (!rows.length)
     $("#empty").textContent =
       listView && listQ
         ? "Nada coincide con el filtro."
@@ -677,7 +748,10 @@ function finishRender(rows, listView) {
             ? "Sin interesantes todavía."
             : view === "favorite"
               ? "Sin favoritos todavía."
-              : "Nada que revisar.";
+              : !data.length
+                ? "Esta búsqueda no ha devuelto ningún anuncio. Prueba con menos palabras o amplía la ventana de tiempo."
+                : "Ya has revisado todos los anuncios de esta búsqueda. Vuelve a buscar para ver los nuevos.";
+  $("#refreshSearch").hidden = !curCsv; // sin búsqueda activa no hay nada que refrescar
   paintStat();
   paintSellerBanner();
   paintListSort();
@@ -692,7 +766,7 @@ function renderCats() {
   const box = $("#cats");
   if (!box) return;
   const show =
-    headers.length && view === "" && curCsv && headers.includes("categoria");
+    loadedCsv && view === "" && curCsv && headers.includes("categoria");
   box.hidden = !show;
   const chips = $("#catChips");
   chips.innerHTML = "";
@@ -711,11 +785,11 @@ function renderCats() {
     b.className = "chip cat-chip" + (off ? " off" : "");
     b.textContent = `${c} (${counts[c]})`; // textContent: a prueba de < & en el nombre
     b.onclick = () => {
-      const cur = catExclMap[curCsv] || (catExclMap[curCsv] = []);
+      const cur = catExclMap[curDrawer()] || (catExclMap[curDrawer()] = []);
       const i = cur.indexOf(c);
       if (i >= 0) cur.splice(i, 1);
       else cur.push(c);
-      if (!cur.length) delete catExclMap[curCsv];
+      if (!cur.length) delete catExclMap[curDrawer()];
       saveCatExcl();
       render();
     };
@@ -728,8 +802,8 @@ function renderCats() {
   mode.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (inc) delete catModeMap[curCsv];
-    else catModeMap[curCsv] = "incluir";
+    if (inc) delete catModeMap[curDrawer()];
+    else catModeMap[curDrawer()] = "incluir";
     saveCatMode();
     render();
   };
@@ -738,7 +812,7 @@ function renderCats() {
   clr.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    delete catExclMap[curCsv];
+    delete catExclMap[curDrawer()];
     saveCatExcl();
     render();
   };
@@ -749,13 +823,13 @@ function addExcl(raw) {
   // true si cambió; norma la palabra, evita duplicados
   const w = norm(raw);
   if (!w || !curCsv || exclTerms().includes(w)) return false;
-  (exclMap[curCsv] ||= []).push(w);
+  (exclMap[curDrawer()] ||= []).push(w);
   saveExcl();
   return true;
 }
 function delExcl(w) {
-  exclMap[curCsv] = exclTerms().filter((x) => x !== w);
-  if (!exclMap[curCsv].length) delete exclMap[curCsv];
+  exclMap[curDrawer()] = exclTerms().filter((x) => x !== w);
+  if (!exclMap[curDrawer()].length) delete exclMap[curDrawer()];
   saveExcl();
 }
 // pinta chips de palabras vetadas en un contenedor; onChange se llama al quitar una
@@ -777,12 +851,12 @@ function fillExclChips(chips, onChange) {
 function renderExcl() {
   const box = $("#excl");
   if (!box) return;
-  box.hidden = !(headers.length && view === "" && curCsv);
+  box.hidden = !(loadedCsv && view === "" && curCsv);
   fillExclChips($("#exclChips"), render);
 }
 
 function paintStat() {
-  if (!headers.length) {
+  if (!loadedCsv) {
     $("#stat").innerHTML = "";
     return;
   }
@@ -941,7 +1015,7 @@ function bulkRestore(ks, msg) {
       if (s !== undefined) stamp[k] = s;
     });
     reblock(unblocked);
-    localStorage.setItem("wp_stamp", JSON.stringify(stamp));
+    setLS("wp_stamp", JSON.stringify(stamp));
     save("wp_rejected", rejected);
     render();
   });
@@ -1074,7 +1148,7 @@ function showSellerRejected(s) {
 function paintSellerBanner() {
   const box = $("#sellerBanner");
   if (!box) return;
-  const cands = !swipeView.hidden && headers.length ? sellerCandidates() : [];
+  const cands = !swipeView.hidden && loadedCsv ? sellerCandidates() : [];
   const badge = $("#swipeCogBadge"); // señal en la cog para no perder el aviso al esconder el banner en el menú
   if (badge) {
     badge.hidden = !cands.length;
@@ -1205,6 +1279,7 @@ function hideSnack() {
 
 // ── carga de un CSV (texto) ──
 function loadCSV(text, name) {
+  loadedCsv = name; // a partir de aquí hay dataset real: se acabó la pantalla de bienvenida
   pointBuckets(name); // apunta al cajón de este CSV antes de render (runScrape carga antes de selectQueryUI)
   const rows = parseCSV(text);
   headers = rows[0];
@@ -1248,8 +1323,8 @@ let allQueries = []; // [{csv, label, kw, since}] — fuente del combobox
 let curCsv = null; // csv de la query seleccionada (el input solo muestra el kw)
 let curCsvScrape = 0; // epoch ms del scrape (Last-Modified del CSV): base para la edad real de los anuncios
 const lastCsvKey = () => "wp_lastcsv"; // último dataset cargado
-function loadQuery(csv) {
-  const c = getCsvCache(csv);
+async function loadQuery(csv) {
+  const c = await getCsvCache(csv);
   if (c) { // ya scrapeada antes: pinta lo cacheado, no re-scrapea (usa "Repetir" para refrescar)
     curCsvScrape = c.ts;
     loadCSV(c.text, csv);
@@ -1257,7 +1332,7 @@ function loadQuery(csv) {
   }
   // sin cache: primera vez que se abre (o cache podado) → scrape (kw+since del nombre)
   const { kw, since } = queryParts(csv);
-  runScrape(kw, since, false).catch((e) => {
+  return runScrape(kw, since, false).catch((e) => {
     if (e.name !== "AbortError") snack("No se pudo buscar: " + e.message, null);
   });
 }
@@ -1267,7 +1342,7 @@ function stampSeen(csv) {
   if (!csv) return;
   const m = JSON.parse(localStorage.getItem(lastSeenKey()) || "{}");
   m[csv] = Date.now();
-  localStorage.setItem(lastSeenKey(), JSON.stringify(m));
+  setLS(lastSeenKey(), JSON.stringify(m));
 }
 // muestra/oculta el badge "desde" y reserva a su medida: el texto (y su marquee) scrollea
 // justo hasta donde empieza el badge, sea "última hora" o "última semana" o lo que sea.
@@ -1284,7 +1359,7 @@ function selectQueryUI(csv) {
   curCsv = csv;
   pointBuckets(csv); // ficheros del cajón de esta búsqueda
   setSince(since);
-  localStorage.setItem(lastCsvKey(), csv); // último dataset cargado
+  setLS(lastCsvKey(), csv); // último dataset cargado
   stampSeen(csv);
 }
 function selectQuery(csv) {
@@ -1356,13 +1431,16 @@ pick.addEventListener("keydown", (e) => {
     pick.blur();
   }
 });
-// al arrancar deja la última búsqueda puesta en el combobox (NO re-scrapea al arrancar:
-// evita golpe de red/403 automático; el usuario toca Buscar o la elige para cargar datos)
+// al arrancar restaura la última búsqueda. Si está cacheada, la PINTA (desde IndexedDB, sin red):
+// antes solo sincronizaba el combobox y la app abría vacía teniendo los resultados a mano.
+// Sin cache solo sincroniza: nada de golpes de red/403 automáticos al abrir.
 function restoreLastCsv() {
   const last = localStorage.getItem(lastCsvKey());
   if (!last) return;
   refreshCsvs().then(() => {
-    if (allQueries.some((q) => q.csv === last)) selectQueryUI(last);
+    if (!allQueries.some((q) => q.csv === last)) return;
+    if (csvIndex[last]) selectQuery(last);
+    else selectQueryUI(last);
   });
 }
 
@@ -1410,7 +1488,7 @@ const loadSearches = () => {
   }
 };
 const writeSearches = (list) =>
-  localStorage.setItem(searchesKey(), JSON.stringify(list));
+  setLS(searchesKey(), JSON.stringify(list));
 function saveSearch(csv, rows) {
   const list = loadSearches().filter((s) => s.csv !== csv); // upsert: la última corrida manda
   list.push({ csv, rows, mtime: Math.floor(Date.now() / 1000) });
@@ -1422,32 +1500,59 @@ const removeSearch = (csv) => {
 };
 
 // cache del CSV scrapeado por búsqueda: seleccionar una búsqueda pinta esto (sin re-scrapear);
-// "Repetir"/Buscar sí re-scrapea y refresca el cache. {text, ts(ms scrape)} por csv.
-const csvCacheKey = "wp_csv";
-const readCsvCache = () => {
-  try { return JSON.parse(localStorage.getItem(csvCacheKey) || "{}"); } catch { return {}; }
+// "Repetir"/Buscar sí re-scrapea y refresca el cache. El TEXTO va a IndexedDB (uno por búsqueda,
+// sin tope: ahí sobra sitio); en memoria solo queda el índice {csv:{ts, ids}}, unos KB, que es lo
+// que permite contar "sin ver" por búsqueda sin abrirlas ni re-scrapear.
+let csvIndex = {};
+const getCsvCache = async (csv) => {
+  const e = csvIndex[csv];
+  if (!e) return null;
+  const text = await idb.get("csv:" + csv);
+  return text ? { text, ts: e.ts } : null;
 };
-const getCsvCache = (csv) => readCsvCache()[csv] || null;
 function cacheCsv(csv, text, ts) {
-  const m = readCsvCache();
-  m[csv] = { text, ts };
-  const saved = new Set(loadSearches().map((s) => s.csv)); // poda: solo búsquedas vivas...
-  for (const k in m) if (!saved.has(k) && k !== csv) delete m[k];
-  for (const k of Object.keys(m).sort((a, b) => m[b].ts - m[a].ts).slice(12)) // ...y las 12 más recientes
-    delete m[k];
-  // persiste; si peta por quota, desaloja la más vieja (nunca la actual) y reintenta, sin tirar el cache entero
-  while (true) {
-    try { localStorage.setItem(csvCacheKey, JSON.stringify(m)); return; }
-    catch {
-      const old = Object.keys(m).filter((k) => k !== csv).sort((a, b) => m[a].ts - m[b].ts)[0];
-      if (!old) return; // solo queda la actual y aun así no cabe: se queda sin cachear (CSV demasiado grande)
-      delete m[old];
-    }
-  }
+  csvIndex[csv] = { ts, ids: data.map((r) => col(r, "id")).filter(Boolean) }; // `data` = este CSV recién cargado
+  const saved = new Set(loadSearches().map((s) => s.csv)); // poda: solo búsquedas vivas
+  for (const k in csvIndex) if (!saved.has(k) && k !== csv) { delete csvIndex[k]; idb.del("csv:" + k); }
+  idb.set("csv:" + csv, text);
+  idb.set("csvIndex", csvIndex);
 }
 function dropCsvCache(csv) {
-  const m = readCsvCache();
-  if (csv in m) { delete m[csv]; localStorage.setItem(csvCacheKey, JSON.stringify(m)); }
+  if (!(csv in csvIndex)) return;
+  delete csvIndex[csv];
+  idb.del("csv:" + csv);
+  idb.set("csvIndex", csvIndex);
+}
+// anuncios cacheados de esa búsqueda que aún no están en ningún cubo de su cajón. null = sin cache
+// (no se puede saber sin re-scrapear). Es lo que responde "¿qué búsqueda tiene algo nuevo?".
+function unseenCount(csv) {
+  const e = csvIndex[csv];
+  if (!e) return null;
+  const d = drawerOf(csv);
+  const done = new Set();
+  for (const n of BUCKET_NAMES) for (const id of buckets[n][d] || []) done.add(id);
+  return e.ids.filter((id) => !done.has(id)).length;
+}
+// migración one-shot: saca de localStorage lo gordo (CSVs + cache de filas) y lo mete en IndexedDB.
+// Hasta ahora compartían los 5 MB con el triaje; al llenarse, clasificar una carta lanzaba y el
+// mazo se congelaba. Tras esto, localStorage solo guarda ids.
+async function hydrateStores() {
+  if (localStorage.getItem("wp_rows") !== null) {
+    await idb.set("rows", rowCache); // rowCache ya se leyó de localStorage al evaluar el módulo
+    localStorage.removeItem("wp_rows");
+  } else rowCache = (await idb.get("rows")) || {};
+  const viejo = localStorage.getItem(csvCacheKey);
+  if (viejo === null) { csvIndex = (await idb.get("csvIndex")) || {}; return; }
+  localStorage.removeItem(csvCacheKey); // libera la cuota YA, pase lo que pase debajo
+  let m = {};
+  try { m = JSON.parse(viejo) || {}; } catch {}
+  for (const k in m) {
+    const rows = parseCSV(m[k].text || ""), i = (rows[0] || []).indexOf("id");
+    if (i < 0) continue;
+    csvIndex[k] = { ts: m[k].ts, ids: rows.slice(1).map((r) => r[i]).filter(Boolean) };
+    await idb.set("csv:" + k, m[k].text);
+  }
+  await idb.set("csvIndex", csvIndex);
 }
 
 // búsquedas guardadas → items del combobox (kw + ventana temporal, filtrable al escribir)
@@ -1489,7 +1594,6 @@ function setLoading(on, n) {
   } // render() recoloca #empty/botón al cargar el CSV
   $("#empty").hidden = true;
   $("#swipeFab").hidden = true;
-  $("#copyInterested").hidden = true;
   box.hidden = false;
   $("#loadingCount").textContent = n ? `${n} encontrados` : "Buscando…";
 }
@@ -1640,7 +1744,11 @@ function paintSearches() {
   );
   const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || "{}");
   const touched = (s) => Math.max(seen[s.csv] || 0, s.mtime * 1000); // abierta o rescrapeada: lo más reciente manda
-  hits.sort((a, b) => touched(b) - touched(a)); // última interacción primero
+  // "¿qué búsqueda tiene carne?": se cuenta contra el CSV cacheado, sin red y sin abrirla. Las que
+  // tienen algo sin ver suben arriba: era lo único que no podías saber sin re-scrapear una a una.
+  const sinVer = {};
+  for (const s of hits) sinVer[s.csv] = unseenCount(s.csv);
+  hits.sort((a, b) => (sinVer[b.csv] > 0) - (sinVer[a.csv] > 0) || touched(b) - touched(a));
   searchesList.innerHTML = "";
   if (!allSearches.length) {
     searchesList.innerHTML =
@@ -1666,7 +1774,9 @@ function paintSearches() {
         : "") +
       `</div>` +
       (alias ? `<div class="sc-realkw"></div>` : "") +
-      `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? "" : "s"} · ${age}</div>` +
+      `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? "" : "s"} · ${age}` +
+      (sinVer[s.csv] ? ` · <b class="sc-new">${sinVer[s.csv]} sin ver</b>` : "") +
+      `</div>` +
       `<div class="sc-btns">` +
       `<button class="ghost sc-run">${ic("search")} Repetir</button>` +
       `<button class="ghost sc-ren">${ic("pencil")} Renombrar</button>` +
@@ -1686,12 +1796,19 @@ function paintSearches() {
   }
 }
 function relaunch(kw, since) {
-  // rellena el buscador principal; el usuario decide cuándo lanzar
+  // "Repetir" repite: antes solo rellenaba el buscador y te dejaba pulsar Buscar tú, así que la app
+  // no tenía NINGÚN camino de "refresca esto y enséñame lo nuevo", que es el gesto del día a día.
   $("#kw").value = kw;
   $("#since").value = since || "";
   closeManager();
-  $("#kw").focus();
+  $("#scrape").click();
 }
+// refrescar la búsqueda activa desde la pantalla principal (mismo gesto que "Repetir", sin abrir ☰)
+$("#refreshSearch").onclick = () => {
+  if (!curCsv) return;
+  const { kw, since } = queryParts(curCsv);
+  relaunch(kw, since);
+};
 function renameSearch(csv, actual) {
   // apodo local; no toca el CSV ni los keywords. Vacío = quitar el apodo
   const nombre = prompt(
@@ -1723,9 +1840,10 @@ function afterCsvChange(oldCsv, newCsv) {
   if (curCsv === oldCsv) {
     if (newCsv) {
       selectQuery(newCsv);
-      localStorage.setItem(lastCsvKey(), newCsv);
+      setLS(lastCsvKey(), newCsv);
     } else {
       curCsv = null;
+      loadedCsv = null;
       pointBuckets(null);
       pick.value = "";
       setSince("");
@@ -1735,7 +1853,7 @@ function afterCsvChange(oldCsv, newCsv) {
       sortKeys = [];
       view = "";
       thead.innerHTML = ""; // sin query activa: nada de stats/rebuscar stale
-      $("#empty").textContent = "Bienvenid@ a Rebusca — escribe una búsqueda y pulsa Buscar";
+      $("#empty").textContent = WELCOME;
       render();
     }
   }
@@ -1758,13 +1876,13 @@ autoExclEl.checked = autoExclLejos;
 lejosKmEl.value = lejosKm;
 autoExclEl.onchange = () => {
   autoExclLejos = autoExclEl.checked;
-  localStorage.setItem("wp_autoexcllejos", autoExclLejos ? "1" : "0");
+  setLS("wp_autoexcllejos", autoExclLejos ? "1" : "0");
   render();
 };
 lejosKmEl.onchange = () => {
   lejosKm = +lejosKmEl.value || 10;
   lejosKmEl.value = lejosKm;
-  localStorage.setItem("wp_lejoskm", lejosKm);
+  setLS("wp_lejoskm", lejosKm);
   render();
 };
 // deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1&fav=<id,id>
@@ -1777,8 +1895,13 @@ function fromURL() {
   const favIds = [...new Set((p.get("fav") || "").split(",").map((s) => s.trim()).filter(Boolean))];
   const q = (p.get("q") || "").trim();
   const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
+  let dest = ""; // cajón donde caen los ?fav=
   if (favIds.length) {
-    pointBuckets(q ? csvNameOf(q, since) : curCsv); // el fav pertenece al cajón de q (o al activo)
+    // OJO: sin ?q=, `curCsv` aún es null (fromURL corre ANTES de restoreLastCsv) → el cajón salía ""
+    // y los favoritos de la IA caían en un cajón fantasma invisible. Cae al origen del propio anuncio
+    // (rowCache) o a la última búsqueda abierta.
+    dest = q ? csvNameOf(q, since) : curCsv || rowCache[favIds[0]]?._csv || localStorage.getItem(lastCsvKey()) || "";
+    pointBuckets(dest);
     for (const id of favIds) { interested.delete(id); rejected.delete(id); favorite.add(id); stampNow(id); }
     save("wp_interested", interested); save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
@@ -1786,6 +1909,7 @@ function fromURL() {
     if (favIds.length) {
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
       view = "favorite"; // muéstralos ya: se pintan desde el cache, sin re-scrapear
+      if (dest) selectQueryUI(dest); // fija curCsv al cajón: sin esto la vista sale vacía
       render();
       snack(`${favIds.length} añadidos a favoritos`, null);
       return true; // ya hay algo en pantalla; no dispares restoreLastCsv()
@@ -1793,7 +1917,7 @@ function fromURL() {
     return false; // sin fav ni q: deja que restoreLastCsv() cargue la última vista
   }
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
-  if (words.length) { exclMap[csvNameOf(q, since)] = words; saveExcl(); } // se aplican al renderizar
+  if (words.length) { exclMap[drawerOf(csvNameOf(q, since))] = words; saveExcl(); } // se aplican al renderizar
   $("#kw").value = q;
   $("#since").value = since;
   $("#titleOnly").checked = p.get("title") === "1";
@@ -1804,8 +1928,8 @@ function fromURL() {
 
 // arranque: sin perfiles, un usuario por navegador. Hidrata estado y restaura la última búsqueda.
 // queueMicrotask difiere el boot a tras evaluar el módulo -> render() no toca consts en TDZ (p.ej. `col`).
-queueMicrotask(() => {
-  $("#empty").textContent = "Bienvenid@ a Rebusca — escribe una búsqueda y pulsa Buscar";
+queueMicrotask(async () => {
+  await hydrateStores(); // CSVs y cache de filas desde IndexedDB (y migra los que quedaran en localStorage)
   hydrateEstado();
   render();
   if (!fromURL()) restoreLastCsv(); // ?q=… dispara su búsqueda; si no, la última vista
@@ -2001,7 +2125,7 @@ function swUndo() {
   if (h.wasStamp === undefined) unstamp(h.k);
   else {
     stamp[h.k] = h.wasStamp;
-    localStorage.setItem("wp_stamp", JSON.stringify(stamp));
+    setLS("wp_stamp", JSON.stringify(stamp));
   }
   save("wp_interested", interested);
   save("wp_rejected", rejected);
@@ -2138,7 +2262,7 @@ function copyInterested(btn, all) {
   }) // si falla el peso, se copia con el estimado
     .then(() => {
       rows.forEach((r) => { const id = col(r, "id"); if (id) aiseen.add(id); }); // márcalos como enviados
-      localStorage.setItem("wp_aiseen", JSON.stringify([...aiseen]));
+      setLS("wp_aiseen", JSON.stringify([...aiseen]));
       snack(`Copiados ${rows.length} ${all ? "interesantes" : "nuevos"} para la IA`, null);
     })
     .catch(() => snack("No se pudo copiar", null))
@@ -2147,7 +2271,6 @@ function copyInterested(btn, all) {
       btn.textContent = prev;
     });
 }
-$("#copyInterested").onclick = (e) => copyInterested(e.currentTarget);
 $("#copyInterestedOpt").onclick = (e) => {
   opts.open = false;
   copyInterested(e.currentTarget, true); // menú ⚙: copia TODOS (aunque ya se enviaran)
@@ -2217,7 +2340,7 @@ async function fetchPesos(rows) {
     if (typeof w === "number") got++;
     await new Promise((r) => setTimeout(r, 250 + Math.random() * 250)); // jitter anti-DataDome
   }
-  localStorage.setItem("wp_pesos", JSON.stringify(pesos));
+  setLS("wp_pesos", JSON.stringify(pesos));
   render();
   return got;
 }
@@ -2238,7 +2361,7 @@ async function itemWeight(id) {
 }
 $("#swYes").onclick = () => card && fling(1); // los hints ✓→ / ←✕ también clasifican, no solo el swipe
 $("#swNo").onclick = () => card && fling(-1);
-$("#swipeFab").onclick = openSwipe;
+$("#swipeFab").onclick = () => fabAction();
 $("#swipeX").onclick = closeSwipe;
 $("#swUndo").onclick = swUndo;
 // cog: menú flotante con orden + gestión de vendedores; se cierra al tocar fuera
@@ -2351,43 +2474,6 @@ function reconcileBack() {
     history.back();
   } // retira la entrada al cerrar por UI (dispara popstate, que ya no cierra nada)
 }
-// tutorial: clic en un paso → tarjeta con su número y mensaje bajo el stepper
-const tut = document.getElementById("tut");
-const tutMsg = document.getElementById("tutMsg");
-const tutNum = document.getElementById("tutNum");
-const tutTxt = document.getElementById("tutTxt");
-[...tut.children].forEach((li, i) => {
-  li.addEventListener("click", () => {
-    if (li.classList.contains("on")) { // reclic en el activo → cierra
-      li.classList.remove("on");
-      tutMsg.hidden = true;
-      document.body.classList.remove("tut-on");
-      return;
-    }
-    [...tut.children].forEach((o) => o.classList.remove("on"));
-    li.classList.add("on");
-    tutNum.textContent = i + 1;
-    tutTxt.textContent = li.title || "Próximamente…";
-    tutMsg.hidden = false;
-    document.body.classList.add("tut-on");
-    const host = tutMsg.offsetParent.getBoundingClientRect();
-    const panel = document.querySelector(".panel"); // el mensaje se posa justo encima del panel de búsqueda
-    tutMsg.style.top = panel.getBoundingClientRect().top - host.top - tutMsg.offsetHeight - 10 + "px";
-  });
-});
-// con el tutorial abierto: clic dentro del stepper, del mensaje o de la barra de búsqueda → no cierra;
-// clic fuera (velo/atenuado) → cierra y se traga el clic para no tocar nada debajo.
-document.addEventListener("click", (e) => {
-  if (tutMsg.hidden) return;
-  const t = e.target;
-  if (tut.contains(t) || tutMsg.contains(t) || t.closest?.(".panel:not(.picker)")) return;
-  e.preventDefault();
-  e.stopPropagation();
-  tut.querySelector(".on")?.classList.remove("on");
-  tutMsg.hidden = true;
-  document.body.classList.remove("tut-on");
-}, true); // fase de captura: intercepta antes de que llegue al objetivo
-
 window.addEventListener("popstate", () => {
   const wasArmed = rbArmed;
   rbArmed = false;

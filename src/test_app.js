@@ -38,12 +38,23 @@ function makeAny() {
   return any;
 }
 
-function makeContext(store) {
+function makeContext(store, opts = {}) {
   const any = makeAny();
   const localStorage = {
     getItem: (k) => (k in store ? store[k] : null),
+    // `opts.limit` = presupuesto en bytes: reproduce el QuotaExceededError real del navegador
     setItem: (k, v) => {
-      store[k] = String(v);
+      v = String(v);
+      if (opts.limit) {
+        let n = v.length;
+        for (const o in store) if (o !== k) n += store[o].length;
+        if (n > opts.limit) {
+          const e = new Error("Setting the value of '" + k + "' exceeded the quota.");
+          e.name = "QuotaExceededError";
+          throw e;
+        }
+      }
+      store[k] = v;
     },
     removeItem: (k) => {
       delete store[k];
@@ -106,7 +117,7 @@ function makeContext(store) {
     cancelAnimationFrame: noop,
     fetch: () => new Promise(() => {}), // no resuelve; en boot no se llama
     navigator: { userAgent: "test", clipboard: { writeText: () => Promise.resolve() } },
-    location: { reload: noop, href: "", search: "", assign: noop },
+    location: { reload: noop, href: "", search: opts.search || "", assign: noop },
     history: { pushState: noop, replaceState: noop },
     matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
     getComputedStyle: () => makeAny(),
@@ -142,8 +153,8 @@ function makeContext(store) {
 }
 
 // Evalúa app.js con `store` como localStorage inicial; devuelve los errores de boot.
-async function boot(store) {
-  const { sandbox, bootErrors } = makeContext(store);
+async function boot(store, opts) {
+  const { sandbox, bootErrors } = makeContext(store, opts);
   vm.createContext(sandbox);
   try {
     vm.runInContext(APP, sandbox, { filename: "app.js" });
@@ -151,8 +162,9 @@ async function boot(store) {
     bootErrors.push(e); // el bug viejo (bloque síncrono) tiraba aquí, en plena evaluación
   }
   await new Promise((r) => setImmediate(r)); // vacía los microtasks del queueMicrotask del boot
-  return bootErrors;
+  return { errs: bootErrors, sandbox };
 }
+const bootErrs = async (store, opts) => (await boot(store, opts)).errs;
 
 async function main() {
   const fail = (m) => {
@@ -160,12 +172,12 @@ async function main() {
   };
 
   // 1. arranque en blanco (usuario nuevo): sin crash
-  let errs = await boot({});
+  let errs = await bootErrs({});
   if (errs.length) fail("boot en blanco lanzó: " + (errs[0].message || errs[0]));
 
   // 2. arranque con estado guardado en la clave fija `wp_estado`: hydrateEstado()->render()
   //    en el boot. Es EXACTAMENTE el camino que crasheaba (TDZ de `col`). Debe ir limpio.
-  errs = await boot({
+  errs = await bootErrs({
     wp_estado: JSON.stringify({
       trash: ["a", "b"],
       fav: ["c"],
@@ -192,7 +204,7 @@ async function main() {
     wp_searches_Javi: JSON.stringify([{ csv: "ps4.csv", rows: 1, mtime: 1 }]),
     wp_lastcsv_Javi: "ps4.csv",
   };
-  errs = await boot(store);
+  errs = await bootErrs(store);
   if (errs.length) fail("boot con migración lanzó: " + (errs[0].message || errs[0]));
   if (store.wp_estado !== '{"trash":["x"],"fav":[],"star":[]}')
     fail("migración: wp_estado no adoptó el estado del perfil activo");
@@ -210,12 +222,60 @@ async function main() {
     }),
     wp_estado: JSON.stringify({ favorite: ["c", "d"], rejected: [], interested: [] }), // formato global viejo
   };
-  errs = await boot(gs);
+  errs = await bootErrs(gs);
   if (errs.length) fail("boot con cubos globales viejos lanzó: " + (errs[0].message || errs[0]));
   if (gs.wp_favorite !== '{"ford.csv":["c"],"ps4.csv":["d"]}')
     fail("migración por cajón: wp_favorite no se repartió por origen, salió " + gs.wp_favorite);
 
-  // 5. el scraper del browser (scrape.js) sigue verde
+  // 5. CUOTA LLENA: escribir en localStorage NUNCA debe lanzar. Bug real (Brave, movil): el
+  //    setItem de wp_rows petaba por quota y la excepcion abortaba fling()/reject() JUSTO despues
+  //    de mover la carta con el dedo y ANTES de animarla/avanzar -> la carta se quedaba congelada
+  //    y no se clasificaba nada ("los botones no funcionan"). setLS() desaloja el cache de CSVs
+  //    (desechable) y reintenta; si aun asi no cabe, devuelve false en vez de tirar.
+  const lleno = {
+    wp_estado: JSON.stringify({ rejected: {}, interested: { "ford.csv": ["k1"] }, favorite: {} }),
+    wp_lastcsv: "ford.csv",
+  };
+  const b = await boot(lleno, { limit: 6000 });
+  if (b.errs.length) fail("boot con presupuesto lanzo: " + (b.errs[0].message || b.errs[0]));
+  if (typeof b.sandbox.setLS !== "function") fail("setLS no quedo definido");
+  lleno.relleno = "x".repeat(5800); // almacen a tope, como en el movil real
+  let tiro = null;
+  try {
+    b.sandbox.reject("k1", "Cosa"); // clasificar con el almacen a tope
+  } catch (e) {
+    tiro = e;
+  }
+  if (tiro) fail("reject() lanzo con la cuota llena (el bug de la carta congelada): " + (tiro.message || tiro));
+
+  // 6. CAJON POR KEYWORD: "ps4--dia" y "ps4--semana" son la misma caza. Antes el `since` iba en la
+  //    clave, asi que cambiar la ventana temporal abria un cajon virgen y resucitaba los rechazados.
+  const cajones = {
+    wp_estado: JSON.stringify({
+      rejected: { "ps4--dia.csv": ["a"], "ps4--semana.csv": ["b"], "tv.csv": ["c"] },
+      interested: {}, favorite: {},
+      excl: { "ps4--dia.csv": ["roto"], "ps4--semana.csv": ["piezas"] },
+    }),
+  };
+  errs = await bootErrs(cajones);
+  if (errs.length) fail("boot con cajones por ventana lanzo: " + (errs[0].message || errs[0]));
+  if (cajones.wp_rejected !== '{"ps4.csv":["a","b"],"tv.csv":["c"]}')
+    fail("cajon por keyword: no se fundieron los rechazados, salio " + cajones.wp_rejected);
+  if (cajones.wp_excl !== '{"ps4.csv":["roto","piezas"]}')
+    fail("cajon por keyword: no se fundieron las exclusiones, salio " + cajones.wp_excl);
+
+  // 7. ?fav=<ids> SIN ?q=: el deep-link que devuelve la IA. curCsv aun es null al arrancar (fromURL
+  //    corre antes que restoreLastCsv), asi que los favoritos caian en el cajon "" -> invisibles.
+  const deep = {
+    wp_estado: JSON.stringify({ rejected: {}, interested: {}, favorite: {} }),
+    wp_lastcsv: "ford--semana.csv",
+  };
+  errs = await bootErrs(deep, { search: "?fav=999,1000" });
+  if (errs.length) fail("boot con ?fav= lanzo: " + (errs[0].message || errs[0]));
+  if (deep.wp_favorite !== '{"ford.csv":["999","1000"]}')
+    fail("?fav= sin ?q=: los favoritos no cayeron en el cajon de la ultima busqueda, salio " + deep.wp_favorite);
+
+  // 8. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 
   console.log("ok");

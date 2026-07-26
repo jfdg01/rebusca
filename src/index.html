@@ -75,18 +75,6 @@
             <span class="eyebrow">rebuscador<br />de chollos</span>
         </div>
     </div>
-    <ol class="tut" id="tut" hidden>
-        <li title="Haz una búsqueda"><span>1</span></li>
-        <li title="Ponte a rebuscar para seleccionar aquellas cosas que sean interesantes"><span>2</span></li>
-        <li><span>3</span></li>
-        <li><span>4</span></li>
-        <li><span>5</span></li>
-        <li><span>6</span></li>
-    </ol>
-    <div class="tut-msg" id="tutMsg" hidden>
-        <b class="tut-num" id="tutNum"></b>
-        <span class="tut-txt" id="tutTxt"></span>
-    </div>
     <div class="panel">
         <details class="help">
             <summary class="help-i" title="cómo buscar" aria-label="cómo buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
@@ -144,6 +132,13 @@
                 <span id="pickSince" class="pick-since" hidden></span>
                 <div id="qlist" class="qlist" hidden></div>
             </div>
+            <button
+                id="refreshSearch"
+                class="icon-btn"
+                title="volver a buscar: trae los anuncios nuevos"
+                data-icon="refresh"
+                hidden
+            ></button>
             <button
                 id="manageSearches"
                 class="icon-btn"
@@ -236,7 +231,7 @@
     <thead></thead>
     <tbody></tbody>
 </table>
-<div class="empty" id="empty">Bienvenid@ a Rebusca, prueba a tocar el primer número</div>
+<div class="empty" id="empty">Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar.</div>
 
 <div class="loading" id="loading" hidden>
     <svg class="spin" viewBox="0 0 44 44" aria-hidden="true">
@@ -251,8 +246,7 @@
 </div>
 </main>
 
-<button id="swipeFab" hidden>REBUSCAR</button>
-<button id="copyInterested" hidden>Copiar interesantes para IA</button>
+<button id="swipeFab" hidden></button>
 
 
 <div class="searches" id="searchesView" role="dialog" aria-modal="true" aria-label="Tus búsquedas" hidden>
