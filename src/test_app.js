@@ -13,6 +13,37 @@ const { execFileSync } = require("child_process");
 
 const APP = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
 
+// Estado inicial real de cada id según el HTML (hidden/disabled/value): sin esto un
+// `#swipeMenu` que nace oculto arrancaría visible en el test y taparía el bug de verdad.
+const HTML = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+// hijos de un contenedor del HTML: [{dataset}] por cada <tag ...> dentro de #id (sin anidar)
+function htmlChildren(id, tag) {
+  const i = HTML.indexOf('id="' + id + '"');
+  if (i < 0) return [];
+  const block = HTML.slice(i, HTML.indexOf("</div>", i));
+  return [...block.matchAll(new RegExp("<" + tag + "\\b([^>]*)>", "g"))].map(([, attrs]) => {
+    const dataset = {};
+    for (const [, k, v] of attrs.matchAll(/data-([\w-]+)="([^"]*)"/g)) dataset[k] = v;
+    return dataset;
+  });
+}
+const HTML_INIT = (() => {
+  const html = HTML;
+  const init = {};
+  for (const [, attrs] of html.matchAll(/<[a-zA-Z][a-zA-Z0-9]*\s([^>]*)>/g)) {
+    const id = /\bid="([^"]+)"/.exec(attrs);
+    if (!id) continue;
+    const val = /\bvalue="([^"]*)"/.exec(attrs);
+    init["#" + id[1]] = {
+      hidden: /\bhidden(?=[\s/>]|$)/.test(attrs),
+      disabled: /\bdisabled(?=[\s/>]|$)/.test(attrs),
+      checked: /\bchecked(?=[\s/>]|$)/.test(attrs),
+      value: val ? val[1] : "",
+    };
+  }
+  return init;
+})();
+
 // ── stub universal de DOM: `any` responde a cualquier acceso/llamada sin romper ──
 // (función encadenable, iterable vacío, coerciona a ""). Suficiente para evaluar el
 // módulo y correr render() con dataset vacío; no simula layout ni eventos reales.
@@ -36,6 +67,111 @@ function makeAny() {
     },
   });
   return any;
+}
+
+// ── elemento falso: guarda lo que le escriben y sabe recibir un click ──
+// El `any` de arriba tragaba las escrituras (`set` -> true sin guardar), así que no se podía
+// leer de vuelta ni el `onclick` ni el `hidden`. Este guarda todo en `st` y cae al `any` para
+// lo que no conozca; los handlers (`on*`) arrancan en null para poder preguntar "¿está cableado?".
+function makeEl(sel, any) {
+  const st = {
+    id: sel.replace(/^#/, ""),
+    nodeType: 1,
+    isConnected: true,
+    value: "",
+    textContent: "",
+    innerHTML: "",
+    className: "",
+    checked: false,
+    indeterminate: false,
+    disabled: false,
+    hidden: false,
+    scrollLeft: 0,
+    scrollWidth: 0,
+    clientWidth: 0,
+    onclick: null,
+    onchange: null,
+    oninput: null,
+    onkeydown: null,
+    onload: null,
+    onerror: null,
+    dataset: {},
+    style: {},
+    children: [],
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+  };
+  Object.assign(st, HTML_INIT[sel]); // hidden/disabled/checked/value tal y como nacen en el HTML
+  const listeners = {};
+  const kids = new Map(); // hijos por selector (memoizados, ver querySelector)
+  let el;
+  const mkEvent = (type, extra) =>
+    Object.assign(
+      { type, target: el, currentTarget: el, preventDefault() {}, stopPropagation() {} },
+      extra,
+    );
+  const api = {
+    // dispara el handler como lo haría el navegador (on<tipo> + addEventListener).
+    // Devuelve lo que devuelva el handler: los async (p.ej. #scrape) se pueden await-ear.
+    dispatch(type, extra) {
+      const ev = mkEvent(type, extra);
+      const on = st["on" + type];
+      const res = typeof on === "function" ? on(ev) : undefined;
+      for (const fn of listeners[type] || []) fn(ev);
+      return res;
+    },
+    click: (extra) => api.dispatch("click", extra),
+    addEventListener: (t, fn) => (listeners[t] ||= []).push(fn),
+    removeEventListener: (t, fn) => {
+      listeners[t] = (listeners[t] || []).filter((f) => f !== fn);
+    },
+    contains: () => false,
+    closest: () => null,
+    remove() {},
+    appendChild(c) {
+      st.children.push(c);
+      return c;
+    },
+    append(...cs) {
+      st.children.push(...cs);
+    },
+    insertBefore: (c) => c,
+    replaceChildren() {
+      st.children = [];
+    },
+    setAttribute() {},
+    removeAttribute() {},
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    // memoizado igual que el del document: `card.querySelector(".sc-del")` devuelve siempre
+    // el mismo hijo, así el test puede pulsar el botón al que app.js le puso el onclick.
+    querySelector(s) {
+      if (!kids.has(s)) kids.set(s, makeEl(s, any));
+      return kids.get(s);
+    },
+    querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
+    focus() {},
+    blur() {},
+    scrollIntoView() {},
+    animate: () => ({ finished: Promise.resolve() }),
+  };
+  el = new Proxy(function () {}, {
+    get(_t, p) {
+      if (p === Symbol.toPrimitive || p === "toString" || p === "valueOf") return () => "";
+      if (p === Symbol.iterator) return function* () {};
+      if (p === "then") return undefined;
+      if (p in api) return api[p];
+      if (p in st) return st[p];
+      return any;
+    },
+    set(_t, p, v) {
+      if (p === "innerHTML") st.children = []; // repintar vacía el subárbol, como en el navegador
+      st[p] = v;
+      return true;
+    },
+    apply: () => any,
+  });
+  return el;
 }
 
 function makeContext(store, opts = {}) {
@@ -63,18 +199,46 @@ function makeContext(store, opts = {}) {
       for (const k of Object.keys(store)) delete store[k];
     },
   };
+  // memoizado por selector: `$("#scrape")` devuelve SIEMPRE el mismo elemento, así el test
+  // puede leer el onclick que le puso app.js y pulsarlo.
+  const els = new Map();
+  const q = (sel) => {
+    if (!els.has(sel)) els.set(sel, makeEl(sel, any));
+    return els.get(sel);
+  };
+  const docListeners = {};
+  // "#listSort button" y similares: se sacan del HTML (con su data-*) y se memoizan, porque
+  // app.js los recorre dos veces (una para pintar el activo, otra para cablear el onclick).
+  const lists = new Map();
+  const qa = (sel) => {
+    const m = /^#([\w-]+)\s+([a-z]+)$/.exec(sel);
+    if (!m) return [];
+    if (!lists.has(sel))
+      lists.set(
+        sel,
+        htmlChildren(m[1], m[2]).map((data, i) => {
+          const e = makeEl(sel + ":" + i, any);
+          Object.assign(e.dataset, data);
+          return e;
+        }),
+      );
+    return lists.get(sel);
+  };
   const document = {
-    querySelector: () => any,
-    querySelectorAll: () => [],
-    getElementById: () => any,
-    createElement: () => makeAny(),
-    createDocumentFragment: () => makeAny(),
+    querySelector: q,
+    querySelectorAll: qa,
+    getElementById: (id) => q("#" + id),
+    createElement: () => makeEl("", any),
+    createDocumentFragment: () => makeEl("", any), // elemento normal: así los <tr> que se le
+    // cuelgan siguen siendo alcanzables desde tbody y el test puede pulsar sus botones
     createTextNode: () => makeAny(),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    body: any,
-    documentElement: any,
-    head: any,
+    addEventListener: (t, fn) => (docListeners[t] ||= []).push(fn),
+    removeEventListener: (t, fn) => {
+      docListeners[t] = (docListeners[t] || []).filter((f) => f !== fn);
+    },
+    body: q("body"),
+    documentElement: q("html"),
+    head: q("head"),
     activeElement: any,
     hidden: false,
     visibilityState: "visible",
@@ -90,9 +254,20 @@ function makeContext(store, opts = {}) {
     }
   };
   const bootErrors = [];
+  // lo que el test observa "desde fuera": qué se copió al portapapeles, qué se abrió/imprimió
+  const spy = { copied: [], opened: [], printed: 0, alerts: [] };
   const sandbox = {
     document,
     localStorage,
+    AbortController,
+    performance: { now: () => 0 },
+    // scrape.js no se carga aquí: el scraper del browser se falsea y devuelve el CSV que pida el test
+    Rebusca: { scrape: async () => opts.csv || "" },
+    print: () => spy.printed++,
+    open: (u) => {
+      spy.opened.push(u);
+      return { focus() {} };
+    },
     console: new Proxy(
       { error: (...a) => bootErrors.push(a) },
       { get: (t, p) => (p in t ? t[p] : noop) }, // assert/log/warn/debug/... -> noop
@@ -106,24 +281,43 @@ function makeContext(store, opts = {}) {
           bootErrors.push(e);
         }
       }),
-    setTimeout: (cb) => {
-      // no ejecuta callbacks diferidos (evita bucles/timers en el test); devuelve id
-      return 0;
+    // por defecto NO ejecuta callbacks diferidos (evita bucles/timers en el test); con
+    // `opts.timers` sí corren (unref: no mantienen vivo el proceso) para poder probar lo
+    // que la app hace tras la animación (p.ej. la carta siguiente del mazo tras un swipe).
+    setTimeout: (cb, ms) => {
+      if (!opts.timers) return 0;
+      const t = setTimeout(() => {
+        try {
+          cb();
+        } catch (e) {
+          bootErrors.push(e);
+        }
+      }, ms || 0);
+      t.unref && t.unref();
+      return t;
     },
-    clearTimeout: noop,
+    clearTimeout: (t) => t && clearTimeout(t),
     setInterval: () => 0,
     clearInterval: noop,
     requestAnimationFrame: () => 0,
     cancelAnimationFrame: noop,
     fetch: () => new Promise(() => {}), // no resuelve; en boot no se llama
-    navigator: { userAgent: "test", clipboard: { writeText: () => Promise.resolve() } },
+    navigator: {
+      userAgent: "test",
+      clipboard: {
+        writeText: (t) => {
+          spy.copied.push(String(t));
+          return Promise.resolve();
+        },
+      },
+    },
     location: { reload: noop, href: "", search: opts.search || "", pathname: "/", assign: noop },
-    history: { pushState: noop, replaceState: noop },
+    history: { pushState: noop, replaceState: noop, back: noop, forward: noop, go: noop, length: 1, state: null },
     matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
     getComputedStyle: () => makeAny(),
-    alert: noop,
-    confirm: () => true,
-    prompt: () => null,
+    alert: (m) => spy.alerts.push(String(m)),
+    confirm: () => (opts.confirm === undefined ? true : opts.confirm),
+    prompt: () => (opts.prompt === undefined ? null : opts.prompt),
     IntersectionObserver: Obs,
     ResizeObserver: Obs,
     MutationObserver: Obs,
@@ -149,12 +343,13 @@ function makeContext(store, opts = {}) {
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
-  return { sandbox, bootErrors };
+  return { sandbox, bootErrors, q, spy, docListeners };
 }
 
 // Evalúa app.js con `store` como localStorage inicial; devuelve los errores de boot.
 async function boot(store, opts) {
-  const { sandbox, bootErrors } = makeContext(store, opts);
+  const ctx = makeContext(store, opts);
+  const { sandbox, bootErrors } = ctx;
   vm.createContext(sandbox);
   try {
     vm.runInContext(APP, sandbox, { filename: "app.js" });
@@ -162,7 +357,7 @@ async function boot(store, opts) {
     bootErrors.push(e); // el bug viejo (bloque síncrono) tiraba aquí, en plena evaluación
   }
   await new Promise((r) => setImmediate(r)); // vacía los microtasks del queueMicrotask del boot
-  return { errs: bootErrors, sandbox };
+  return { errs: bootErrors, sandbox, q: ctx.q, spy: ctx.spy, docListeners: ctx.docListeners, store };
 }
 const bootErrs = async (store, opts) => (await boot(store, opts)).errs;
 
@@ -324,7 +519,10 @@ async function main() {
   console.log("ok");
 }
 
-main().catch((e) => {
-  console.error(e.message || e);
-  process.exit(1);
-});
+module.exports = { boot, makeContext }; // test_buttons.js reutiliza este arranque
+
+if (require.main === module)
+  main().catch((e) => {
+    console.error(e.message || e);
+    process.exit(1);
+  });

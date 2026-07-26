@@ -31,6 +31,7 @@ python3 src/servidor.py                       # levanta el server estático -> h
 python3 src/servidor.py demo                  # self-check del server (sin red)
 node src/scrape.js demo                       # self-check del scraper del browser (sin red)
 node src/test_app.js                          # smoke test de app.js (evalúa el módulo + boot, sin navegador)
+node src/test_buttons.js                      # suite de botones: cada botón hace lo suyo (DOM falso sobre el boot de test_app.js)
 python3 src/wallapop.py "deshumidificador"    # scrape CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py demo                  # self-check del scraper Python (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart rebusca
