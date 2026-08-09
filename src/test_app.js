@@ -18,10 +18,16 @@ const APP = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
 const HTML = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 
 // CSV de juguete con las columnas que produce scrape.js
-const CSV_FIELDS = "id,titulo,precio,categoria,ciudad,cp,km,dias,reservado,envio,url,vendedor,imagen,imagenes,descripcion";
+// las columnas salen del scraper, no de una copia a mano: una columna nueva descolocaba las
+// filas del juguete en silencio (cada celda pasaba a la de al lado)
+const CSV_COLS = require("./scrape.js").FIELDS;
+const CSV_FIELDS = CSV_COLS.join(",");
+const csvRow = (o) => CSV_COLS.map((f) => (f in o ? String(o[f]) : "")).join(",");
 const CSV = [CSV_FIELDS,
-  "a1,Ford Focus,1000,Coches,Jaen,23001,3,1,False,False,https://w/a1,Ana,,,buen estado",
-  "a2,Ford Fiesta,200,Coches,Ubeda,23400,25,2,False,False,https://w/a2,Bea,,,con arreglos",
+  csvRow({ id: "a1", titulo: "Ford Focus", precio: 1000, categoria: "Coches", ciudad: "Jaen", cp: "23001",
+    km: 3, dias: 1, reservado: "False", envio: "False", url: "https://w/a1", vendedor: "Ana", descripcion: "buen estado" }),
+  csvRow({ id: "a2", titulo: "Ford Fiesta", precio: 200, categoria: "Coches", ciudad: "Ubeda", cp: "23400",
+    km: 25, dias: 2, reservado: "False", envio: "False", url: "https://w/a2", vendedor: "Bea", descripcion: "con arreglos" }),
 ].join("\r\n") + "\r\n";
 // hijos de un contenedor del HTML: [{dataset}] por cada <tag ...> dentro de #id (sin anidar)
 function htmlChildren(id, tag) {
@@ -743,7 +749,10 @@ async function main() {
     } catch (e) {
       fail("loadCSV con un CSV vacío lanzó: " + (e.message || e));
     }
-    if (ev("headers.length") !== 15) fail("un CSV vacío dejó la cabecera en " + ev("JSON.stringify(headers)"));
+    // el esquema por defecto ES el del scraper: contra un número fijo, añadir una columna al
+    // scraper dejaba la cabecera de emergencia corta y nadie se enteraba
+    if (ev("JSON.stringify(headers)") !== JSON.stringify(require("./scrape.js").FIELDS))
+      fail("un CSV vacío dejó la cabecera en " + ev("JSON.stringify(headers)"));
 
     b.sandbox.__CSV = CSV_FIELDS + "\r\n" + "a1,Ford Focus,1000\r\n" + CSV.split("\r\n")[1] + "\r\n";
     try {
@@ -770,6 +779,7 @@ async function main() {
     const raro = {
       id: "x1", titulo: 'Ford "Focus", 1.6', precio: 1000, categoria: "Coches, usados",
       ciudad: "Jaén", cp: "23001", km: 3, dias: 1, reservado: false, envio: true,
+      top: true, garantia: false, reacond: false,
       url: "https://w/x1?a=1&b=2", vendedor: 'Ana "la del taller"', imagen: "", imagenes: "",
       descripcion: "primera línea\nsegunda, con coma\ny una \"cita\"",
     };
@@ -783,6 +793,13 @@ async function main() {
     }
     if (vm.runInContext("data.length", b.sandbox) !== 1)
       fail("el salto de línea dentro del campo partió la fila en " + vm.runInContext("data.length", b.sandbox));
+
+    // wallapop.py es la referencia local del MISMO scraper: si los esquemas se separan, un CSV
+    // hecho con el CLI ya no es el que la app espera. Nadie lo comprobaba.
+    const py = fs.readFileSync(path.join(__dirname, "wallapop.py"), "utf8");
+    const pyFields = ((py.match(/^FIELDS = \[([\s\S]*?)\]/m) || [])[1] || "").match(/"([a-z]+)"/g) || [];
+    if (JSON.stringify(pyFields.map((s) => s.slice(1, -1))) !== JSON.stringify(FIELDS))
+      fail("wallapop.py y scrape.js ya no comparten esquema: " + pyFields.join(","));
   }
 
   // 12d. dos pestañas abiertas: el evento `storage` de la OTRA pestaña re-hidrata esta.
@@ -823,10 +840,11 @@ async function main() {
           return out.join("|"); })()`,
         b.sandbox,
       );
-    const fila = (id, precio) =>
-      `${id},Ford Focus,${precio},Coches,Jaen,23001,3,1,False,False,https://w/${id},Ana,,,buen estado`;
     const lote = (precios) =>
-      [CSV_FIELDS, ...precios.map((p, i) => fila("a" + i, p))].join("\r\n") + "\r\n";
+      [CSV_FIELDS, ...precios.map((p, i) => csvRow({ id: "a" + i, titulo: "Ford Focus", precio: p,
+        categoria: "Coches", ciudad: "Jaen", cp: "23001", km: 3, dias: 1, reservado: "False",
+        envio: "False", url: "https://w/a" + i, vendedor: "Ana", descripcion: "buen estado" }))]
+        .join("\r\n") + "\r\n";
 
     const b = await boot({});
     // 9 precios: mediana 1000. El primero (500) está un 50 % por debajo; el segundo (900), un 10 %.
@@ -842,6 +860,43 @@ async function main() {
     vm.runInContext('loadCSV(__CSV, "corto.csv")', b.sandbox);
     if (vm.runInContext("medianPrice", b.sandbox) !== null) fail("con 4 precios la mediana debería ser null");
     if (/li-deal/.test(carta(b, 0))) fail("salió chip con una muestra de 4 anuncios: " + carta(b, 0));
+  }
+
+  // 12g. la tarjeta pinta lo que el CSV ya sabía: reservado (solo lo leía el texto para la IA),
+  //      número de fotos (solo lo usaba el PDF) y las banderas garantía/reacondicionado/perfil top.
+  {
+    const carta = (b, i) =>
+      vm.runInContext(
+        `(() => { const el = document.createElement("div"); fillCard(el, data[${i}]); const out = [];
+          (function walk(n) { for (const c of n.children || []) { out.push(c.className + ":" + c.textContent); walk(c); } })(el);
+          return out.join("|"); })()`,
+        b.sandbox,
+      );
+    const b = await boot({});
+    b.sandbox.__CSV =
+      [CSV_FIELDS,
+        csvRow({ id: "b1", titulo: "Ford Focus", precio: 1000, categoria: "Coches", ciudad: "Jaen",
+          km: 3, dias: 1, reservado: "True", top: "True", garantia: "True", reacond: "True",
+          envio: "True", url: "https://w/b1", vendedor: "Ana",
+          imagenes: "http://x/1.jpg http://x/2.jpg http://x/3.jpg", descripcion: "buen estado" }),
+        csvRow({ id: "b2", titulo: "Ford Fiesta", precio: 900, categoria: "Coches", ciudad: "Jaen",
+          km: 3, dias: 1, reservado: "False", top: "False", garantia: "False", reacond: "False",
+          envio: "True", url: "https://w/b2", vendedor: "Bea", imagenes: "http://x/1.jpg",
+          descripcion: "con arreglos" }),
+      ].join("\r\n") + "\r\n";
+    vm.runInContext('loadCSV(__CSV, "flags.csv")', b.sandbox);
+
+    const c1 = carta(b, 0);
+    if (!/li-res:Reservado/.test(c1)) fail("un anuncio reservado no lo dice en la tarjeta: " + c1);
+    for (const t of ["3 fotos", "garantía", "reacondicionado", "perfil top"])
+      if (!c1.includes(t)) fail(`la tarjeta no pinta "${t}": ` + c1);
+
+    const c2 = carta(b, 1);
+    if (/li-res/.test(c2)) fail("un anuncio libre salió como reservado: " + c2);
+    if (!/li-extra: · 1 foto$|li-extra: · 1 foto\|/.test(c2 + "|"))
+      fail("con una sola foto la tarjeta no dice «1 foto»: " + c2);
+    for (const t of ["garantía", "reacondicionado", "perfil top"])
+      if (c2.includes(t)) fail(`la tarjeta pinta "${t}" en un anuncio que no lo trae: ` + c2);
   }
 
   // 12. el scraper del browser (scrape.js) sigue verde

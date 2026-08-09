@@ -13,7 +13,7 @@ const { boot } = require("./test_app.js");
 const HTML = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 
 // ── CSV de juguete: mismas columnas que produce scrape.js ──
-const FIELDS = "id,titulo,precio,categoria,ciudad,cp,km,dias,reservado,envio,url,vendedor,imagen,imagenes,descripcion".split(",");
+const FIELDS = require("./scrape.js").FIELDS; // el esquema de verdad, no una copia a mano
 const row = (o) => FIELDS.map((f) => (f in o ? String(o[f]) : "")).join(",");
 const CSV =
   [

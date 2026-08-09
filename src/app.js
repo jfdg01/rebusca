@@ -431,7 +431,8 @@ const HIDE = new Set(["id", "cp", "url", "vendedor", "imagen", "imagenes"]); // 
 // esquema fijo del scraper (== FIELDS de scrape.js). Sirve de headers por defecto para poder
 // renderizar favoritos desde el cache aunque no se haya scrapeado nada esta sesión.
 const DEFAULT_HEADERS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-  "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
+  "reservado", "top", "garantia", "reacond",
+  "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
 let headers = DEFAULT_HEADERS.slice(),
   data = [],
   sortKeys = [],
@@ -630,6 +631,14 @@ function fillCard(el, r) {
     d.title = `${off} % por debajo de la mediana del lote (${eur(medianPrice)})`;
     media.append(d);
   }
+  // reservado: el CSV lo traía desde el principio y solo lo leía el texto para la IA. Va encima
+  // de la foto porque cambia la decisión ANTES de salir a Wallapop.
+  if (col(r, "reservado") === "True") {
+    const res = document.createElement("span");
+    res.className = "li-res";
+    res.textContent = "Reservado";
+    media.append(res);
+  }
   // frescura: chip esmerilado en la esquina superior (sin color de urgencia)
   if (isNum(dias)) {
     const a = document.createElement("span");
@@ -657,6 +666,20 @@ function fillCard(el, r) {
   ship.textContent = conEnvio ? "Con envío" : "Sin envío";
   flags.append(ship);
   if (where) flags.append(document.createTextNode(`, ${where}`));
+  // señales que ya estaban en el CSV y no pintaba nadie: cuántas fotos trae el anuncio (una foto
+  // borrosa o siete claras es una señal barata) y las tres banderas del vendedor/artículo
+  const nFotos = (col(r, "imagenes") || "").split(" ").filter(Boolean).length;
+  const extra = [];
+  if (nFotos) extra.push(`${nFotos} ${nFotos === 1 ? "foto" : "fotos"}`);
+  if (col(r, "garantia") === "True") extra.push("garantía");
+  if (col(r, "reacond") === "True") extra.push("reacondicionado");
+  if (col(r, "top") === "True") extra.push("perfil top");
+  if (extra.length) {
+    const ex = document.createElement("span");
+    ex.className = "li-extra"; // span y no un nodo de texto suelto: así hay algo que mirar
+    ex.textContent = " · " + extra.join(" · ");
+    flags.append(ex);
+  }
   // id de Wallapop: el mismo [#...] que la IA maneja. Visible solo en las listas (donde se cotejan
   // sus veredictos); un toque lo copia, y pegándolo en el filtro (#id) se localiza el anuncio.
   const id = col(r, "id");

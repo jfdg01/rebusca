@@ -358,6 +358,12 @@
   .li-deal { position: absolute; right: .65rem; bottom: .65rem; z-index: 1; white-space: nowrap;
     font: 800 1.05rem/1 var(--mono); color: var(--pine-ink); background: var(--pine-soft);
     padding: .42rem .6rem; border-radius: 11px; box-shadow: 0 3px 12px rgba(9,14,12,.4); }
+  /* reservado: dato que ya venía en el CSV y solo leía la IA. Arriba a la izquierda, en el
+     naranja de "sin envío", porque es lo que hace descartar el anuncio antes de abrirlo */
+  .li-res { position: absolute; top: .6rem; left: .6rem; z-index: 1; white-space: nowrap;
+    font: 800 11px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: #fff;
+    background: var(--ship-no); padding: .34rem .52rem; border-radius: 999px;
+    box-shadow: 0 2px 8px rgba(9,14,12,.35); }
   /* frescura: chip esmerilado arriba a la derecha, sin color de urgencia */
   .li-age { position: absolute; top: .6rem; right: .6rem; z-index: 1; white-space: nowrap;
     font: 600 11px/1 var(--mono); letter-spacing: .01em; color: #f3f5f1;

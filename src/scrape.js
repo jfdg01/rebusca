@@ -8,7 +8,8 @@
   const HEADERS = { "X-DeviceOS": "0", "Accept": "application/json",
                     "Accept-Language": "es-ES", "User-Agent": "Mozilla/5.0" };
   const FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-                  "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
+                  "reservado", "top", "garantia", "reacond",
+                  "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"];
   const SINCE_TF = { hora: "today", dia: "today", semana: "lastWeek", mes: "lastMonth" };
   const SINCE_DAYS = { hora: 1 / 24, dia: 1, semana: 7, mes: 30 };
   const JAEN = [37.7796, -3.7849];
@@ -124,6 +125,11 @@
       km: dist,
       dias: dias,
       reservado: (it.reserved || {}).flag || false,
+      // tres señales que la API de búsqueda YA manda (misma forma {flag} que reserved) y que el
+      // scraper tiraba: perfil profesional, garantía y reacondicionado. Cero peticiones nuevas.
+      top: (it.is_top_profile || {}).flag || false,
+      garantia: (it.has_warranty || {}).flag || false,
+      reacond: (it.is_refurbished || {}).flag || false,
       envio: (it.shipping || {}).user_allows_shipping || false,
       url: "https://es.wallapop.com/item/" + (it.web_slug || ""),
       vendedor: it.user_id || "",
@@ -253,6 +259,11 @@
     a(r.imagenes === "http://x/big1.jpg http://x/m2.jpg", "imagenes: todas, mejor res"); // small p/tarjeta, big/medium p/dossier
     a(row({ id: "y", title: "x", price: { amount: 1 }, location: {} }, [0, 0]).imagen === "", "imagen vacía");
     a(row({ id: "y", title: "x", price: { amount: 1 }, location: {} }, [0, 0]).imagenes === "", "imagenes vacía");
+    // banderas {flag} de la API: presentes, ausentes y con la clave a null
+    const banderas = row({ id: "f", title: "x", location: {}, is_top_profile: { flag: true },
+      has_warranty: { flag: false }, is_refurbished: null }, [0, 0]);
+    a(banderas.top === true && banderas.garantia === false && banderas.reacond === false, "banderas {flag}");
+    a(row({ id: "f", title: "x", location: {} }, [0, 0]).top === false, "bandera ausente -> false");
     a(titleMatches("iPhone 12 azul", "iphone azul"), "titleMatches acentos");
     a(!titleMatches("Funda para móvil", "iphone"), "titleMatches no casa");
     const eq = (x, y, m) => a(JSON.stringify(branches(x)) === JSON.stringify(y), m);

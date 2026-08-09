@@ -165,7 +165,8 @@ def search(keywords, lat, lon, order_by=None, time_filter=None, incidencias=None
 
 
 FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
-          "reservado", "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"]  # id inmutable primero, descripcion al final
+          "reservado", "top", "garantia", "reacond",
+          "envio", "url", "vendedor", "imagen", "imagenes", "descripcion"]  # id inmutable primero, descripcion al final
 
 
 # quita emojis y pictogramas de los textos del anuncio (símbolos, banderas, ZWJ, tonos de piel, VS16)
@@ -199,6 +200,10 @@ def row(it, origin):
         "km": dist,
         "dias": dias,
         "reservado": (it.get("reserved") or {}).get("flag", False),
+        # la API de busqueda ya manda estas tres con la misma forma {flag} que reserved
+        "top": (it.get("is_top_profile") or {}).get("flag", False),        # vendedor profesional
+        "garantia": (it.get("has_warranty") or {}).get("flag", False),
+        "reacond": (it.get("is_refurbished") or {}).get("flag", False),
         "envio": (it.get("shipping") or {}).get("user_allows_shipping", False),
         "url": "https://es.wallapop.com/item/" + it.get("web_slug", ""),
         "vendedor": it.get("user_id", ""),   # id opaco del vendedor: estable, sirve de key para bloquear
@@ -371,6 +376,10 @@ def demo():
               "images": [], "taxonomy": []}, (0, 0))
     assert rp["titulo"] == "" and rp["precio"] == "" and rp["categoria"] == "", rp
     assert rp["reservado"] is False and rp["envio"] is False and rp["km"] == "", rp
+    assert rp["top"] is False and rp["garantia"] is False and rp["reacond"] is False, rp
+    # banderas {flag} de la API: mismo trato que reserved
+    rb = row({"id": "b", "location": {}, "is_top_profile": {"flag": True}, "has_warranty": {"flag": False}}, (0, 0))
+    assert rb["top"] is True and rb["garantia"] is False and rb["reacond"] is False, rb
     print("ok")
 
 
