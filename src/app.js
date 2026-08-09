@@ -855,11 +855,15 @@ function filteredRows() {
 function render() {
   enforceBlocks(); // vendedores bloqueados a la papelera antes de filtrar
   const rows = filteredRows();
-  tbody.innerHTML = "";
-  const frag = document.createDocumentFragment();
-  for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
-  tbody.append(frag);
   const listView = view === "rejected" || view === "favorite";
+  tbody.innerHTML = "";
+  // la tabla SOLO se ve en modo lista (favoritos/papelera). En el mazo el swipe monta su propia
+  // tarjeta, así que estos <tr> se construían para nadie, justo cuando el usuario espera resultados.
+  if (listView) {
+    const frag = document.createDocumentFragment();
+    for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
+    tbody.append(frag);
+  }
   return finishRender(rows, listView);
 }
 function rowTr(r) {

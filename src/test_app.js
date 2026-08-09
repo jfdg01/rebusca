@@ -899,6 +899,22 @@ async function main() {
       if (c2.includes(t)) fail(`la tarjeta pinta "${t}" en un anuncio que no lo trae: ` + c2);
   }
 
+  // 12h. la tabla solo existe en modo lista: en el mazo el swipe monta su propia tarjeta, así que
+  //      construir un <tr> por fila era trabajo tirado justo al terminar la búsqueda.
+  {
+    const b = await boot({});
+    b.sandbox.__CSV = CSV;
+    vm.runInContext('loadCSV(__CSV, "ford.csv")', b.sandbox);
+    const n = () => vm.runInContext("tbody.children.length", b.sandbox);
+    if (vm.runInContext("filteredRows().length", b.sandbox) !== 2)
+      fail("el mazo no tiene las 2 filas del CSV de juguete");
+    if (n() !== 0) fail("el mazo construyó " + n() + " <tr> que nadie ve");
+    vm.runInContext('favorite.add("a1"); view = "favorite"; render()', b.sandbox);
+    if (n() !== 1) fail("la lista de favoritos no pintó su fila: " + n() + " <tr>");
+    vm.runInContext('view = ""; render()', b.sandbox);
+    if (n() !== 0) fail("al volver al mazo la tabla se quedó con " + n() + " <tr>");
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

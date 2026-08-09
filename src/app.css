@@ -304,6 +304,9 @@
     border-radius: 18px; padding: 1.2rem; margin: 0;
     box-shadow: 0 4px 16px rgba(27,33,30,.12);
     display: flex; flex-direction: column; overflow: hidden;
+    /* una papelera de cientos de tarjetas: el browser se salta el layout de las que no se ven.
+       contain-intrinsic-size da el alto estimado para que la barra de scroll no baile */
+    content-visibility: auto; contain-intrinsic-size: auto 420px;
   }
   tbody td { border: none; padding: 0; }
 
