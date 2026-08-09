@@ -115,6 +115,29 @@ async function main() {
     ok(sig.aborted, "#stopScrape no abortó la búsqueda");
   }
 
+  // ── 3b. dos scrapes a la vez: gana el ÚLTIMO que pidió el usuario ──
+  //     Antes los dos repintaban y ganaba el que acabase, que podía no ser el que pediste.
+  //     Abortar no basta: scrape.js resuelve con el CSV parcial, así que el perdedor llegaba
+  //     igual a loadCSV/cacheCsv/saveSearch.
+  {
+    const slow = CSV.replace(/Ford Focus/, "Lento");
+    const b = await boot({}, {
+      timers: true,
+      scrape: async (o) => (await tick(o.keywords === "lento" ? 40 : 0), o.keywords === "lento" ? slow : CSV),
+    });
+    b.q("#kw").value = "lento";
+    b.q("#scrape").click(); // sin await: se queda en vuelo
+    await flush();
+    b.q("#kw").value = "rapido";
+    b.q("#scrape").click();
+    await tick(80);
+    ok(ev(b, "curCsv") === "rapido.csv", "el scrape perdedor repintó la tabla: " + ev(b, "curCsv"));
+    ok(!(b.store.wp_searches || "").includes("lento"), "el scrape perdedor guardó su búsqueda");
+    ok(b.q("#loading").hidden === true, "el perdedor dejó colgado el overlay del ganador");
+    ok(b.q("#scrape").textContent === "Buscar",
+      'el botón se quedó etiquetado "' + b.q("#scrape").textContent + '"');
+  }
+
   // ── 4. copiar el prompt de entrada (#copyAskPrompt): al portapapeles, con lo tecleado ──
   {
     const b = await boot({});
@@ -193,6 +216,60 @@ async function main() {
     b.q("#swNo").click();
     ok(bucket(b, "rejected").includes(primera), "#swNo no mandó la carta a la papelera");
     ok(!bucket(b, "favorite").includes(primera), "una carta no puede estar en los dos cubos");
+  }
+
+  // ── 9b. el hueco de 200ms entre carta y carta, y el mazo agotado ──
+  // La carta vuela 200ms. Durante ese vuelo `card` es null y ✓/✕ no hacen nada. Antes seguían
+  // encendidos: el segundo toque de un doble-toque se perdía en silencio (síntoma nº1 reportado).
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    b.q("#swNo").click();
+    ok(b.q("#swNo").disabled === true && b.q("#swYes").disabled === true,
+      "✓/✕ siguen encendidos mientras la carta vuela");
+    const antes = ev(b, "di");
+    b.q("#swNo").click(); // el toque perdido de un doble-toque
+    ok(ev(b, "di") === antes && bucket(b, "rejected").length === 1,
+      "un toque en el hueco de 200ms clasificó de más");
+    await tick(300);
+    ok(b.q("#swNo").disabled === false, "✓/✕ no se reactivaron con la carta siguiente");
+
+    // carrera: el mazo se reconstruye mientras la carta vuela
+    b.q("#swNo").click();
+    ev(b, "rebuildDeck()"); // deja di = 0 sobre un mazo nuevo
+    await tick(300);
+    ok(ev(b, "di") === 0, "el setTimeout del fling viejo avanzó sobre el mazo reconstruido");
+
+    // mazo agotado: no hay carta a la que decir sí o no
+    ev(b, "di = deck.length; nextCard()");
+    ok(b.q("#swNo").disabled === true && b.q("#swYes").disabled === true,
+      "✓/✕ siguen encendidos con el mazo agotado");
+  }
+
+  // ── 9c. un "Deshacer" pendiente no puede aplicarse a otro cajón ──
+  // Los 6 sitios que ofrecen deshacer cierran sobre `rejected`/`favorite` POR NOMBRE, y
+  // pointBuckets() las reapunta al cambiar de búsqueda. Sin invalidar el snack, el botón
+  // seguía vivo 5s y operaba sobre el cajón equivocado.
+  {
+    const b = await loaded();
+    ev(b, 'reject("a1", "Ford Focus")');
+    ok(typeof b.q("#undo").onclick === "function", "reject() no ofreció deshacer");
+    ev(b, 'selectQueryUI("motos.csv")');
+    ok(b.q("#undo").onclick === null, "el Deshacer de otra búsqueda sigue armado tras cambiar de cajón");
+    ok(bucket(b, "rejected").includes("a1"), "el rechazo de ford se perdió al cambiar de cajón");
+  }
+
+  // ── 9d. el lote copiado para la IA conserva SU búsqueda de origen ──
+  // #copyDeck es asíncrono (espera al portapapeles). setAisent() leía curDrawer() al resolver,
+  // así que cambiar de búsqueda mientras tanto etiquetaba el lote con la búsqueda equivocada y
+  // su ?keep= aterrizaba en el cajón que no era.
+  {
+    const b = await loaded();
+    b.q("#copyDeck").click();
+    ev(b, 'selectQueryUI("motos.csv")'); // el usuario cambia de búsqueda antes de que resuelva
+    await flush();
+    const sent = JSON.parse(b.store.wp_aisent || "{}");
+    ok(sent.csv === "ford.csv", "el lote copiado se etiquetó con la búsqueda equivocada: " + sent.csv);
   }
 
   // ── 10. ver (#swVer) y copiar (#swCopy) la carta actual ──
@@ -348,6 +425,11 @@ async function main() {
     b.q("#manageSearches").click();
     const card = () => b.q("#searchesList").children[0];
     ok(card(), "el gestor no pintó la búsqueda guardada");
+    // el badge no promete una cifra: unseenCount() no aplica exclusiones ni topes, así que el
+    // número era mayor que el mazo real ("12 sin ver" y dentro no había nada)
+    const badge = /<b class="sc-new">([^<]*)<\/b>/.exec(String(card().innerHTML));
+    ok(badge, 'el gestor no pintó el badge "sin ver"');
+    ok(!/\d/.test(badge[1]), 'el badge "sin ver" volvió a prometer una cifra: ' + badge[1]);
     card().querySelector(".sc-ren").click(); // Renombrar: apodo local, no toca lo que se busca
     ok(JSON.parse(b.store.wp_alias || "{}")["ford.csv"] === "Mi coche", ".sc-ren no guardó el apodo");
     ok((b.store.wp_searches || "").includes("ford.csv"), ".sc-ren tocó la búsqueda, no solo el apodo");

@@ -40,6 +40,11 @@ function setLS(k, v) {
   if (!lleno) { lleno = true; setTimeout(() => snack("Almacenamiento lleno: borra búsquedas viejas en ☰"), 0); }
   return false;
 }
+// Lectura simétrica: un valor corrupto se comporta como ausente. Sin esto, un solo JSON roto
+// en cualquier clave tiraba una excepción al evaluar el módulo y la app quedaba inerte en TODA
+// carga futura, sin forma de auto-repararse (el usuario no puede borrar lo que no puede abrir).
+// `??` y no `||`: un "" guardado cae al fallback igual que antes.
+const readJSON = (k, fb) => { try { return JSON.parse(localStorage.getItem(k) ?? JSON.stringify(fb)); } catch { return fb; } };
 // ── IndexedDB: almacén clave/valor para lo que no cabe en localStorage ──
 // localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
 // (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
@@ -76,7 +81,16 @@ const idb = (() => {
 // "ps4--dia.csv" y "ps4--semana.csv" son la MISMA caza: comparten rechazados, interesantes,
 // favoritos y exclusiones. Antes el `since` iba dentro de la clave, así que cambiar de "semana"
 // a "día" abría un cajón virgen y resucitaba cientos de anuncios ya descartados.
-const drawerOf = (csv) => (csv || "").replace(/--(hora|dia|semana|mes)(?=\.csv$)/, "");
+// única fuente del vocabulario de frescura: la regex del cajón y el filtro del deep-link se
+// derivan de aquí. Añadir una ventana temporal = añadir una clave a este mapa (y su <option>).
+const SINCE_LABEL = {
+  hora: "última hora",
+  dia: "último día",
+  semana: "última semana",
+  mes: "último mes",
+};
+const SINCE_RE = new RegExp("--(" + Object.keys(SINCE_LABEL).join("|") + ")(?=\\.csv$)");
+const drawerOf = (csv) => (csv || "").replace(SINCE_RE, "");
 const curDrawer = () => drawerOf(curCsv);
 // funde las claves de un mapa {csv:…} por cajón; `merge(a,b)` resuelve los choques.
 // Idempotente: una clave ya fundida se mapea a sí misma → no hace falta flag de migración.
@@ -92,7 +106,11 @@ console.assert(
     JSON.stringify(foldDrawers({ "a--dia.csv": ["x"], "a--mes.csv": ["y"] }, uni)) === '{"a.csv":["x","y"]}',
   "drawerOf()/foldDrawers() roto",
 );
-const load = (k) => new Set(JSON.parse(localStorage.getItem(k) || "[]"));
+console.assert(
+  SINCE_RE.test("x--hora.csv") && SINCE_RE.test("x--mes.csv") && !SINCE_RE.test("x--ayer.csv"),
+  "SINCE_RE no deriva de SINCE_LABEL",
+);
+const load = (k) => new Set(readJSON(k, []));
 const BUCKET_NAMES = ["rejected", "favorite"]; // los "ficheros" de cada cajón (sin ver = el resto)
 const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
 // cache de filas por id (objeto {columna:valor}). Permite ver favoritos aunque su
@@ -108,19 +126,31 @@ const buckets = { rejected: {}, favorite: {} };
 const toMap = (val) => {
   const map = {};
   const add = (c, id) => (map[drawerOf(c)] ||= new Set()).add(id);
-  if (Array.isArray(val)) for (const id of val) add(rowCache[id]?._csv || "", id);
+  // Sin _csv no se sabe de qué búsqueda salió el id. Archivarlo bajo "" lo metía en un cajón
+  // real e inalcanzable: `allQueries` se puebla solo desde wp_searches, así que nadie podía
+  // volver a verlo, pero seguía contando y ocupando. Convención: nada se archiva bajo "".
+  if (Array.isArray(val)) for (const id of val) { const c = rowCache[id]?._csv; if (c) add(c, id); }
   else if (val && typeof val === "object") for (const c in val) for (const id of val[c]) add(c, id);
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
 const mergeInto = (into, from) => { for (const c in from) { const s = into[c] ||= new Set(); from[c].forEach((id) => s.add(id)); } };
-for (const n of BUCKET_NAMES) buckets[n] = toMap(JSON.parse(localStorage.getItem("wp_" + n) || "null"));
+for (const n of BUCKET_NAMES) buckets[n] = toMap(readJSON("wp_" + n, null));
 // migración: el cubo "interesantes" desaparece; sus ids ascienden a favoritos (y la clave se retira)
-mergeInto(buckets.favorite, toMap(JSON.parse(localStorage.getItem("wp_interested") || "null")));
+mergeInto(buckets.favorite, toMap(readJSON("wp_interested", null)));
 localStorage.removeItem("wp_interested");
 let rejected = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
+let pointedDrawer = null; // cajón al que apuntan rejected/favorite ahora mismo
 function pointBuckets(csv) { // reapunta las vars al cajón `csv` (créalo vacío si no existe)
   const c = drawerOf(csv);
+  // Un "Deshacer" vivo cierra sobre `rejected`/`favorite` POR NOMBRE, así que al pulsarlo
+  // opera sobre el cajón actual, no sobre el que lo generó: rechazas en A, cambias a B,
+  // deshaces, y el rechazo se queda en A mientras B pierde un id que nunca clasificaste.
+  // Este es el único punto por el que pasa un cambio de cajón, así que cubre los 6 sitios
+  // que ofrecen deshacer (reject, restore, rejectedLejos, rejectedExcluded, bulkRestore,
+  // blockSeller) con una línea. Gatea en el cambio REAL: un loadCSV del mismo csv no debe
+  // matar un snack legítimo.
+  if (c !== pointedDrawer) { pointedDrawer = c; hideSnack(); }
   rejected = buckets.rejected[c] ||= new Set();
   favorite = buckets.favorite[c] ||= new Set();
 }
@@ -132,16 +162,19 @@ const save = (k, _set) => {
 // último lote copiado/exportado a la IA: {csv, ids}. Su respuesta es un enlace ?keep=<ids>:
 // esos ids se conservan como favoritos y el RESTO del lote se rechaza de una vez.
 const aisent = () => { try { return JSON.parse(localStorage.getItem("wp_aisent") || "null"); } catch { return null; } };
-function setAisent(rows) {
+// `originCsv` se captura ANTES del await del llamador. Leer curDrawer() aquí lo leía tarde:
+// entre el clic de copiar y su resolución el usuario puede cambiar de búsqueda, y el lote
+// quedaba etiquetado con la búsqueda equivocada. Su ?keep= aterrizaba en el cajón que no era.
+function setAisent(rows, originCsv) {
   // recuerda el lote y cachea sus filas: el veredicto puede llegar en otra sesión, sin CSV cargado
   const ids = [];
   for (const r of rows) {
     const id = col(r, "id");
     if (!id) continue;
     ids.push(id);
-    rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || curDrawer() };
+    rowCache[id] = { ...rowToObj(r), _csv: rowCache[id]?._csv || originCsv };
   }
-  setLS("wp_aisent", JSON.stringify({ csv: curDrawer(), ids }));
+  setLS("wp_aisent", JSON.stringify({ csv: originCsv, ids }));
   idb.set("rows", rowCache);
 }
 const bucketed = (id) => BUCKET_NAMES.some((n) => Object.values(buckets[n]).some((s) => s.has(id))); // en algún cajón
@@ -165,7 +198,7 @@ const saveBlockSel = () => {
   setLS("wp_blocksel", JSON.stringify([...blockSel]));
   pushEstado();
 };
-let stamp = JSON.parse(localStorage.getItem("wp_stamp") || "{}"); // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
+let stamp = readJSON("wp_stamp", {}); // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
 const stampNow = (k) => {
   stamp[k] = Date.now();
   setLS("wp_stamp", JSON.stringify(stamp));
@@ -176,7 +209,7 @@ const unstamp = (k) => {
     setLS("wp_stamp", JSON.stringify(stamp));
   }
 };
-let exclMap = JSON.parse(localStorage.getItem("wp_excl") || "{}"); // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
+let exclMap = readJSON("wp_excl", {}); // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
 const exclTerms = () => (curCsv && exclMap[curDrawer()]) || []; // palabras vetadas del cajón activo
 const saveExcl = () => {
   setLS("wp_excl", JSON.stringify(exclMap));
@@ -186,25 +219,25 @@ const saveExcl = () => {
 // igual que una palabra vetada (y con el mismo atajo "mandar a rechazados" en el stat).
 // Se guardan por búsqueda, así se re-aplican en cada re-scrape sin volver a teclearlos.
 const LIMITS = [["precio", "€"], ["dias", "días"], ["km", "km"]];
-let limMap = JSON.parse(localStorage.getItem("wp_lim") || "{}"); // {cajon: {precio, dias, km}}
+let limMap = readJSON("wp_lim", {}); // {cajon: {precio, dias, km}}
 const limits = () => (curCsv && limMap[curDrawer()]) || {};
 const saveLimits = () => {
   setLS("wp_lim", JSON.stringify(limMap));
   pushEstado();
 };
-let catExclMap = JSON.parse(localStorage.getItem("wp_catexcl") || "{}"); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
+let catExclMap = readJSON("wp_catexcl", {}); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
 const catExclTerms = () => (curCsv && catExclMap[curDrawer()]) || [];
 const saveCatExcl = () => {
   setLS("wp_catexcl", JSON.stringify(catExclMap));
   pushEstado();
 };
-let catModeMap = JSON.parse(localStorage.getItem("wp_catmode") || "{}"); // {csv: "incluir"}: si es "incluir", las categorías marcadas son las ÚNICAS que se conservan (resto a rechazados); por defecto "excluir"
+let catModeMap = readJSON("wp_catmode", {}); // {csv: "incluir"}: si es "incluir", las categorías marcadas son las ÚNICAS que se conservan (resto a rechazados); por defecto "excluir"
 const catMode = () => (curCsv && catModeMap[curDrawer()]) || "excluir";
 const saveCatMode = () => {
   setLS("wp_catmode", JSON.stringify(catModeMap));
   pushEstado();
 };
-let aliasMap = JSON.parse(localStorage.getItem("wp_alias") || "{}"); // {csv: "apodo"}: nombre legible por búsqueda; NO toca el CSV ni los keywords reales
+let aliasMap = readJSON("wp_alias", {}); // {csv: "apodo"}: nombre legible por búsqueda; NO toca el CSV ni los keywords reales
 const saveAlias = () => {
   setLS("wp_alias", JSON.stringify(aliasMap));
   pushEstado();
@@ -250,7 +283,16 @@ function hydrateEstado() {
   {
     {
       // ponytail: doble bloque solo para conservar la indentación del cuerpo original intacta
-      for (const n of BUCKET_NAMES) buckets[n] = toMap(e[n]); // reparte por cajón (o migra el global viejo)
+      const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}); // ignora formatos viejos
+      // Cada campo vive en dos sitios: su clave espejo (wp_rejected, wp_excl…) y el blob
+      // wp_estado, que lo duplica todo. Reasignar desde el blob machacaba la clave espejo, y
+      // el blob es el que más fácil falla por cuota (es el grande, y se escribe el último).
+      // Precedencia POR CAMPO: manda la espejo si existe; el blob solo rellena lo que falte
+      // (instalación anterior a las claves fijas, o migración desde perfiles).
+      // No se fusionan: una unión no sabe representar un borrado, así que resucitaría en cada
+      // arranque un rechazo que el usuario acaba de retirar.
+      const mir = (k, blobVal) => (localStorage.getItem(k) != null ? readJSON(k, null) : blobVal);
+      for (const n of BUCKET_NAMES) buckets[n] = toMap(mir("wp_" + n, e[n])); // reparte por cajón (o migra el global viejo)
       mergeInto(buckets.favorite, toMap(e.interested)); // migración: interesantes viejos ascienden a favoritos
       // cubos exclusivos POR CAJÓN: papelera > favoritos.
       const cajones = new Set([...Object.keys(buckets.rejected), ...Object.keys(buckets.favorite)]);
@@ -260,24 +302,19 @@ function hydrateEstado() {
       }
       pointBuckets(curCsv); // reapunta rejected/favorite al cajón activo
       blockSel.clear();
-      (e.blockSel || []).forEach((x) => blockSel.add(x));
+      (mir("wp_blocksel", e.blockSel) || []).forEach((x) => blockSel.add(x));
       setLS("wp_blocksel", JSON.stringify([...blockSel]));
       // los tres se funden por cajón: "ps4--dia" y "ps4--semana" comparten exclusiones
-      const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}); // ignora formatos viejos
-      exclMap = foldDrawers(obj(e.excl), uni); // {cajon:[palabras]}
-      catExclMap = foldDrawers(obj(e.catExcl), uni); // {cajon:[categorias]}
-      catModeMap = foldDrawers(obj(e.catMode), (a, b) => a || b); // {cajon:"incluir"}
-      limMap = foldDrawers(obj(e.lim), (a, b) => ({ ...b, ...a })); // {cajon:{precio,dias,km}}
+      exclMap = foldDrawers(obj(mir("wp_excl", e.excl)), uni); // {cajon:[palabras]}
+      catExclMap = foldDrawers(obj(mir("wp_catexcl", e.catExcl)), uni); // {cajon:[categorias]}
+      catModeMap = foldDrawers(obj(mir("wp_catmode", e.catMode)), (a, b) => a || b); // {cajon:"incluir"}
+      limMap = foldDrawers(obj(mir("wp_lim", e.lim)), (a, b) => ({ ...b, ...a })); // {cajon:{precio,dias,km}}
       setLS("wp_lim", JSON.stringify(limMap));
-      aliasMap =
-        e.alias && typeof e.alias === "object" && !Array.isArray(e.alias)
-          ? e.alias
-          : {}; // {csv:"apodo"}
+      aliasMap = obj(mir("wp_alias", e.alias)); // {csv:"apodo"}
       setLS("wp_alias", JSON.stringify(aliasMap));
-      stamp =
-        e.stamp && typeof e.stamp === "object" && !Array.isArray(e.stamp)
-          ? e.stamp
-          : {}; // {key:epochMs} cuándo se clasificó
+      // wp_stamp se escribe SIN pasar por pushEstado (stampNow/unstamp), así que su clave
+      // espejo es estructuralmente más nueva que el blob para este campo.
+      stamp = obj(mir("wp_stamp", e.stamp)); // {key:epochMs} cuándo se clasificó
       setLS("wp_stamp", JSON.stringify(stamp));
       for (const n of BUCKET_NAMES) setLS("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
       setLS("wp_excl", JSON.stringify(exclMap));
@@ -1273,7 +1310,9 @@ function snack(msg, undo) {
 function hideSnack() {
   const s = $("#snack");
   s.classList.remove("show");
-  setTimeout(() => (s.hidden = true), 220);
+  $("#undo").onclick = null; // los 220ms de salida ya no son clicables
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => (s.hidden = true), 220); // en snackTimer, no suelto: un snack nuevo lo cancela
 }
 
 // ── carga de un CSV (texto) ──
@@ -1444,12 +1483,6 @@ function restoreLastCsv() {
 }
 
 // nombre de CSV → partes de la query: "ps4--semana.csv" → {kw:"ps4", since:"semana"}
-const SINCE_LABEL = {
-  hora: "última hora",
-  dia: "último día",
-  semana: "última semana",
-  mes: "último mes",
-};
 const SINCE_SHORT = {
   "": "TODO",
   hora: "HORA",
@@ -1599,6 +1632,7 @@ function setLoading(on, n) {
   $("#loadingCount").textContent = n ? `${n} encontrados` : "Buscando…";
 }
 let _timer;
+let scrapeCtrl = null; // scrape en vuelo: pulsar Buscar otra vez cancela el anterior
 function startTimer() {
   // cronómetro de la búsqueda: puede tardar mucho si hay miles de resultados
   const t0 = Date.now();
@@ -1615,7 +1649,8 @@ function startTimer() {
 // (AbortController) y carga el CSV resultante. Devuelve el nombre de CSV.
 async function runScrape(kw, since, titleOnly) {
   const csv = csvNameOf(kw, since);
-  const ctrl = new AbortController();
+  scrapeCtrl?.abort(); // el anterior deja de pedir páginas; el usuario quiere ESTA búsqueda
+  const ctrl = (scrapeCtrl = new AbortController());
   const stop = $("#stopScrape");
   stop.hidden = false;
   stop.textContent = "parar búsqueda";
@@ -1642,6 +1677,10 @@ async function runScrape(kw, since, titleOnly) {
       },
       signal: ctrl.signal,
     });
+    // el chequeo va DESPUÉS del await: scrape.js resuelve con el CSV parcial al abortar, así que
+    // sin esto el perdedor seguiría hasta loadCSV/cacheCsv/saveSearch. AbortError y no return:
+    // un return dejaría queryParts(undefined) -> TypeError en el onclick de Buscar.
+    if (ctrl !== scrapeCtrl) { const e = new Error("scrape superado"); e.name = "AbortError"; throw e; }
     curCsvScrape = Date.now(); // CSV recién generado: base para la edad real de cada anuncio
     loadCSV(text, csv);
     cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
@@ -1649,16 +1688,19 @@ async function runScrape(kw, since, titleOnly) {
     return csv;
   } finally {
     live = false;
-    clearInterval(_timer);
-    setLoading(false);
+    // gateado: el perdedor no puede matar el cronómetro ni el overlay del ganador
+    if (ctrl === scrapeCtrl) {
+      clearInterval(_timer);
+      setLoading(false);
+      scrapeCtrl = null;
+    }
   }
 }
 $("#scrape").onclick = async () => {
   const kw = $("#kw").value.trim();
   if (!kw) return;
   const since = $("#since").value || "";
-  const btn = $("#scrape"),
-    txt = btn.textContent;
+  const btn = $("#scrape");
   btn.disabled = true;
   btn.textContent = "Buscando…";
   try {
@@ -1670,7 +1712,9 @@ $("#scrape").onclick = async () => {
     if (e.name !== "AbortError") snack("No se pudo buscar: " + e.message, null);
   } finally {
     btn.disabled = false;
-    btn.textContent = txt;
+    // etiqueta fija, no la que había: con dos scrapes a la vez el segundo capturaba "Buscando…"
+    // como texto "original" y el botón se quedaba así para siempre
+    btn.textContent = "Buscar";
   }
 };
 $("#kw").addEventListener("keydown", (e) => {
@@ -1776,7 +1820,10 @@ function paintSearches() {
       `</div>` +
       (alias ? `<div class="sc-realkw"></div>` : "") +
       `<div class="sc-meta">${s.rows} resultado${s.rows === 1 ? "" : "s"} · ${age}` +
-      (sinVer[s.csv] ? ` · <b class="sc-new">${sinVer[s.csv]} sin ver</b>` : "") +
+      // sin cifra: unseenCount() resta solo lo ya clasificado, no aplica las exclusiones ni los
+      // topes, así que el número era mayor que el mazo real. Deuda conocida: el badge sigue
+      // apareciendo aunque TODOS los sin-ver estén excluidos y el mazo salga vacío.
+      (sinVer[s.csv] ? ` · <b class="sc-new">sin ver</b>` : "") +
       `</div>` +
       `<div class="sc-btns">` +
       `<button class="ghost sc-run">${ic("search")} Repetir</button>` +
@@ -1913,37 +1960,50 @@ function fromURL() {
   const picks = [["rejected", idsOf("no")], ["favorite", keepIds]].filter(([, ids]) => ids.length);
   const nPicks = picks.reduce((n, [, ids]) => n + ids.length, 0);
   const q = (p.get("q") || "").trim();
-  const since = ["hora", "dia", "semana", "mes"].includes(p.get("since")) ? p.get("since") : "";
-  let dest = "", sentCsv = "", outN = 0; // dest = cajón donde cae la criba
+  // hasOwn y no `in`: la URL es entrada de usuario y `"constructor" in SINCE_LABEL` es true
+  const since = Object.hasOwn(SINCE_LABEL, p.get("since") ?? "") ? p.get("since") : "";
+  let sentCsv = "", outN = 0, orphanN = 0;
+  const touched = new Set(); // cajones donde ha caído algo: el enlace puede repartir en varios
+  const landed = { rejected: [], favorite: [] }; // lo que se clasificó DE VERDAD, para el mensaje
   if (nPicks || isKeep) {
+    const sent = isKeep ? aisent() : null; // ?keep = veredicto sobre el último lote enviado
+    sentCsv = sent?.csv || ""; // se resuelve ANTES del bucle: es el mejor origen para un id del lote
     // cubos POR CAJÓN: cada id va al cajón de ?q= o, sin q, al de ORIGEN del propio anuncio
     // (rowCache._csv). OJO: al boot `curCsv` aún es null (fromURL corre ANTES de restoreLastCsv),
     // así que meterlos en el activo los tiraba a un cajón fantasma invisible.
     for (const [bucket, ids] of picks)
       for (const id of ids) {
-        dest = q ? csvNameOf(q, since) : rowCache[id]?._csv || curCsv || localStorage.getItem(lastCsvKey()) || "";
+        const dest = q ? csvNameOf(q, since)
+          : rowCache[id]?._csv || (isKeep && sentCsv) || curCsv || localStorage.getItem(lastCsvKey()) || "";
+        if (!dest) { orphanN++; continue; } // sin cajón conocido: no se archiva bajo "" y se dice
+        touched.add(dest);
         pointBuckets(dest);
         const sets = { rejected, favorite };
         for (const n of BUCKET_NAMES) sets[n].delete(id); // cubos exclusivos: sale del otro
         sets[bucket].add(id);
+        landed[bucket].push(id);
         stampNow(id);
       }
-    const sent = isKeep ? aisent() : null; // ?keep = veredicto sobre el último lote enviado
     if (sent) {
-      sentCsv = sent.csv || "";
       const keep = new Set(keepIds);
       pointBuckets(sentCsv);
       for (const id of sent.ids)
         if (!keep.has(id)) { favorite.delete(id); rejected.add(id); stampNow(id); outN++; }
+      if (outN) touched.add(sentCsv);
       localStorage.removeItem("wp_aisent"); // veredicto consumido: el lote queda resuelto
     }
     save("wp_rejected", rejected); save("wp_favorite", favorite);
   }
-  // "3 a favoritos y 40 a rechazados · 12 más del lote a rechazados"
-  const msg = () => [nPicks && triageMsg(picks), outN && `${outN} más del lote a rechazados`].filter(Boolean).join(" · ");
+  // "3 a favoritos y 40 a rechazados · 12 más del lote a rechazados · repartido en 2 búsquedas"
+  // Cuenta lo que aterrizó, no lo que pedía el enlace: si no, un id ignorado salía a la vez
+  // como clasificado y como ignorado en el mismo mensaje.
+  const landedPicks = TRIAGE.map(([, b]) => [b, landed[b]]).filter(([, ids]) => ids.length);
+  const msg = () => [landedPicks.length && triageMsg(landedPicks), outN && `${outN} más del lote a rechazados`,
+    touched.size > 1 && `repartido en ${touched.size} búsquedas`,
+    orphanN && `${orphanN} sin búsqueda conocida (ignorados)`].filter(Boolean).join(" · ");
   if (!q) {
     if (nPicks || isKeep) {
-      dest = dest || sentCsv || curCsv || ""; // cajón de origen del lote
+      const dest = [...touched].at(-1) || sentCsv || curCsv || ""; // cajón que se abre al terminar
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
       // muestra el cubo más alto que haya tocado: se pinta desde el cache, sin re-scrapear
       view = picks.length && picks.at(-1)[0] !== "rejected" ? picks.at(-1)[0] : "";
@@ -1955,7 +2015,9 @@ function fromURL() {
     return false; // sin criba ni q: deja que restoreLastCsv() cargue la última vista
   }
   const words = [...new Set((p.get("excl") || "").split(",").map(norm).filter(Boolean))];
-  if (words.length) { exclMap[drawerOf(csvNameOf(q, since))] = words; saveExcl(); } // se aplican al renderizar
+  // fusiona, no sustituye: el deep-link añadía sus palabras BORRANDO las que el usuario había
+  // vetado a mano en ese cajón. Mismo patrón que limMap 9 líneas más abajo.
+  if (words.length) { const d = drawerOf(csvNameOf(q, since)); exclMap[d] = uni(exclMap[d] || [], words); saveExcl(); } // se aplican al renderizar
   // ?maxp=/&maxd= (precio/antigüedad máximos) = los topes del cajón: se aplican al renderizar,
   // igual que si los hubieras tecleado en el menú ⚙ (y quedan guardados para la próxima).
   const lim = {};
@@ -2055,6 +2117,7 @@ function nextCard() {
   paintSellerBanner(); // candidatos cambian al rechazar cartas dentro del swipe
   const done = di >= deck.length; // mazo agotado: no hay tarjeta a la que copiar/abrir
   $("#swVer").disabled = $("#swCopy").disabled = done;
+  $("#swYes").disabled = $("#swNo").disabled = done; // sin esto seguían encendidos y no hacían nada
   if (done) {
     swipeCount.textContent = "";
     const el = document.createElement("div");
@@ -2159,7 +2222,13 @@ function fling(dir) {
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`;
   card.style.opacity = 0;
   card = null; // bloquea doble-decisión mientras vuela
+  $("#swYes").disabled = $("#swNo").disabled = true; // ...y se VE bloqueada: sin esto el toque se tragaba en silencio
+  // El mazo se puede reconstruir durante el vuelo (un chip de palabra vetada, un tope nuevo).
+  // `rebuildDeck()` reasigna `deck` entero y pone `di = 0`, así que este `di++` avanzaría sobre
+  // un mazo que ya no es el suyo y se saltaría la primera tarjeta del nuevo.
+  const deckAtFling = deck;
   setTimeout(() => {
+    if (deck !== deckAtFling) return;
     di++;
     nextCard();
   }, 200);
@@ -2336,11 +2405,12 @@ function copyForAI(btn, all, vacio) {
   if (!all.length) return snack(vacio, null);
   const rows = all.slice(0, UNSEEN_CAP); // tope: más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
   const prev = btn.textContent;
+  const originCsv = curDrawer(); // el cajón de AHORA: la copia es asíncrona y curCsv puede cambiar
   btn.disabled = true;
   btn.textContent = "Preparando…";
   copyAsync(() => aiPrompt(rows, all.length))
     .then(() => {
-      setAisent(rows);
+      setAisent(rows, originCsv);
       snack(`${rows.length} anuncios copiados — pégaselos a tu IA`, null);
     })
     .catch(() => snack("No se pudo copiar", null))
@@ -2445,6 +2515,7 @@ async function dossierFav(btn) {
   const rows = bucketRows(favorite);
   if (!rows.length) return snack("No tienes favoritos", null);
   const prev = btn.textContent;
+  const originCsv = curDrawer(); // igual que en copyForAI: se espera a las fotos antes de registrar
   btn.disabled = true;
   btn.textContent = "Preparando…";
   try {
@@ -2457,7 +2528,7 @@ async function dossierFav(btn) {
         im.complete ? null : new Promise((res) => (im.onload = im.onerror = res)),
       ),
     );
-    setAisent(rows); // el PDF también es un lote enviado: su ?keep resuelve el resto
+    setAisent(rows, originCsv); // el PDF también es un lote enviado: su ?keep resuelve el resto
     window.print();
   } finally {
     btn.disabled = false;

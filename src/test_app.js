@@ -262,15 +262,19 @@ function makeContext(store, opts = {}) {
     AbortController,
     performance: { now: () => 0 },
     // scrape.js no se carga aquí: el scraper del browser se falsea y devuelve el CSV que pida el test
-    Rebusca: { scrape: async () => opts.csv || "" },
+    Rebusca: { scrape: opts.scrape || (async () => opts.csv || "") },
     print: () => spy.printed++,
     open: (u) => {
       spy.opened.push(u);
       return { focus() {} };
     },
     console: new Proxy(
-      { error: (...a) => bootErrors.push(a) },
-      { get: (t, p) => (p in t ? t[p] : noop) }, // assert/log/warn/debug/... -> noop
+      {
+        error: (...a) => bootErrors.push(a),
+        // los console.assert() de app.js son checks reales: si fallan, la suite se entera
+        assert: (cond, ...a) => cond || bootErrors.push(["console.assert:", ...a]),
+      },
+      { get: (t, p) => (p in t ? t[p] : noop) }, // log/warn/debug/... -> noop
     ),
     // queueMicrotask envuelto: captura el crash del boot en vez de tumbar el proceso
     queueMicrotask: (cb) =>
@@ -370,6 +374,14 @@ async function main() {
   let errs = await bootErrs({});
   if (errs.length) fail("boot en blanco lanzó: " + (errs[0].message || errs[0]));
 
+  // 1b. arranque con UNA clave corrupta: el valor roto se ignora, la app arranca igual.
+  //     Sin readJSON() cualquiera de estas dejaba la app inerte en toda carga futura.
+  for (const k of ["wp_blocksel", "wp_rejected", "wp_favorite", "wp_interested", "wp_stamp",
+                   "wp_excl", "wp_lim", "wp_catexcl", "wp_catmode", "wp_alias"]) {
+    const e = await bootErrs({ [k]: "{json roto" });
+    if (e.length) fail("boot con " + k + " corrupto lanzó: " + (e[0].message || e[0]));
+  }
+
   // 2. arranque con estado guardado en la clave fija `wp_estado`: hydrateEstado()->render()
   //    en el boot. Es EXACTAMENTE el camino que crasheaba (TDZ de `col`). Debe ir limpio.
   errs = await bootErrs({
@@ -421,6 +433,36 @@ async function main() {
   if (errs.length) fail("boot con cubos globales viejos lanzó: " + (errs[0].message || errs[0]));
   if (gs.wp_favorite !== '{"ford.csv":["c"],"ps4.csv":["d"]}')
     fail("migración por cajón: wp_favorite no se repartió por origen, salió " + gs.wp_favorite);
+
+  // 4b. …y un id del formato viejo SIN origen conocido se descarta, no se archiva bajo "".
+  //     El cajón "" es real pero inalcanzable: allQueries se puebla solo desde wp_searches.
+  const lg = { wp_estado: JSON.stringify({ favorite: ["idX"], rejected: [] }) }; // sin wp_rows
+  errs = await bootErrs(lg);
+  if (errs.length) fail("boot con id legacy sin origen lanzó: " + (errs[0].message || errs[0]));
+  if ("" in JSON.parse(lg.wp_favorite || "{}")) fail("la migración legacy creó el cajón fantasma \"\"");
+
+  // 4c. la clave espejo manda sobre el blob wp_estado, campo a campo. Los dos guardan lo
+  //     mismo; si la escritura del blob falla por cuota (es el grande y va el último), el
+  //     arranque revertía al estado viejo y encima machacaba la espejo con él.
+  const div = {
+    wp_rejected: JSON.stringify({ "ford.csv": ["a1"] }), // lo que el usuario acaba de rechazar
+    wp_estado: JSON.stringify({ rejected: {}, favorite: {} }), // blob obsoleto
+  };
+  errs = await bootErrs(div);
+  if (errs.length) fail("boot con espejo/blob divergentes lanzó: " + (errs[0].message || errs[0]));
+  if (!(JSON.parse(div.wp_rejected)["ford.csv"] || []).includes("a1"))
+    fail("hydrateEstado revirtió un rechazo desde el blob obsoleto, quedó " + div.wp_rejected);
+
+  // 4d. …y al revés: la espejo NO tiene el id y el blob sí. Es una RETIRADA (deshacer, quitar
+  //     un favorito). No debe resucitar. Este caso descarta fusionar por unión.
+  const ret = {
+    wp_rejected: JSON.stringify({ "ford.csv": [] }),
+    wp_estado: JSON.stringify({ rejected: { "ford.csv": ["a1"] }, favorite: {} }),
+  };
+  errs = await bootErrs(ret);
+  if (errs.length) fail("boot con retirada lanzó: " + (errs[0].message || errs[0]));
+  if ((JSON.parse(ret.wp_rejected)["ford.csv"] || []).includes("a1"))
+    fail("hydrateEstado resucitó un rechazo ya retirado, quedó " + ret.wp_rejected);
 
   // 5. CUOTA LLENA: escribir en localStorage NUNCA debe lanzar. Bug real (Brave, movil): el
   //    setItem de wp_rows petaba por quota y la excepcion abortaba fling()/reject() JUSTO despues
@@ -498,12 +540,57 @@ async function main() {
     fail("?keep: el resto del lote no se rechazó, salió " + kp.wp_rejected);
   if ("wp_aisent" in kp) fail("?keep: no consumió wp_aisent");
 
+  // 9b. ?keep= SIN wp_rows: el id cae en el cajón del propio lote (wp_aisent.csv), no en "".
+  //     Es el caso real de responder al enlace desde otro navegador o tras limpiar el cache.
+  const kp2 = { wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }) };
+  errs = await bootErrs(kp2, { search: "?keep=a1" });
+  if (errs.length) fail("?keep sin wp_rows lanzó: " + (errs[0].message || errs[0]));
+  if (kp2.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep sin wp_rows: el conservado no cayó en el cajón del lote, salió " + kp2.wp_favorite);
+
+  // 9c. id irresoluble (sin ?q=, sin origen, sin última búsqueda): NO se archiva bajo "" y se avisa
+  const hu = {};
+  const bh = await boot(hu, { search: "?fav=zzz" });
+  if (bh.errs.length) fail("?fav= huérfano lanzó: " + (bh.errs[0].message || bh.errs[0]));
+  if ("" in JSON.parse(hu.wp_favorite || "{}")) fail("?fav= huérfano creó el cajón fantasma \"\"");
+  if (!/sin búsqueda conocida/.test(String(bh.q("#snackmsg").textContent)))
+    fail("?fav= huérfano no avisó, el snack dijo: " + bh.q("#snackmsg").textContent);
+
+  // 9d. dos orígenes distintos: el enlace reparte y el mensaje lo dice
+  const dos = {
+    wp_rows: JSON.stringify({ a1: { id: "a1", _csv: "coches.csv" }, a2: { id: "a2", _csv: "motos.csv" } }),
+  };
+  const bd = await boot(dos, { search: "?fav=a1,a2" });
+  if (bd.errs.length) fail("?fav= repartido lanzó: " + (bd.errs[0].message || bd.errs[0]));
+  if (!/2 búsquedas/.test(String(bd.q("#snackmsg").textContent)))
+    fail("?fav= repartido no dijo en cuántas búsquedas cayó, el snack dijo: " + bd.q("#snackmsg").textContent);
+
   // 10. deep-link con topes ?maxp/?maxd: son los topes del cajón (wp_lim), se aplican al render
   const tp = {};
   errs = await bootErrs(tp, { search: "?q=kindle&maxp=80&maxd=30" });
   if (errs.length) fail("deep-link ?maxp/?maxd lanzó: " + (errs[0].message || errs[0]));
   if (tp.wp_lim !== '{"kindle.csv":{"precio":80,"dias":30}}')
     fail("?maxp/?maxd: no quedaron como topes del cajón, salió " + tp.wp_lim);
+
+  // 10b. ?excl= FUSIONA con lo que el usuario ya vetó a mano en ese cajón, no lo sustituye.
+  //      Se siembra también wp_estado: hoy hydrateEstado() reasigna exclMap desde el blob, así
+  //      que sembrar solo la clave espejo no sobrevive al arranque (eso es H10, otra tanda).
+  const ex = {
+    wp_excl: JSON.stringify({ "ford.csv": ["carcamal"] }),
+    wp_estado: JSON.stringify({ excl: { "ford.csv": ["carcamal"] } }),
+  };
+  errs = await bootErrs(ex, { search: "?q=ford&excl=barato" });
+  if (errs.length) fail("deep-link ?excl lanzó: " + (errs[0].message || errs[0]));
+  const w = (JSON.parse(ex.wp_excl)["ford.csv"] || []).sort();
+  if (w.join() !== "barato,carcamal") fail("?excl= borró las exclusiones manuales, quedó " + w);
+
+  // 10c. ?since= solo acepta el vocabulario de SINCE_LABEL. "constructor" viene del prototipo,
+  //      así que un `in` lo dejaba pasar y el cajón salía "ford--constructor.csv".
+  const sc = {};
+  errs = await bootErrs(sc, { search: "?q=ford&since=constructor&maxp=80" });
+  if (errs.length) fail("deep-link ?since=constructor lanzó: " + (errs[0].message || errs[0]));
+  if (sc.wp_lim !== '{"ford.csv":{"precio":80}}')
+    fail("?since= coló una ventana temporal que no existe, el cajón salió " + sc.wp_lim);
 
   // 11. ajuste "excluir lejos sin envío": EXCLUYE del mazo, no rechaza. Bug real: enforceLejos()
   //     corría en cada render() y volvía a rechazar lo que acababas de restaurar -> "vaciar
