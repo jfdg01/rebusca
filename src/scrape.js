@@ -154,9 +154,10 @@
         catch (e) {
           if (e.name === "AbortError") return finish();
           if (String(e.message).startsWith("403")) break;   // bloqueo: corta esta rama, conserva lo ya recogido
-          // lo ya recogido no se tira: wallapop.py deja en disco lo que llevara escrito.
-          // Sin filas todavía sí sube el error: si no, la caída se vería como "no hay nada".
-          if (rows.length) return finish();
+          // `break`, igual que el 403: muere ESTA rama, las siguientes se piden igual. Lo ya
+          // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). Sin filas
+          // todavía sí sube el error: si no, la caída se vería como "no hay nada".
+          if (rows.length) break;
           throw e;
         }
         const items = (((d || {}).data || {}).section || {}).payload;

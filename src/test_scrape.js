@@ -132,12 +132,14 @@ async function main() {
     ok(calls.length === 1, "un 400 de params no se reintenta: " + calls.length);
   }
 
-  // ── 9. una rama que se cae NO tira lo ya recogido por las anteriores ──
+  // ── 9. una rama que se cae corta ESA rama, no la búsqueda entera. Con la rama mala en
+  //     medio se ve: las de detrás se tienen que pedir igual, como hace el 403 (test 10).
   {
-    const { api } = load(async (url) =>
-      url.includes("mala") ? resp(500, {}) : resp(200, page([item("a")])));
-    const csv = await api.scrape({ keywords: "buena OR mala" });
-    ok(filas(csv).length === 1, "la rama caída se llevó por delante las filas de la buena");
+    const { api, calls } = load(async (url) =>
+      url.includes("mala") ? resp(500, {}) : resp(200, page([item(url.includes("tercera") ? "c" : "a")])));
+    const csv = await api.scrape({ keywords: "buena OR mala OR tercera" });
+    ok(calls.some((u) => u.includes("tercera")), "la rama caída se llevó por delante las que van detrás");
+    ok(filas(csv).length === 2, "faltan filas de las ramas sanas: " + filas(csv).length);
   }
 
   // ── 9b. …pero si no hay NADA que salvar, el error sube y se ve ──
