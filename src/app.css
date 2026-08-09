@@ -360,7 +360,9 @@
     backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
   .li-title { font: 700 1.12rem/1.28 var(--sans); overflow-wrap: anywhere; margin: 0 0 .4rem;
     text-wrap: balance;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
+    /* 2 líneas: a 320px un título de Wallapop no cabe en una y "Vespa Primavera 125 del 201…"
+       esconde justo el modelo. La tarjeta del swipe ya usaba 2; ahora la lista también. */
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   /* envío + distancia: metadato en una línea bajo el título */
   .li-flags { font: 12px var(--mono); color: var(--ink-soft); text-align: left; }
   .li-flags .ship.no { color: var(--ship-no); font-weight: 700; }   /* sin envío: naranja para que salte a la vista */
@@ -502,8 +504,8 @@
     touch-action: pan-y; cursor: grab; user-select: none; }
   .swipe-card.grab { cursor: grabbing; }
   /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
-  /* título largo: máx 2 líneas, luego ellipsis (hereda el clamp de .li-title) */
-  .swipe-card .li-title { flex: 0 0 auto; -webkit-line-clamp: 2; }
+  /* el clamp de 2 líneas ya viene de .li-title; aquí solo el flex */
+  .swipe-card .li-title { flex: 0 0 auto; }
   .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
   /* la media (foto + gradiente + overlays) crece a altura fija: más escaparate que el 16/9 de la lista.
      .li-img sigue siendo absolute/inset:0/cover, así que llena esta caja sin trucos de margen */
