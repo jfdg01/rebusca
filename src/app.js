@@ -1786,7 +1786,7 @@ const getLoc = () => {
   return { lat: v.lat, lon: v.lon };
 };
 // pinta el overlay: n = contador de encontrados (o null al arrancar, sin dato aun)
-function setLoading(on, n) {
+function setLoading(on, n, rama, ramas) {
   const box = $("#loading");
   $("#stat").hidden = on; // los stats son de la query vieja: ocúltalos mientras se busca
   $(".panel.picker").hidden = on; // búsqueda activa + exclusiones son de la query vieja: fuera mientras se busca
@@ -1799,7 +1799,10 @@ function setLoading(on, n) {
   $("#copyDeck").hidden = true;
   $("#copyFav").hidden = true;
   box.hidden = false;
-  $("#loadingCount").textContent = n ? `${n} encontrados` : "Buscando…";
+  // las ramas OR se piden en serie: con doce, el total y el reloj no dicen si va por la primera
+  // o por la última. Con una sola rama el sufijo sobra y no sale.
+  const deRama = ramas > 1 ? ` · rama ${rama}/${ramas}` : "";
+  $("#loadingCount").textContent = (n ? `${n} encontrados` : "Buscando…") + deRama;
 }
 let _timer;
 let scrapeCtrl = null; // scrape en vuelo: pulsar Buscar otra vez cancela el anterior
@@ -1842,8 +1845,8 @@ async function runScrape(kw, since, titleOnly) {
       titleOnly,
       lat,
       lon,
-      onProgress: (n) => {
-        if (live) setLoading(true, n);
+      onProgress: (n, rama, ramas) => {
+        if (live) setLoading(true, n, rama, ramas);
       },
       signal: ctrl.signal,
     });

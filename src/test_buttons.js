@@ -801,6 +801,27 @@ async function main() {
     ok(calls.length === 2, "volver a Jaén no relanzó la búsqueda");
   }
 
+  // ── 35. el contador de la búsqueda dice por qué rama OR va (las ramas se piden en serie) ──
+  {
+    const b = await boot({}, { csv: CSV });
+    const visto = [];
+    b.sandbox.Rebusca.scrape = async (o) => {
+      o.onProgress(0, 1, 12);
+      visto.push(b.q("#loadingCount").textContent);
+      o.onProgress(7, 2, 12);
+      visto.push(b.q("#loadingCount").textContent);
+      o.onProgress(9, 1, 1); // una sola rama: el sufijo sobra
+      visto.push(b.q("#loadingCount").textContent);
+      return CSV;
+    };
+    b.q("#kw").value = "ford OR focus";
+    await b.q("#scrape").click();
+    await flush();
+    ok(visto[0] === "Buscando… · rama 1/12", "el contador no dice la rama al empezar: " + visto[0]);
+    ok(visto[1] === "7 encontrados · rama 2/12", "el contador no avanza de rama: " + visto[1]);
+    ok(visto[2] === "9 encontrados", "con una sola rama el sufijo sobra: " + visto[2]);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

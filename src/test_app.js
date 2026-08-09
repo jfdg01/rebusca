@@ -942,6 +942,29 @@ async function main() {
       if (!fs.existsSync(path.join(__dirname, ic.src.replace(/^\//, "")))) fail("icono del manifest que no existe: " + ic.src);
   }
 
+  // 12l. progreso por rama: las ramas OR se piden EN SERIE. Con doce ramas el usuario veía el
+  //      reloj subir sin saber si iba por la primera o por la última.
+  {
+    const Rebusca = require("./scrape.js");
+    const item = (id) => ({ id, title: "x", location: {} });
+    const antes = global.fetch;
+    // rama 1: un anuncio. rama 2: vacía (tiene que mover el contador igual). rama 3: un anuncio.
+    let pedida = 0;
+    global.fetch = async () => ({
+      ok: true, status: 200,
+      json: async () => ({ data: { section: { payload: { items: ++pedida === 2 ? [] : [item("i" + pedida)] } } } }),
+    });
+    const pasos = [];
+    try {
+      await Rebusca.scrape({ keywords: "a OR b OR c", onProgress: (n, r, t) => pasos.push(`${n}/${r}/${t}`) });
+    } finally {
+      global.fetch = antes;
+    }
+    // entrada de rama + una llamada por fila nueva
+    const esperado = ["0/1/3", "1/1/3", "1/2/3", "1/3/3", "2/3/3"].join(" ");
+    if (pasos.join(" ") !== esperado) fail("el progreso no dice por qué rama va: " + pasos.join(" "));
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

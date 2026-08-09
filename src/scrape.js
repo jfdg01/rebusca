@@ -177,6 +177,8 @@
   }
 
   // scrape({keywords, since, titleOnly, lat, lon, onProgress, signal}) -> texto CSV (mismo formato que wallapop.py)
+  // onProgress(filas, rama, ramas): las ramas OR se piden EN SERIE, así que sin el número de rama
+  // el usuario solo ve el reloj subir y no sabe si va por la primera de doce o por la última.
   async function scrape(opts) {
     const { keywords, since = null, titleOnly = false,
             lat = JAEN[0], lon = JAEN[1], onProgress, signal } = opts;
@@ -202,7 +204,9 @@
     };
     const ramas = branches(keywords);
     diag.ramas = ramas.length;
-    for (const kw of ramas) {
+    for (const [iRama, kw] of ramas.entries()) {
+      const aviso = () => onProgress && onProgress(rows.length, iRama + 1, ramas.length);
+      aviso(); // al entrar en la rama: una rama sin resultados también mueve el contador
       let params = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
       if (orderBy) params.order_by = orderBy;
       if (tf) params.time_filter = tf;
@@ -238,7 +242,7 @@
           }
           seen.add(r.id);
           rows.push(r);
-          if (onProgress) onProgress(rows.length);
+          aviso();
         }
         const np = ((d || {}).meta || {}).next_page;
         if (!np || old) break;
