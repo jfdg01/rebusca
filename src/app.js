@@ -772,9 +772,13 @@ const isLejos = (r) => {
   return km !== "" && +km > lejosKm && col(r, "envio") !== "True";
 };
 let autoExclLejos = localStorage.getItem("wp_autoexcllejos") === "1"; // si activo, los lejos-sin-envío quedan excluidos del mazo (Ajustes)
-const isExcluded = (r) => {
-  if (autoExclLejos && isLejos(r)) return true; // ajuste "excluir lejos sin envío": fuera del mazo, no a la papelera
-  if (overLimit(r)) return true; // pasa de precio/antigüedad/distancia máximos del cajón
+// El veto se parte en dos motivos porque el contador enseña los dos por separado: un número solo
+// no decía qué filtro te quitó qué. Números (topes y km) por un lado, texto (palabra y categoría)
+// por otro. Los cuatro motivos exactos no caben en 320 px.
+const exclPorTope = (r) =>
+  (autoExclLejos && isLejos(r)) || // ajuste "excluir lejos sin envío": fuera del mazo, no a la papelera
+  overLimit(r); // pasa de precio/antigüedad/distancia máximos del cajón
+const exclPorTexto = (r) => {
   // vetada por la query activa: categoría exacta o palabra en el título
   const cats = catExclTerms();
   if (cats.length) {
@@ -785,6 +789,7 @@ const isExcluded = (r) => {
   const t = norm(r[iTitulo] || "");
   return exclTerms().some((w) => t.includes(w));
 };
+const isExcluded = (r) => exclPorTope(r) || exclPorTexto(r);
 // compara dos celdas: numérica si ambas lo son (vacío = -∞), si no alfabética con acentos
 function cmpCell(x, y) {
   if ((x === "" || isNum(x)) && (y === "" || isNum(y))) {
@@ -1106,6 +1111,16 @@ function paintStat() {
   const vetados = hasExcl
     ? data.filter((r) => !clasif(r) && isExcluded(r)).length
     : 0;
+  // Con un solo motivo, la misma línea lo nombra. Con los dos, el desglose baja a su propia línea:
+  // en 320 px el enlace de acción ya se come media fila. Una fila vetada por los dos motivos cuenta
+  // como tope, que es el filtro que el usuario puso con un número.
+  const porTope = hasExcl ? data.filter((r) => !clasif(r) && exclPorTope(r)).length : 0;
+  const porTexto = vetados - porTope;
+  const dosMotivos = porTope && porTexto;
+  const motivo = dosMotivos ? "" : porTope ? " por tope" : " por palabra o categoría";
+  const desglose = dosMotivos
+    ? `<span><b>${porTexto}</b> por palabra o categoría, ${porTope} por tope</span>`
+    : "";
   const lejos = data.filter(
     (r) => !clasif(r) && !isExcluded(r) && isLejos(r),
   ).length;
@@ -1113,7 +1128,7 @@ function paintStat() {
   $("#stat").innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
     (vetados
-      ? `<span><b>${vetados}</b> excluidos · <span class="link" id="rejectedExcl">mandar a rechazados</span></span>`
+      ? `<span><b>${vetados}</b> excluidos${motivo} · <span class="link" id="rejectedExcl">mandar a rechazados</span></span>` + desglose
       : "") +
     (lejos
       ? `<span><b>${lejos}</b> de ellos lejos y sin envío · <span class="link" id="rejectedLejos">rechazar</span></span>`

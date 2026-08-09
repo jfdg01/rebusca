@@ -428,6 +428,16 @@ async function main() {
     b.q("#undo").click(); // el snack ofrece deshacer: debe devolverlo al mazo
     ok(bucket(b, "rejected").length === 0, "deshacer no sacó de la papelera lo que rechazó #rejectedLejos");
     b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "roto" } });
+    // el desglose: un número solo no dice qué filtro te quitó qué
+    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(b.q("#stat").innerHTML),
+      "el contador no dice que el veto fue por palabra: " + b.q("#stat").innerHTML);
+    b.q("#lim_precio").dispatch("change", { target: { value: "300" } }); // a1 (1000 €) cae por tope
+    ok(/<b>2<\/b> excluidos ·/.test(b.q("#stat").innerHTML) &&
+      /<b>1<\/b> por palabra o categoría, 1 por tope/.test(b.q("#stat").innerHTML),
+      "con dos motivos el contador no los separa: " + b.q("#stat").innerHTML);
+    b.q("#lim_precio").dispatch("change", { target: { value: "" } }); // sin tope: vuelve a un motivo
+    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(b.q("#stat").innerHTML),
+      "al quitar el tope el contador no vuelve a un motivo: " + b.q("#stat").innerHTML);
     b.q("#rejectedExcl").click();
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
   }
