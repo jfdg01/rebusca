@@ -482,9 +482,11 @@
   .swipe-sort button.on { background: var(--pine); border-color: var(--pine); color: #fff; }
   .swipe-sort button.on::after { content: ' ' attr(data-dir); }
   .swipe-count { color: var(--ink-soft); font: 700 12px var(--mono); letter-spacing: .12em; }
-  .swipe-count-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: min(440px, 100%); margin: .4rem 0 1rem; }
+  .swipe-count-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: min(440px, 100%); margin: .2rem 0 .6rem; }
   /* pistas de deslizamiento: ✓→ guardar (verde) · ←✕ descartar (rojo) */
-  .swipe-hint { display: inline-flex; align-items: center; gap: .05rem; opacity: .9; background: none; border: 0; box-shadow: none; padding: .2rem .3rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  /* min-height 3rem: son la acción más repetida de la app y medían 28px. 48px CSS con el
+     zoom .95 del body = 45.6px reales, por encima del mínimo táctil de 44px. */
+  .swipe-hint { display: inline-flex; align-items: center; justify-content: center; gap: .05rem; opacity: .9; background: none; border: 0; box-shadow: none; min-height: 3rem; min-width: 3rem; padding: .2rem .3rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .swipe-hint:hover { background: none; box-shadow: none; }
   .swipe-hint:active { opacity: .5; transform: none; box-shadow: none; }
   .swipe-hint .icon { width: 21px; height: 21px; stroke-width: 2.4; }
