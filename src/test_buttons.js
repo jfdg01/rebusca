@@ -423,7 +423,7 @@ async function main() {
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
   }
 
-  // ── 21. gestor de búsquedas: los 4 botones de cada tarjeta ──
+  // ── 21. gestor de búsquedas: los 5 botones de cada tarjeta ──
   {
     const b = await loaded({ prompt: "Mi coche" });
     const calls = [];
@@ -439,6 +439,12 @@ async function main() {
     card().querySelector(".sc-ren").click(); // Renombrar: apodo local, no toca lo que se busca
     ok(JSON.parse(b.store.wp_alias || "{}")["ford.csv"] === "Mi coche", ".sc-ren no guardó el apodo");
     ok((b.store.wp_searches || "").includes("ford.csv"), ".sc-ren tocó la búsqueda, no solo el apodo");
+    // Enlace: la app parsea ocho parámetros de URL y no construía ninguno
+    card().querySelector(".sc-link").click();
+    await flush();
+    ok(b.spy.copied.at(-1) === "https://rebusca.dibogomez.com/?q=ford",
+      "el enlace copiado no reproduce la búsqueda: " + b.spy.copied.at(-1));
+    ok(/Enlace copiado/.test(b.q("#snackmsg").textContent), "copiar el enlace no avisa al usuario");
     card().querySelector(".sc-run").click(); // Repetir: re-scrapea y cierra el gestor
     await flush();
     ok(calls.length === 1 && calls[0].keywords === "ford", ".sc-run no relanzó la búsqueda");

@@ -353,7 +353,9 @@ function makeContext(store, opts = {}) {
         },
       },
     },
-    location: { reload: noop, href: "", search: opts.search || "", pathname: "/", assign: noop },
+    // origin: un navegador siempre lo tiene, y el enlace de una búsqueda se construye con él
+    location: { reload: noop, href: "", origin: "https://rebusca.dibogomez.com",
+      search: opts.search || "", pathname: "/", assign: noop },
     // historial de verdad: `back()` dispara popstate como el navegador. Con un noop, el
     // botón atrás del móvil (la única "capa" sin botón propio en pantalla) no lo probaba nadie.
     history: {

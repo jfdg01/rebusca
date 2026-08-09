@@ -2009,6 +2009,7 @@ function paintSearches() {
       `<div class="sc-btns">` +
       `<button class="ghost sc-run">${ic("search")} Repetir</button>` +
       `<button class="ghost sc-ren">${ic("pencil")} Renombrar</button>` +
+      `<button class="ghost sc-link">${ic("copy")} Enlace</button>` +
       `<button class="primary sc-pick">${ic("check")} Seleccionar</button>` +
       `<button class="danger sc-del">${ic("rejected")} Borrar</button></div>`;
     card.querySelector(".sc-kw").textContent = alias || kw; // textContent: a prueba de < & en el término
@@ -2020,9 +2021,26 @@ function paintSearches() {
     card.querySelector(".sc-ren").onclick = () =>
       renameSearch(s.csv, alias || "");
     card.querySelector(".sc-run").onclick = () => relaunch(kw, since);
+    card.querySelector(".sc-link").onclick = () => shareSearch(kw, since);
     card.querySelector(".sc-del").onclick = () => deleteSearch(s.csv, kw);
     searchesList.appendChild(card);
   }
+}
+// ── enlace de una búsqueda ──
+// La app parsea ocho parámetros de URL y no construía ninguno. Con el enlace se le pasa una
+// búsqueda a otra persona, o te la llevas a otro móvil (no hay cuentas ni sincronización).
+// Al abrirlo, fromURL() rellena el buscador y pulsa Buscar solo.
+const searchURL = (kw, since) =>
+  location.origin + location.pathname + "?" + new URLSearchParams(since ? { q: kw, since } : { q: kw });
+console.assert(
+  searchURL("tv led", "semana").endsWith("?q=tv+led&since=semana") &&
+    searchURL("tv led", "").endsWith("?q=tv+led"), // sin since no se ensucia la URL
+  "searchURL() roto",
+);
+function shareSearch(kw, since) {
+  copyAsync(() => searchURL(kw, since))
+    .then(() => snack("Enlace copiado", null))
+    .catch(() => snack("No se pudo copiar el enlace", null));
 }
 function relaunch(kw, since) {
   // "Repetir" repite: antes solo rellenaba el buscador y te dejaba pulsar Buscar tú, así que la app
