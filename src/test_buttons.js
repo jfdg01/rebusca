@@ -883,6 +883,42 @@ async function main() {
       "la foto bloquea el hilo de la interfaz: loading=" + img.loading + " decoding=" + img.decoding);
   }
 
+  // ── 38. copia de seguridad: guardar, perderlo todo, restaurar ──
+  {
+    const b = await loaded();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); rejected.add("a3"); save("wp_rejected", rejected)');
+    b.q("#exportState").click();
+    const copia = b.spy.blobs[0].partes.join("");
+    ok(/"app":"rebusca"/.test(copia), "la copia no se identifica: " + copia.slice(0, 60));
+    const datos = JSON.parse(copia).datos;
+    ok(datos.wp_favorite && datos.wp_rejected && datos.wp_searches,
+      "la copia no lleva el triaje ni las búsquedas: " + Object.keys(datos).join());
+    ok(!("wp_rows" in datos) && !("wp_csv" in datos), "la copia se lleva los caches de resultados");
+
+    // el botón visible solo abre el selector de fichero, que va oculto
+    let abierto = 0;
+    b.q("#importState").onclick = () => abierto++;
+    b.q("#importBtn").click();
+    ok(abierto === 1, "el botón de restaurar no abre el selector de fichero: " + abierto);
+
+    // otro navegador, vacío: el fichero lo devuelve todo
+    const b2 = await boot({}, { csv: CSV });
+    ok(!Object.keys(JSON.parse(b2.store.wp_favorite || "{}")).length,
+      "el almacén de partida ya traía favoritos: " + b2.store.wp_favorite);
+    b2.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    ok(JSON.parse(b2.store.wp_favorite || "{}")["ford.csv"].join() === "a1",
+      "restaurar no devolvió los favoritos: " + b2.store.wp_favorite);
+    ok(b2.spy.reloads === 1, "restaurar no recargó la página: " + b2.spy.reloads);
+
+    // un fichero que no es una copia: avisa y no toca nada
+    const b3 = await boot({}, { csv: CSV });
+    b3.q("#importState").dispatch("change", { target: { files: [{ text: async () => "{}" }] } });
+    await flush();
+    ok(/Copia no válida/.test(b3.q("#snackmsg").textContent),
+      "un fichero cualquiera pasó por copia: " + b3.q("#snackmsg").textContent);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

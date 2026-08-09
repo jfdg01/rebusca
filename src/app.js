@@ -2199,6 +2199,53 @@ locReset.onclick = () => {
   paintLoc();
   relanzaPorLoc();
 };
+
+// ── copia de seguridad del estado ──
+// No hay cuentas ni backend: meses de triaje viven solo en el almacén de este navegador, y Safari
+// en iOS lo limpia tras unos días sin visitas. Se copian TODAS las claves wp_*, no una lista
+// escrita a mano, para que una clave nueva entre sola en la copia. Los CSVs cacheados quedan
+// fuera: pesan y se regeneran solos, porque abrir una búsqueda guardada la vuelve a scrapear.
+const BACKUP_SKIP = ["wp_rows", "wp_csv"]; // caches de resultados del modelo viejo
+const backupKeys = () => {
+  const out = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("wp_") && !BACKUP_SKIP.includes(k)) out.push(k);
+  }
+  return out;
+};
+const backupJSON = () =>
+  JSON.stringify({
+    app: "rebusca",
+    v: 1,
+    fecha: new Date().toISOString(),
+    datos: Object.fromEntries(backupKeys().map((k) => [k, localStorage.getItem(k)])),
+  });
+$("#exportState").onclick = () => {
+  const url = URL.createObjectURL(new Blob([backupJSON()], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "rebusca-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  URL.revokeObjectURL(url);
+  snack("Copia guardada", null);
+};
+$("#importBtn").onclick = () => $("#importState").click();
+$("#importState").onchange = (e) => {
+  const f = (e.target.files || [])[0];
+  if (!f) return;
+  f.text()
+    .then((t) => {
+      const datos = (JSON.parse(t) || {}).datos;
+      if (!datos || typeof datos !== "object") throw new Error("no es una copia de Rebusca");
+      // Borra antes de escribir: si no, lo viejo y lo nuevo se mezclan y aparecen favoritos que
+      // la copia no traía. Las claves se listan antes de borrar, porque borrar mueve los índices.
+      for (const k of backupKeys()) localStorage.removeItem(k);
+      for (const k in datos) localStorage.setItem(k, datos[k]);
+      location.reload(); // el estado vive en variables ya leídas: recargar es lo único honesto
+    })
+    .catch((err) => snack("Copia no válida: " + (err.message || err), null));
+};
 // deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1
 //            &maxp=<€>&maxd=<días>&keep=<ids>&fav=<ids>&no=<ids>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:

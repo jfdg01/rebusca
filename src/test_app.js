@@ -225,6 +225,12 @@ function makeContext(store, opts = {}) {
     clear: () => {
       for (const k of Object.keys(store)) delete store[k];
     },
+    // length/key: la API real de Storage. La copia de seguridad recorre el almacén con ella,
+    // porque una lista de claves escrita a mano se queda coja en cuanto se añade una.
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (i) => Object.keys(store)[i] ?? null,
   };
   // memoizado por selector: `$("#scrape")` devuelve SIEMPRE el mismo elemento, así el test
   // puede leer el onclick que le puso app.js y pulsarlo.
@@ -290,7 +296,7 @@ function makeContext(store, opts = {}) {
   };
   const fireWin = fire(winListeners);
   // lo que el test observa "desde fuera": qué se copió al portapapeles, qué se abrió/imprimió
-  const spy = { copied: [], opened: [], printed: 0, alerts: [], warns: [] };
+  const spy = { copied: [], opened: [], printed: 0, alerts: [], warns: [], blobs: [], reloads: 0 };
   const sandbox = {
     document,
     localStorage,
@@ -354,7 +360,7 @@ function makeContext(store, opts = {}) {
       },
     },
     // origin: un navegador siempre lo tiene, y el enlace de una búsqueda se construye con él
-    location: { reload: noop, href: "", origin: "https://rebusca.dibogomez.com",
+    location: { reload: () => spy.reloads++, href: "", origin: "https://rebusca.dibogomez.com",
       search: opts.search || "", pathname: "/", assign: noop },
     // historial de verdad: `back()` dispara popstate como el navegador. Con un noop, el
     // botón atrás del móvil (la única "capa" sin botón propio en pantalla) no lo probaba nadie.
@@ -392,11 +398,13 @@ function makeContext(store, opts = {}) {
     innerWidth: 320,
     innerHeight: 632,
     devicePixelRatio: 2,
-    URL,
+    // createObjectURL/revokeObjectURL no están en el URL de node: los pone el navegador, y son
+    // lo que baja la copia de seguridad. El spy guarda el Blob para poder leer lo que se bajó.
+    URL: { createObjectURL: (b) => (spy.blobs.push(b), "blob:copia"), revokeObjectURL: noop },
     URLSearchParams,
     Event: class {},
     CustomEvent: class {},
-    Blob: class {},
+    Blob: class { constructor(partes) { this.partes = partes; } },
     Math,
     Date,
     JSON,

@@ -81,6 +81,20 @@
                     <button class="chip" id="locBtn">Usar mi ubicación</button>
                     <button class="chip" id="locReset" hidden>Volver a Jaén</button>
                 </div>
+                <!-- copia de seguridad: no hay cuentas ni backend, así que meses de triaje viven
+                     solo en el almacén de este navegador. El botón abre el selector de fichero,
+                     que va oculto: un <label for> no hereda el marco de los botones de al lado. -->
+                <div class="opt-group">
+                    <span class="opt-row">Copia de seguridad</span>
+                    <button class="chip" id="exportState">Guardar copia</button>
+                    <button class="chip" id="importBtn">Restaurar copia</button>
+                    <input
+                        type="file"
+                        id="importState"
+                        accept="application/json,.json"
+                        hidden
+                    />
+                </div>
             </div>
         </details>
         <div class="brand-title">
