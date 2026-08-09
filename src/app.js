@@ -2045,6 +2045,49 @@ lejosKmEl.onchange = () => {
   setLS("wp_lejoskm", lejosKm);
   render();
 };
+// ── ubicación: km y "lejos" se miden desde aquí ──
+// wp_loc lo leía getLoc() desde siempre, pero nadie lo escribía: todo el mundo buscaba desde Jaén.
+// El navegador solo suelta la ubicación real con permiso y sobre HTTPS (producción lo es).
+const locLabel = $("#locLabel"),
+  locBtn = $("#locBtn"),
+  locReset = $("#locReset");
+function paintLoc() {
+  const l = getLoc();
+  const propia = l !== JAEN_LOC; // getLoc devuelve JAEN_LOC (la constante) si no hay wp_loc válido
+  locLabel.textContent = propia
+    ? `Ubicación: ${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}`
+    : "Ubicación: Jaén";
+  locReset.hidden = !propia;
+}
+paintLoc();
+// los km del CSV cargado son de la ubicación vieja: re-scrapea para recalcularlos
+const relanzaPorLoc = () => {
+  if (!curCsv) return;
+  const { kw, since } = queryParts(curCsv);
+  relaunch(kw, since);
+};
+locBtn.onclick = () => {
+  if (!navigator.geolocation) return snack("Este navegador no da la ubicación.");
+  locBtn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (p) => {
+      locBtn.disabled = false;
+      setLS("wp_loc", JSON.stringify({ lat: p.coords.latitude, lon: p.coords.longitude }));
+      paintLoc();
+      relanzaPorLoc();
+    },
+    (e) => {
+      locBtn.disabled = false;
+      snack("No se pudo leer tu ubicación: " + ((e && e.message) || "permiso denegado"));
+    },
+    { timeout: 10000, maximumAge: 600000 },
+  );
+};
+locReset.onclick = () => {
+  localStorage.removeItem("wp_loc");
+  paintLoc();
+  relanzaPorLoc();
+};
 // deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1
 //            &maxp=<€>&maxd=<días>&keep=<ids>&fav=<ids>&no=<ids>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:

@@ -754,6 +754,48 @@ async function main() {
     ok(/sin coincidencias/.test(b.q("#qlist").innerHTML), "un filtro sin resultados no avisa");
   }
 
+  // ── 34. ubicación (#locBtn / #locReset): getLoc() leía wp_loc desde siempre y nadie lo
+  //        escribía, así que TODO el mundo buscaba desde Jaén ──
+  {
+    const b = await loaded();
+    ok(b.q("#locReset").hidden === true, "el botón de volver a Jaén sale sin ubicación propia");
+    ok(ev(b, "getLoc().lat") === 37.7796, "sin wp_loc la ubicación de partida no es Jaén");
+
+    // navegador sin geolocation (o contexto no seguro): avisa, no revienta
+    b.q("#locBtn").click();
+    ok(/no da la ubicación/.test(b.q("#snackmsg").textContent), "sin geolocation el botón no avisa");
+    ok(!b.store.wp_loc, "sin geolocation se escribió wp_loc igual");
+
+    // permiso denegado: avisa con el motivo y no guarda nada
+    b.sandbox.navigator.geolocation = { getCurrentPosition: (_ok, err) => err({ message: "denegado" }) };
+    b.q("#locBtn").click();
+    ok(/denegado/.test(b.q("#snackmsg").textContent), "el error de geolocation no llega al usuario");
+    ok(!b.store.wp_loc, "un permiso denegado escribió wp_loc");
+    ok(b.q("#locBtn").disabled === false, "el botón se quedó deshabilitado tras el error");
+
+    // permiso concedido: guarda, repinta y re-scrapea (los km del CSV son de la ubicación vieja)
+    const calls = [];
+    b.sandbox.Rebusca.scrape = async (o) => (calls.push(o), CSV);
+    b.sandbox.navigator.geolocation = {
+      getCurrentPosition: (_ok) => _ok({ coords: { latitude: 40.4168, longitude: -3.7038 } }),
+    };
+    b.q("#locBtn").click();
+    await flush();
+    ok(JSON.parse(b.store.wp_loc || "{}").lat === 40.4168, "no se guardó la ubicación: " + b.store.wp_loc);
+    ok(ev(b, "getLoc().lon") === -3.7038, "getLoc() sigue devolviendo Jaén tras guardar");
+    ok(/40\.417/.test(b.q("#locLabel").textContent), "la etiqueta no muestra la ubicación: " + b.q("#locLabel").textContent);
+    ok(b.q("#locReset").hidden === false, "el botón de volver a Jaén sigue oculto");
+    ok(calls.length === 1, "guardar la ubicación no relanzó la búsqueda (los km eran de la vieja)");
+    ok(calls[0].lat === 40.4168, "el re-scrape fue con la ubicación vieja: " + JSON.stringify(calls[0]));
+
+    // volver a Jaén: borra la clave, repinta y relanza otra vez
+    b.q("#locReset").click();
+    await flush();
+    ok(!b.store.wp_loc, "volver a Jaén no borró wp_loc");
+    ok(b.q("#locReset").hidden === true, "el botón de volver a Jaén se quedó visible");
+    ok(calls.length === 2, "volver a Jaén no relanzó la búsqueda");
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 
