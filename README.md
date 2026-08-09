@@ -38,7 +38,9 @@ flowchart LR
 - **El browser scrapea directo, no el servidor.** `api.wallapop.com` responde con `Access-Control-Allow-Origin: *` y permite el header `X-DeviceOS` en el preflight CORS, así que cada navegador llama a la API de Wallapop desde su propia IP. Ventaja: no hay una IP de servidor compartida que Wallapop pueda banear para todos, y el server se reduce a servir ficheros.
 - **Scraping por la API interna `v3/search`** (`src/scrape.js`), con `order_by=newest` + `time_filter` (`today`/`lastWeek`/`lastMonth`) para que sea el propio servidor de Wallapop quien filtre por antigüedad, en vez de paginar todo el catálogo.
 - **Búsqueda booleana propia**: `corsair OR seasonic`, `(corsair OR seasonic) gold`, frases entre comillas… Wallapop no sabe hacer `OR`, así que cada rama se lanza como una búsqueda aparte y se unen los resultados (dedup por `id`).
-- **Estado por navegador** (`localStorage`): un blob `wp_estado` con `{trash, fav, star, blockSel, excl, catExcl, catMode, alias}` + las búsquedas guardadas (`wp_searches`). Un usuario por navegador, sin perfiles ni cuentas.
+- **Estado por navegador** (`localStorage`): un blob `wp_estado` con `{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}` + las búsquedas guardadas (`wp_searches`). Un usuario por navegador, sin perfiles ni cuentas. Las filas cacheadas van aparte, en IndexedDB. Hay copia de seguridad a JSON, y **solo cubre `localStorage`** (ver `MEJORAS.md`, defecto 3).
+- **Se instala en la pantalla de inicio**: `manifest.webmanifest` + `apple-touch-icon.png`. Sin service worker: la app necesita red para scrapear, así que un modo sin conexión mentiría. El **modo oscuro** sigue a `prefers-color-scheme` con dos `<meta name="theme-color">`; el `theme_color` del manifest se queda en el claro, porque el formato no admite media queries.
+- **Enlace de una búsqueda**: el botón "Enlace" genera una URL con `?q=`, `&since=`, `&excl=` y los topes. Al abrirla, la app aplica el filtro y busca sola, y luego limpia la URL para que un refresco no la repita.
 - **Tolerante a bloqueos**: si Wallapop suelta un `403` (DataDome), el scraper corta esa rama y devuelve lo ya recogido en lugar de fallar. `AbortController` permite parar a mitad y quedarte con el CSV parcial.
 - **Cero build en el front**: el HTML se sirve `no-cache` y `stamp_versions()` añade `?v=<mtime>` a `app.css`/`app.js`/`scrape.js` para invalidar la caché de Cloudflare en cada deploy sin tocar su configuración.
 - **`wallapop.py`**: el mismo scraper en Python (CLI de referencia local, byte-a-byte igual que `scrape.js`). No se usa en producción; se mantiene como referencia y para scrapear desde la terminal.
@@ -51,7 +53,7 @@ flowchart LR
 | Scraper     | **En el browser** (`scrape.js`), contra la API interna de Wallapop (`v3/search`) vía `fetch` |
 | Backend     | **Python de librería estándar pura** (`http.server`) — solo sirve estáticos, cero dependencias |
 | Persistencia| **`localStorage`** del navegador (estado + búsquedas); el servidor no guarda nada |
-| Despliegue  | VPS + **systemd** (`wallapop.service`) expuesto por **Cloudflare Tunnel**  |
+| Despliegue  | VPS + **systemd** (`rebusca.service`) expuesto por **Cloudflare Tunnel**  |
 
 ## En números
 
@@ -69,10 +71,14 @@ Todo se ejecuta **desde la raíz del repo**. El servidor solo sirve estáticos d
 # 1) Levantar la app (sirve estáticos) -> http://0.0.0.0:8000  (override con PORT)
 python3 src/servidor.py
 
-# 2) Self-checks sin red
+# 2) Self-checks sin red (los siete; ninguno toca la red)
 python3 src/servidor.py demo          # servidor
-node src/scrape.js demo               # scraper del browser
+python3 src/test_servidor.py          # suite del servidor: rutas, MIME, anti-traversal
 python3 src/wallapop.py demo          # scraper Python (referencia)
+node src/scrape.js demo               # scraper del browser
+node src/test_scrape.js               # suite del scraper: paginación, OR, reintentos, abortar
+node src/test_app.js                  # app.js: evalúa el módulo + boot, sin navegador
+node src/test_buttons.js              # cada botón hace lo suyo (DOM falso sobre el boot de test_app.js)
 
 # 3) Scrapear desde la CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py "deshumidificador"
@@ -82,7 +88,7 @@ python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
 **Despliegue a producción** (`deploy.sh`): rsync del código y `wallapop.service` al VPS, reinstala el unit de systemd y reinicia el servicio.
 
 ```bash
-./deploy.sh                           # rsync a oracle + systemctl restart wallapop
+./deploy.sh                           # rsync a oracle + systemctl restart rebusca
 ```
 
 El servicio corre bajo systemd (`ExecStart=/usr/bin/python3 src/servidor.py`, `PORT=8000`, `Restart=on-failure`) y se publica en internet a través de **Cloudflare Tunnel**, en [rebusca.dibogomez.com](https://rebusca.dibogomez.com).

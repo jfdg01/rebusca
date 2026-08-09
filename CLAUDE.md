@@ -32,9 +32,23 @@ python3 src/servidor.py demo                  # self-check del server (sin red)
 node src/scrape.js demo                       # self-check del scraper del browser (sin red)
 node src/test_app.js                          # smoke test de app.js (evalúa el módulo + boot, sin navegador)
 node src/test_buttons.js                      # suite de botones: cada botón hace lo suyo (DOM falso sobre el boot de test_app.js)
+node src/test_scrape.js                       # suite del scraper: paginación, OR, reintentos, abortar (sin red)
+python3 src/test_servidor.py                  # suite del server: rutas, MIME, anti-traversal, stamp
 python3 src/wallapop.py "deshumidificador"    # scrape CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py demo                  # self-check del scraper Python (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart rebusca
+```
+
+**Los siete checks de una, antes de cerrar sobre `main`.** Ninguno pide red. Que el
+comando calle es la señal de que van bien: solo habla cuando algo sale con código != 0.
+`test_scrape.js` y `test_servidor.py` se quedaron fuera de esta lista y estuvieron rotos
+27 commits sin que nadie lo notara (ver `MEJORAS.md`, defecto 6).
+
+```bash
+for c in "python3 src/servidor.py demo" "python3 src/test_servidor.py" "python3 src/wallapop.py demo" \
+         "node src/scrape.js demo" "node src/test_app.js" "node src/test_buttons.js" "node src/test_scrape.js"; do
+  $c >/dev/null 2>&1 || echo "FALLA: $c"
+done
 ```
 
 > **Servidor de pruebas: SIEMPRE el puerto 8123.** Para verificar cambios, comprueba

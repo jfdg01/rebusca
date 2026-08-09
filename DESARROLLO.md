@@ -52,6 +52,13 @@ python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
 python3 src/wallapop.py demo                                # self-check sin red
 ```
 
+**Son siete checks, no tres.** Los cuatro que no son un `demo()` viven en fichero aparte:
+`src/test_app.js`, `src/test_buttons.js`, `src/test_scrape.js` y `src/test_servidor.py`.
+Córrelos todos antes de cerrar sobre `main` (el bucle está en `CLAUDE.md`). Barato de
+escribir también significa fácil de olvidar: `test_scrape.js` y `test_servidor.py` no
+estaban en ninguna lista, y el primero estuvo 27 commits en rojo sin que nadie lo viera.
+El detalle está en `MEJORAS.md`, defecto 6.
+
 ## 4. QA sin tocar datos reales (un usuario por navegador)
 
 Ya no hay perfiles ni estado en el servidor: **cada navegador es un usuario** y su
