@@ -105,35 +105,8 @@ Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
    del CSS (p. ej. el padding del `body`, la cabecera sticky, las tarjetas a sangre completa)
    y da falsos verdes.
 
-### Cómo sacar el screenshot (probado en este entorno)
-
-**CDP interactivo NO funciona aquí:** un Chrome con `--remote-debugging-port` muere con
-exit 144 (lo mata el sandbox), lo lances como lo lances (`&`, `setsid`, background del tool,
-`dangerouslyDisableSandbox`). No pierdas tiempo con websockets/CDP. Lo que **sí** funciona es
-el one-shot `--screenshot` (arranca, pinta, sale):
-
-```bash
-google-chrome --headless=new --disable-gpu --hide-scrollbars \
-  --force-device-scale-factor=2 --window-size=320,632 \
-  --virtual-time-budget=3500 \
-  --screenshot=/ruta/salida.png "http://127.0.0.1:8123/"
-```
-
-`--force-device-scale-factor=2 --window-size=320,632` = el setup del usuario (DPR2, 320×632).
-El one-shot **no ejecuta clics ni JS**, así que para llegar al estado real se **edita temporalmente
-el disco** (el server de :8123 sirve de disco en cada request) y se **revierte tras la foto**:
-
-- **Arranque directo:** ya no hay gate de perfil; el one-shot headless arranca con `localStorage`
-  vacío y cae directo en la app (pantalla de bienvenida). Para fotografiar con estado, siembra las
-  claves fijas al final de `app.js` (`localStorage.setItem("wp_estado", '...'); location.reload();`)
-  y borra el bloque tras la foto.
-- **Abrir un `<details>`/popover:** añade el atributo `open` en el HTML.
-- **Abrir una vista que necesita clic** (p. ej. gestión de búsquedas): añade al final de `app.js`
-  un `setTimeout(() => openManager(), 1200)` y sube `--virtual-time-budget` para que dé tiempo.
-- **Revertir SIEMPRE:** deshaz los append/edits temporales. Comprueba con `grep` que no quedan
-  restos (p. ej. `grep -n 'TEMP screenshot' src/app.js`) antes de commitear.
-
-Sigue siendo validación real (mismo CSS/markup/flujo), solo se fuerza el estado que un tap daría.
+El cómo (Chrome headless one-shot, forzar estado, revertir): skill `screenshot`
+(`.claude/skills/screenshot/SKILL.md`).
 
 ## Estilo
 

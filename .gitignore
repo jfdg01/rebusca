@@ -4,3 +4,4 @@ estados/
 __pycache__/
 .venv/
 .wrangler/
+.claude/settings.local.json
