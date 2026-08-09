@@ -915,6 +915,14 @@ async function main() {
     if (n() !== 0) fail("al volver al mazo la tabla se quedó con " + n() + " <tr>");
   }
 
+  // 12i. lo que cambia solo (el overlay de carga y el snack) tiene que anunciarse: sin una región
+  //      viva, quien usa lector de pantalla no sabe que la búsqueda arrancó ni que hay "Deshacer".
+  for (const id of ["loading", "snack"]) {
+    const tag = (HTML.match(new RegExp('<div[^>]*id="' + id + '"[^>]*>')) || [])[0] || "";
+    if (!/role="status"/.test(tag) || !/aria-live="polite"/.test(tag))
+      fail(`#${id} no es una región viva: ` + tag);
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

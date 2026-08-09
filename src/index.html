@@ -264,7 +264,9 @@
 </table>
 <div class="empty" id="empty">Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar. ¿No sabes qué modelos buscar? Dale a "Que la IA me monte la búsqueda".</div>
 
-<div class="loading" id="loading" hidden>
+<!-- role="status" + aria-live: el lector de pantalla canta "Buscando…", el contador y el aviso
+     del snack. Sin esto la búsqueda empieza y termina en silencio para quien no ve la pantalla. -->
+<div class="loading" id="loading" role="status" aria-live="polite" hidden>
     <svg class="spin" viewBox="0 0 44 44" aria-hidden="true">
         <circle class="track" cx="22" cy="22" r="19"></circle>
         <circle class="arc" cx="22" cy="22" r="19"></circle>
@@ -358,7 +360,7 @@
     </div>
 </div>
 
-<div class="snack" id="snack" hidden>
+<div class="snack" id="snack" role="status" aria-live="polite" hidden>
     <span id="snackmsg"></span>
     <button id="undo">Deshacer</button>
 </div>
