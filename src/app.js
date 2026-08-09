@@ -854,6 +854,9 @@ function finishRender(rows, listView) {
   document
     .querySelectorAll("header .panel")
     .forEach((p) => (p.hidden = listView)); // varios paneles ahora (perfil, buscar, query activa)
+  // primer arranque: sin búsquedas guardadas ni CSV cargado, "Búsqueda activa" es un selector
+  // vacío que solo estorba encima de la bienvenida. Vuelve en cuanto hay algo que elegir.
+  $(".picker").hidden = listView || !(loadedCsv || allQueries.length);
   $("#listHead").hidden = !listView;
   if (!listView && listQ) {
     listQ = "";

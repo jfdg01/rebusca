@@ -54,6 +54,21 @@ puede verificar nada:
 
 Sigue siendo validación real (mismo CSS/markup/flujo), solo se fuerza el estado que un tap daría.
 
+### El arranque real se cuelga bajo `--virtual-time-budget`
+
+El boot hace `await hydrateStores()` (IndexedDB). Con tiempo virtual, el reloj corre por delante
+del I/O real y esa promesa **nunca resuelve**: `render()` no llega a correr y la foto sale con el
+HTML estático de `index.html`, no con lo que pinta la app. Se nota porque `#empty` ya trae el texto
+de bienvenida en el markup: parece que arrancó y no arrancó.
+
+Para fotografiar el arranque, repite el boot sin ese paso:
+
+```js
+setTimeout(() => { hydrateEstado(); render(); }, 50); // TEMP screenshot
+```
+
+Los snippets que llaman a `loadCSV(...)` no lo necesitan: ya pintan ellos.
+
 ## 3. Revierte SIEMPRE, antes de commitear
 
 ```bash

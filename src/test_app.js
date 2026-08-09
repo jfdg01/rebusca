@@ -801,6 +801,16 @@ async function main() {
     if (b.errs.length) fail("una clave ajena en el evento storage lanzó: " + (b.errs[0].message || b.errs[0]));
   }
 
+  // 12e. primer arranque: el panel "Búsqueda activa" está vacío y no debe salir encima de la
+  //      bienvenida. Vuelve en cuanto hay un CSV cargado (o una búsqueda guardada).
+  {
+    const b = await boot({});
+    if (b.q(".picker").hidden !== true) fail("el panel de búsqueda activa sale en el primer arranque");
+    b.sandbox.__CSV = CSV;
+    vm.runInContext('loadCSV(__CSV, "ford.csv")', b.sandbox);
+    if (b.q(".picker").hidden !== false) fail("el panel de búsqueda activa sigue oculto con un CSV cargado");
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 
