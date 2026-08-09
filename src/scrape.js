@@ -13,6 +13,9 @@
   const SINCE_TF = { hora: "today", dia: "today", semana: "lastWeek", mes: "lastMonth" };
   const SINCE_DAYS = { hora: 1 / 24, dia: 1, semana: 7, mes: 30 };
   const JAEN = [37.7796, -3.7849];
+  // Con frescura "cualquiera" no hay corte por fecha ni por páginas: doce ramas OR son minutos de
+  // peticiones y un CSV que no cabe en el móvil. El CLI ya tenía --limit; el browser, nada.
+  const MAX_ROWS = 1500;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Es la
@@ -181,7 +184,7 @@
   // el usuario solo ve el reloj subir y no sabe si va por la primera de doce o por la última.
   async function scrape(opts) {
     const { keywords, since = null, titleOnly = false,
-            lat = JAEN[0], lon = JAEN[1], onProgress, signal } = opts;
+            lat = JAEN[0], lon = JAEN[1], maxRows = MAX_ROWS, onProgress, signal } = opts;
     const orderBy = since ? "newest" : null;
     const tf = since ? SINCE_TF[since] : null;
     const maxDays = since != null ? SINCE_DAYS[since] : null;
@@ -192,11 +195,11 @@
     // y un scrape completo daban exactamente el mismo CSV: el llamador no podía distinguirlos y
     // lo cacheaba como definitivo. `scrape()` sigue devolviendo un string, así que nada cambia
     // para quien no mire el diagnóstico.
-    const diag = { ramas: 0, ramasRotas: 0, sinId: 0, abortado: false, parcial: false };
+    const diag = { ramas: 0, ramasRotas: 0, sinId: 0, abortado: false, tope: 0, parcial: false };
     const finish = () => {
       // ordena por cercanía al terminar (el server siempre lo hace: nunca pasa --max-km)
       rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
-      diag.parcial = diag.ramasRotas > 0 || diag.abortado;
+      diag.parcial = diag.ramasRotas > 0 || diag.abortado || diag.tope > 0;
       api.lastScrape = diag;
       if (diag.parcial) console.warn("Rebusca: scrape incompleto", diag);
       if (diag.sinId) console.warn(`Rebusca: ${diag.sinId} anuncios sin id, descartados`);
@@ -243,6 +246,10 @@
           seen.add(r.id);
           rows.push(r);
           aviso();
+          // Tope duro: sin `since` no hay corte por fecha ni por páginas, y doce ramas OR son
+          // minutos de peticiones. Sale por el mismo canal que una rama caída (diag.parcial),
+          // así que el llamador ya sabe no cachear esto como definitivo.
+          if (rows.length >= maxRows) { diag.tope = maxRows; return finish(); }
         }
         const np = ((d || {}).meta || {}).next_page;
         if (!np || old) break;

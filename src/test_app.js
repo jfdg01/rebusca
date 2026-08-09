@@ -967,6 +967,28 @@ async function main() {
     if (pasos.join(" ") !== esperado) fail("el progreso no dice por qué rama va: " + pasos.join(" "));
   }
 
+  // 12m. un tope de filas corta la búsqueda muy amplia y la marca como parcial (item 14)
+  {
+    const Rebusca = require("./scrape.js");
+    const antes = global.fetch;
+    let pag = 0;
+    // 10 páginas de 3 anuncios = 30 filas. Sin tope se recogen las 30; el tope corta en la 5.
+    global.fetch = async () => ({
+      ok: true, status: 200,
+      json: async () => ({
+        data: { section: { payload: { items: [0, 1, 2].map((k) => ({ id: `p${pag}i${k}`, title: "x", location: {} })) } } },
+        meta: { next_page: ++pag < 10 ? "n" + pag : null },
+      }),
+    });
+    let csv;
+    try { csv = await Rebusca.scrape({ keywords: "sofa", maxRows: 5 }); }
+    finally { global.fetch = antes; }
+    const filas = csv.trim().split("\n").length - 1; // menos la cabecera
+    if (filas !== 5) fail("el tope no cortó la búsqueda: " + filas + " filas"); // corta en la fila justa, no al final de la página
+    const diag = Rebusca.lastScrape;
+    if (diag.tope !== 5 || !diag.parcial) fail("el tope no marca el resultado como parcial: " + JSON.stringify(diag));
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

@@ -1863,7 +1863,9 @@ async function runScrape(kw, since, titleOnly) {
     if (diag && diag.parcial) {
       snack(diag.abortado
         ? "Búsqueda parada: resultado parcial, no se guarda"
-        : `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`, null);
+        : diag.tope
+          ? `Tope de ${diag.tope} anuncios: resultado recortado, no se guarda. Afina la búsqueda.`
+          : `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`, null);
     } else cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
