@@ -785,6 +785,22 @@ async function main() {
       fail("el salto de línea dentro del campo partió la fila en " + vm.runInContext("data.length", b.sandbox));
   }
 
+  // 12d. dos pestañas abiertas: el evento `storage` de la OTRA pestaña re-hidrata esta.
+  //      Sin el listener, esta pestaña se quedaba con su copia en memoria y el siguiente
+  //      pushEstado() borraba lo que la otra acababa de clasificar.
+  {
+    const b = await boot({});
+    b.sandbox.__CSV = CSV;
+    vm.runInContext('loadCSV(__CSV, "ford.csv")', b.sandbox);
+    b.store["wp_rejected"] = JSON.stringify({ "ford.csv": ["a1"] }); // la otra pestaña rechaza a1
+    b.fireWin("storage", { key: "wp_rejected" });
+    const rej = vm.runInContext('[...buckets.rejected["ford.csv"]]', b.sandbox);
+    if (!rej.includes("a1")) fail("el evento storage no trajo el rechazo de la otra pestaña: " + JSON.stringify(rej));
+    // una clave ajena (otra app en el mismo dominio) no dispara nada raro
+    b.fireWin("storage", { key: "otracosa" });
+    if (b.errs.length) fail("una clave ajena en el evento storage lanzó: " + (b.errs[0].message || b.errs[0]));
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

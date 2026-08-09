@@ -2171,6 +2171,15 @@ queueMicrotask(async () => {
   }
 });
 
+// Dos pestañas de la app abiertas a la vez: el navegador manda `storage` a las OTRAS pestañas
+// (nunca a la que escribe, así que no hay bucle). hydrateEstado() ya es repetible y repinta al
+// final, así que re-hidratar es todo lo que hace falta. Sin esto, la pestaña vieja seguía con su
+// copia en memoria y el siguiente pushEstado() borraba lo que la otra acababa de clasificar.
+// `e.key` es null cuando alguien llama a localStorage.clear().
+window.addEventListener("storage", (e) => {
+  if (e.key == null || e.key.startsWith("wp_")) hydrateEstado();
+});
+
 // ── modo swipe (tinder): una tarjeta a la vez; arrastra ← rechazar / → favorito ──
 const swipeView = $("#swipeView"),
   swipeStage = $("#swipeStage"),
