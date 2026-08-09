@@ -157,9 +157,11 @@ _EMOJI = re.compile(
     "\U00002190-\U000021FF\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U0000200D\U000020E3]"
 )
 def _deemoji(s):
-    return " ".join(_EMOJI.sub("", s).split())   # limpia y colapsa los huecos que dejan
+    return " ".join(_EMOJI.sub("", s or "").split())   # limpia y colapsa los huecos que dejan
 
 
+# Campo a campo tolerante como scrape.js: la API omite claves y las manda a null.
+# Un KeyError/AttributeError aqui aborta el scrape entero por UN anuncio raro.
 def row(it, origin):
     loc = it.get("location") or {}
     lat, lon = loc.get("latitude"), loc.get("longitude")
@@ -169,16 +171,16 @@ def row(it, origin):
     tax = it.get("taxonomy") or []   # breadcrumb de categorias; la hoja es la mas especifica
     return {
         "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
-        "titulo": _deemoji(it["title"]),
-        "precio": it["price"]["amount"],
-        "categoria": tax[-1]["name"] if tax else "",
+        "titulo": _deemoji(it.get("title")),
+        "precio": (it.get("price") or {}).get("amount", ""),
+        "categoria": (tax[-1] or {}).get("name", "") if tax else "",
         "descripcion": _deemoji(it.get("description") or ""),  # 1 sola linea, sin emojis
         "ciudad": loc.get("city", ""),
         "cp": loc.get("postal_code", ""),
         "km": dist,
         "dias": dias,
-        "reservado": it.get("reserved", {}).get("flag", False),
-        "envio": it.get("shipping", {}).get("user_allows_shipping", False),
+        "reservado": (it.get("reserved") or {}).get("flag", False),
+        "envio": (it.get("shipping") or {}).get("user_allows_shipping", False),
         "url": "https://es.wallapop.com/item/" + it.get("web_slug", ""),
         "vendedor": it.get("user_id", ""),   # id opaco del vendedor: estable, sirve de key para bloquear
         "imagen": ((it.get("images") or [{}])[0].get("urls") or {}).get("small", ""),  # thumb W320 p/tarjeta
@@ -309,6 +311,11 @@ def demo():
     assert _deemoji("Aleron 🔥 AMG 🚗💨") == "Aleron AMG", "deemoji: quita emojis y colapsa huecos"
     assert _deemoji("café ñ 5€ ✅") == "café ñ 5€", "deemoji: conserva acentos/€, quita check"
     assert _deemoji("🇪🇸 España") == "España", "deemoji: quita banderas"
+    # anuncio incompleto: fila con huecos, no un crash. scrape.js ya lo tolera; van a la par
+    rp = row({"id": "z", "location": None, "reserved": None, "shipping": None,
+              "images": [], "taxonomy": []}, (0, 0))
+    assert rp["titulo"] == "" and rp["precio"] == "" and rp["categoria"] == "", rp
+    assert rp["reservado"] is False and rp["envio"] is False and rp["km"] == "", rp
     print("ok")
 
 

@@ -14,6 +14,8 @@
   const JAEN = [37.7796, -3.7849];
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Es la
+  // única desviación conocida frente a wallapop.py, y solo cambia una décima de km en la tarjeta.
   const round1 = (x) => Math.round(x * 10) / 10;
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const titleMatches = (title, kw) => {
@@ -82,7 +84,9 @@
       envio: (it.shipping || {}).user_allows_shipping || false,
       url: "https://es.wallapop.com/item/" + (it.web_slug || ""),
       vendedor: it.user_id || "",
-      imagen: ((it.images || [{}])[0].urls || {}).small || "", // miniatura para la tarjeta
+      // ojo: `images: []` (anuncio sin fotos) es truthy en JS y falsy en Python, así que el
+      // `|| [{}]` de wallapop.py aquí no salva: hay que defender también el [0].
+      imagen: (((it.images || [])[0] || {}).urls || {}).small || "", // miniatura para la tarjeta
       // todas las fotos (mejor resolución disponible), separadas por espacio, para el PDF/dossier
       imagenes: (it.images || [])
         .map((im) => { const u = im.urls || {}; return u.big || u.large || u.xlarge || u.medium || u.small || ""; })
@@ -102,9 +106,19 @@
   async function getJSON(url, signal) {
     for (let a = 0; a < 5; a++) {                 // backoff ante 429/5xx; 403 = bloqueo -> corta
       let res;
-      try { res = await fetch(url, { headers: HEADERS, signal }); }
-      catch (e) { if (e.name === "AbortError") throw e; await sleep(2 ** a * 1000 + Math.random() * 1000); continue; }
-      if (res.ok) return res.json();
+      try {
+        res = await fetch(url, { headers: HEADERS, signal });
+        // el parseo va DENTRO del try: Wallapop sirve páginas de error con 200, y ese
+        // res.json() rechaza. Fuera del try su rechazo se escapaba sin un solo reintento.
+        if (res.ok) {
+          const d = await res.json();
+          // 200 con error blando: params malos (== ValueError de wallapop.py). No se reintenta:
+          // en el fallback de "sin items" se colaba como 0 resultados, en silencio.
+          if (d && d.status === 400) { const b = new Error("400 de la API (params malos): " + d.message); b.fatal = 1; throw b; }
+          return d;
+        }
+      }
+      catch (e) { if (e.name === "AbortError" || e.fatal) throw e; await sleep(2 ** a * 1000 + Math.random() * 1000); continue; }
       if (res.status === 403) throw new Error("403: bloqueo (DataDome). Baja el ritmo o cambia de red.");
       if (![429, 500, 502, 503, 504].includes(res.status)) throw new Error("HTTP " + res.status);
       const ra = parseFloat(res.headers.get("Retry-After"));
@@ -140,6 +154,9 @@
         catch (e) {
           if (e.name === "AbortError") return finish();
           if (String(e.message).startsWith("403")) break;   // bloqueo: corta esta rama, conserva lo ya recogido
+          // lo ya recogido no se tira: wallapop.py deja en disco lo que llevara escrito.
+          // Sin filas todavía sí sube el error: si no, la caída se vería como "no hay nada".
+          if (rows.length) return finish();
           throw e;
         }
         const items = (((d || {}).data || {}).section || {}).payload;

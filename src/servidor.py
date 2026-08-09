@@ -6,7 +6,7 @@ perfiles y las búsquedas (localStorage). El server ya no escribe nada.
     python3 src/servidor.py            # http://0.0.0.0:8000
     python3 src/servidor.py demo       # self-check sin red
 """
-import os, re, sys
+import io, os, re, sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -31,6 +31,18 @@ SEC_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Strict-Transport-Security": "max-age=31536000",
 }
+
+
+# Extensiones que la página pide de verdad. Todo lo demás (.py, .pyc, .sh, sin extensión,
+# listados de directorio) no sale. Los `test_*` se caen aparte: son .js/.py y llevan dentro
+# el mapa de la app. ponytail: lista blanca de extensiones, no de ficheros; añadir un icono
+# nuevo no obliga a tocar esto, añadir un .py sí (que es justo lo que se quiere).
+PUB = (".html", ".css", ".js", ".txt", ".webp", ".png", ".svg", ".ico", ".json", ".webmanifest", ".woff2")
+
+
+def publico(ruta):
+    nombre = ruta.rsplit("/", 1)[-1].lower()
+    return nombre.endswith(PUB) and not nombre.startswith("test_")
 
 
 def stamp_versions(html, mtimes):
@@ -72,9 +84,13 @@ class H(SimpleHTTPRequestHandler):
             t += "; charset=utf-8"
         return t
 
-    def do_GET(self):
-        if urlparse(self.path).path in ("/", "/index.html"):
-            html = (HERE / "index.html").read_text()
+    # Todo pasa por send_head: es lo que usan GET y HEAD, así que el HEAD anuncia el mismo
+    # tamaño que luego sirve el GET (los bots y Cloudflare preguntan con HEAD antes de bajar).
+    def send_head(self):
+        ruta = urlparse(self.path).path
+        if ruta in ("/", "/index.html"):
+            # encoding explícito: systemd arranca sin LANG y read_text() cogería ascii
+            html = (HERE / "index.html").read_text(encoding="utf-8")
             body = stamp_versions(html, stamped_mtimes(html)).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -82,9 +98,14 @@ class H(SimpleHTTPRequestHandler):
             self.send_header("Link", '</llms.txt>; rel="alternate"; type="text/plain"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
-            return
-        return super().do_GET()   # app.js/app.css/scrape.js/imágenes (anti-traversal propio)
+            return io.BytesIO(body)   # do_GET lo vuelca al socket; do_HEAD lo tira
+        # Lista blanca: en src/ conviven el server, el scraper de referencia y los tests, y el
+        # dominio es público. Cualquier cosa que no sea un estático de la página se va en 404
+        # (404, no 403: no confirma qué ficheros existen).
+        if not publico(ruta):
+            self.send_error(404, "File not found")
+            return None
+        return super().send_head()   # app.js/app.css/scrape.js/imágenes (anti-traversal propio)
 
     def log_message(self, *a):   # menos ruido
         pass
@@ -99,6 +120,10 @@ def demo():
     # descubrimiento: coge locales existentes (servidor.py existe en HERE); ignora http/absolutas/ancla
     m = stamped_mtimes('<link href="servidor.py"><a href="https://x/y"><img src="/logo.png"><a href="#z">')
     assert list(m) == ["servidor.py"], m
+    # lista blanca: sale lo que pide la página, no el fuente ni los tests
+    assert all(map(publico, ["/app.js", "/app.css", "/llms.txt", "/wallapop-logo.webp", "/x/i.png"]))
+    assert not any(map(publico, ["/servidor.py", "/wallapop.py", "/test_app.js", "/SERVIDOR.PY",
+                                 "/__pycache__/", "/deploy.sh", "/.git/config", "/"]))
     # charset utf-8 en text/*; binarios sin tocar
     g = H.__new__(H).guess_type
     assert g("x.txt").endswith("charset=utf-8"), g("x.txt")

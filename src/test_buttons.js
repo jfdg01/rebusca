@@ -31,6 +31,12 @@ const CSV_ANA =
   row({ id: "a4", titulo: "Ford Puma", precio: "800", categoria: "Coches", ciudad: "Jaen", km: "4", dias: "3", reservado: "False", envio: "False", url: "https://w/a4", vendedor: "Ana", descripcion: "impecable" }) +
   "\r\n";
 
+// variante con una segunda categoría: con una sola, "incluir" y "sin filtro" dan el mismo mazo
+const CSV_CATS =
+  CSV +
+  row({ id: "a5", titulo: "Vespa 125", precio: "1500", categoria: "Motos", ciudad: "Jaen", km: "5", dias: "4", reservado: "False", envio: "False", url: "https://w/a5", vendedor: "Cris", descripcion: "poco uso" }) +
+  "\r\n";
+
 let n = 0;
 const fail = (m) => {
   throw new Error("FAIL: " + m);
@@ -513,6 +519,23 @@ async function main() {
     ok(!(b.store.wp_catexcl || "").includes("Coches"), "#catClear no limpió las categorías marcadas");
   }
 
+  // ── 25b. con DOS categorías el modo incluir se distingue de "no filtrar" ──
+  // Con una sola categoría en el CSV, "incluir Coches" y "sin filtro" dejan el mismo mazo:
+  // el test de arriba pasaría igual aunque el modo incluir no hiciera nada.
+  {
+    const b = await loaded({ csv: CSV_CATS });
+    const chip = (nombre) =>
+      b.q("#catChips").children.find((c) => String(c.textContent).startsWith(nombre));
+    ok(ev(b, "deckRows().length") === 4, "el mazo de dos categorías no salió entero");
+    ok(chip("Motos") && chip("Coches"), "#catChips no pintó las dos categorías");
+
+    chip("Motos").click(); // modo excluir: fuera las motos
+    ok(ev(b, "deckRows().length") === 3, "vetar Motos no quitó la moto del mazo");
+    b.q("#catMode").click(); // modo incluir: lo marcado es lo ÚNICO que se queda
+    ok(ev(b, "deckRows().length") === 1, "en modo incluir debería quedar solo la moto");
+    ok(ev(b, 'col(deckRows()[0], "categoria")') === "Motos", "en modo incluir quedó la categoría equivocada");
+  }
+
   // ── 26. banner de vendedores del mazo: "Rechazar siguientes" bloquea al vendedor ──
   {
     const b = await loaded({ csv: CSV_ANA });
@@ -537,6 +560,167 @@ async function main() {
     await flush();
     ok(ev(b, "curCsv") === "ford.csv", "la fila del combobox no seleccionó la búsqueda");
     ok(calls.length === 0, "la fila del combobox re-scrapeó en vez de cargar lo guardado");
+  }
+
+  // ── 28. botón atrás del móvil: cierra la capa abierta en vez de salir de la página ──
+  // Es la única superficie que no tiene botón propio: si se rompe, el usuario sale de la app.
+  {
+    const b = await loaded();
+    const pop = () => b.sandbox.history.back(); // el atrás del móvil: retrocede Y dispara popstate
+    ok(b.hist.length === 0, "sin nada abierto no debería haber entrada de historial");
+
+    b.q("#manageSearches").click();
+    ok(b.q("#searchesView").hidden === false, "#manageSearches no abrió el gestor");
+    ok(b.hist.length === 1, "abrir el gestor no armó la entrada sintética de historial");
+    pop();
+    ok(b.q("#searchesView").hidden === true, "el botón atrás no cerró el gestor");
+
+    // cerrar por UI retira la entrada: si no, hace falta pulsar atrás dos veces para salir
+    b.q("#manageSearches").click();
+    ok(b.hist.length === 1, "reabrir el gestor no volvió a armar el historial");
+    b.q("#searchesX").click();
+    ok(b.hist.length === 0, "cerrar por UI dejó la entrada sintética colgando");
+
+    // el atrás con nada abierto NO puede cerrar nada (deja salir de la página)
+    pop();
+    ok(b.q("#searchesView").hidden === true, "un atrás de más reabrió algo");
+  }
+
+  // ── 29. clic fuera del menú del engranaje: lo cierra; dentro, no ──
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    b.q("#swipeCog").click();
+    ok(b.q("#swipeMenu").hidden === false, "#swipeCog no abrió el menú");
+    b.fireDoc("click", { target: b.q("#swipeMenu") });
+    ok(b.q("#swipeMenu").hidden === false, "un clic DENTRO del menú lo cerró");
+    b.fireDoc("click", { target: b.q("#kw") });
+    ok(b.q("#swipeMenu").hidden === true, "un clic fuera no cerró el menú del engranaje");
+  }
+
+  // ── 30. a11y: los <span class="link"> hacen de botón, así que Enter y espacio los pulsan ──
+  {
+    const b = await loaded();
+    const link = b.q("#toggleTrash"); // "ver rechazados" es uno de esos spans
+    link.className = "link";
+    let pulsado = 0;
+    link.onclick = () => pulsado++;
+    b.fireDoc("keydown", { target: link, key: "Enter" });
+    b.fireDoc("keydown", { target: link, key: " " });
+    ok(pulsado === 2, "Enter/espacio sobre un .link no lo pulsaron: " + pulsado);
+    link.className = "";
+    b.fireDoc("keydown", { target: link, key: "Enter" });
+    ok(pulsado === 2, "Enter pulsó algo que ya no es un .link");
+  }
+
+  // ── 31. la búsqueda falla (Wallapop caído, sin red): avisa y deja la app usable ──
+  // Todos los demás tests le dan a Rebusca.scrape un CSV bueno, así que el camino de error
+  // (avisar + soltar el botón + quitar el overlay) no lo recorría ninguno.
+  {
+    const b = await boot({}, { timers: true, scrape: async () => { throw new Error("boom"); } });
+    ok(b.errs.length === 0, "boot lanzó: " + (b.errs[0] && (b.errs[0].message || b.errs[0])));
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ok(b.q("#scrape").disabled === false, "el botón Buscar se quedó bloqueado tras el fallo");
+    ok(b.q("#scrape").textContent === "Buscar", "el botón se quedó en 'Buscando…'");
+    ok(/No se pudo buscar/.test(b.q("#snackmsg").textContent), "el fallo no avisó: " + b.q("#snackmsg").textContent);
+    ok(b.q("#loading").hidden === true, "el overlay de carga se quedó puesto (#stopScrape vive dentro)");
+    ok(ev(b, "scrapeCtrl") === null, "el AbortController de la búsqueda caída no se soltó");
+    // y la app sigue usable: el intento siguiente carga
+    b.sandbox.Rebusca.scrape = async () => CSV;
+    await b.q("#scrape").click();
+    await flush();
+    ok(ev(b, "data.length") === 3, "tras un fallo, la búsqueda siguiente no cargó");
+
+    // parar la búsqueda a mano NO es un fallo: no debe salir el aviso rojo
+    const b2 = await boot({}, { timers: true, scrape: async () => { const e = new Error("x"); e.name = "AbortError"; throw e; } });
+    b2.q("#kw").value = "ford";
+    await b2.q("#scrape").click();
+    await flush();
+    ok(b2.q("#snackmsg").textContent === "", "parar la búsqueda sacó un aviso de error");
+    ok(b2.q("#scrape").disabled === false, "tras parar, el botón Buscar se quedó bloqueado");
+  }
+
+  // ── 32. gesto de arrastre del mazo: los umbrales de decide() y el eje del arrastre ──
+  // Los botones del mazo (#swYes/#swNo) sí se probaban; el dedo, que es como se usa de verdad, no.
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    // un gesto completo: pulsar en (0,0), mover a (dx,dy) y soltar `ms` milisegundos después
+    const drag = async (dx, dy, ms) => {
+      const v = b.q("#swipeView");
+      const p = (t, x, y, ts) => v.dispatch(t, { clientX: x, clientY: y, timeStamp: ts, pointerId: 1 });
+      p("pointerdown", 0, 0, 0);
+      p("pointermove", dx, dy, ms);
+      p("pointerup", dx, dy, ms);
+      await tick(260); // el vuelo de la tarjeta + el nextCard() diferido
+    };
+    const primera = ev(b, "deck[di] && key(deck[di])");
+    await drag(-100, 0, 300); // arrastre largo a la izquierda = rechazar
+    ok(ev(b, "rejected.has(" + JSON.stringify(primera) + ")"), "arrastrar a la izquierda no rechazó la tarjeta");
+
+    const segunda = ev(b, "deck[di] && key(deck[di])");
+    ok(segunda !== primera, "tras el arrastre no pasó a la tarjeta siguiente");
+    await drag(100, 0, 300); // arrastre largo a la derecha = guardar
+    ok(ev(b, "favorite.has(" + JSON.stringify(segunda) + ")"), "arrastrar a la derecha no guardó la tarjeta");
+
+    // arrastre corto y lento: no cuaja, la tarjeta se queda
+    const tercera = ev(b, "deck[di] && key(deck[di])");
+    await drag(30, 0, 1000);
+    ok(ev(b, "deck[di] && key(deck[di])") === tercera, "un arrastre de 30px lento clasificó la tarjeta");
+    ok(!ev(b, "favorite.has(" + JSON.stringify(tercera) + ")"), "un arrastre corto y lento guardó la tarjeta");
+
+    // ...pero corto y RÁPIDO sí: un flick de 30px en 50ms son 0.6 px/ms
+    await drag(30, 0, 50);
+    ok(ev(b, "favorite.has(" + JSON.stringify(tercera) + ")"), "un flick rápido no clasificó la tarjeta");
+
+    // vertical: es scroll de la descripción, no un swipe
+    const b2 = await loaded();
+    b2.q("#swipeFab").click();
+    const cuarta = ev(b2, "deck[di] && key(deck[di])");
+    const v2 = b2.q("#swipeView");
+    v2.dispatch("pointerdown", { clientX: 0, clientY: 0, timeStamp: 0, pointerId: 1 });
+    v2.dispatch("pointermove", { clientX: 5, clientY: 80, timeStamp: 100, pointerId: 1 });
+    v2.dispatch("pointerup", { clientX: 5, clientY: 80, timeStamp: 100, pointerId: 1 });
+    await tick(260);
+    ok(ev(b2, "deck[di] && key(deck[di])") === cuarta, "un arrastre vertical clasificó la tarjeta");
+  }
+
+  // ── 33. combobox de búsquedas (#pick): es un <input>, así que el inventario de botones
+  //        no lo mira. Enfocar abre la lista entera, teclear filtra, Escape y el clic fuera cierran.
+  {
+    const b = await loaded();
+    b.q("#kw").value = "bici";
+    await b.q("#scrape").click();
+    await flush();
+    const filas = () => b.q("#qlist").children.length;
+
+    b.q("#pick").dispatch("focus");
+    ok(b.q("#qlist").hidden === false, "enfocar el combobox no abrió la lista");
+    ok(filas() === 2, "la lista no salió entera al enfocar: " + filas() + " filas");
+
+    b.q("#pick").value = "bic";
+    b.q("#pick").dispatch("input");
+    ok(filas() === 1, "teclear no filtró la lista: " + filas() + " filas");
+    ok(b.q("#pickSince").hidden === true, "al teclear, el badge de la ventana temporal se quedó");
+
+    // el DOM falso no tiene la anidación del HTML: se declara la que dice index.html
+    // (<div class="qbox"> envuelve a #pick, #pickSince y #qlist), que es lo que mira contains()
+    b.q(".qbox").append(b.q("#pick"), b.q("#pickSince"), b.q("#qlist"));
+    b.fireDoc("pointerdown", { target: b.q("#qlist") }); // dentro del combobox: no cierra
+    ok(b.q("#qlist").hidden === false, "un clic DENTRO del combobox cerró la lista");
+    b.fireDoc("pointerdown", { target: b.q("#kw") });
+    ok(b.q("#qlist").hidden === true, "un clic fuera no cerró la lista");
+
+    b.q("#pick").dispatch("focus");
+    b.q("#pick").dispatch("keydown", { key: "Escape" });
+    ok(b.q("#qlist").hidden === true, "Escape no cerró la lista");
+
+    // sin coincidencias: avisa en vez de dejar el hueco vacío
+    b.q("#pick").value = "zzz";
+    b.q("#pick").dispatch("input");
+    ok(/sin coincidencias/.test(b.q("#qlist").innerHTML), "un filtro sin resultados no avisa");
   }
 
   console.log("ok (" + n + " comprobaciones)");

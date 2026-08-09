@@ -16,6 +16,13 @@ const APP = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
 // Estado inicial real de cada id según el HTML (hidden/disabled/value): sin esto un
 // `#swipeMenu` que nace oculto arrancaría visible en el test y taparía el bug de verdad.
 const HTML = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+
+// CSV de juguete con las columnas que produce scrape.js
+const CSV_FIELDS = "id,titulo,precio,categoria,ciudad,cp,km,dias,reservado,envio,url,vendedor,imagen,imagenes,descripcion";
+const CSV = [CSV_FIELDS,
+  "a1,Ford Focus,1000,Coches,Jaen,23001,3,1,False,False,https://w/a1,Ana,,,buen estado",
+  "a2,Ford Fiesta,200,Coches,Ubeda,23400,25,2,False,False,https://w/a2,Bea,,,con arreglos",
+].join("\r\n") + "\r\n";
 // hijos de un contenedor del HTML: [{dataset}] por cada <tag ...> dentro de #id (sin anidar)
 function htmlChildren(id, tag) {
   const i = HTML.indexOf('id="' + id + '"');
@@ -73,6 +80,7 @@ function makeAny() {
 // El `any` de arriba tragaba las escrituras (`set` -> true sin guardar), así que no se podía
 // leer de vuelta ni el `onclick` ni el `hidden`. Este guarda todo en `st` y cae al `any` para
 // lo que no conozca; los handlers (`on*`) arrancan en null para poder preguntar "¿está cableado?".
+const ELS = new WeakSet(); // los elementos falsos, para distinguirlos del stub `any`
 function makeEl(sel, any) {
   const st = {
     id: sel.replace(/^#/, ""),
@@ -98,7 +106,17 @@ function makeEl(sel, any) {
     dataset: {},
     style: {},
     children: [],
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+  };
+  // classList sobre `className`: una sola fuente de verdad. Antes `contains` devolvía siempre
+  // false, así que "¿tiene la clase X?" (a11y de los .link, chips activos) no se podía probar.
+  const cls = () => st.className.split(/\s+/).filter(Boolean);
+  st.classList = {
+    add: (...c) => (st.className = [...new Set([...cls(), ...c])].join(" ")),
+    remove: (...c) => (st.className = cls().filter((x) => !c.includes(x)).join(" ")),
+    toggle(c, f) {
+      (f ?? !this.contains(c)) ? this.add(c) : this.remove(c);
+    },
+    contains: (c) => cls().includes(c),
   };
   Object.assign(st, HTML_INIT[sel]); // hidden/disabled/checked/value tal y como nacen en el HTML
   const listeners = {};
@@ -124,7 +142,9 @@ function makeEl(sel, any) {
     removeEventListener: (t, fn) => {
       listeners[t] = (listeners[t] || []).filter((f) => f !== fn);
     },
-    contains: () => false,
+    // contiene = es él mismo o cuelga de él. Solo se recorren elementos falsos (ELS): el stub
+    // universal `any` responde truthy a todo y daría un "sí" a cualquier nodo.
+    contains: (n) => n === el || st.children.some((c) => ELS.has(c) && c.contains(n)),
     closest: () => null,
     remove() {},
     appendChild(c) {
@@ -171,6 +191,7 @@ function makeEl(sel, any) {
     },
     apply: () => any,
   });
+  ELS.add(el);
   return el;
 }
 
@@ -254,6 +275,14 @@ function makeContext(store, opts = {}) {
     }
   };
   const bootErrors = [];
+  const winListeners = {};
+  const hist = []; // entradas de historial sintéticas que empuja la app (botón atrás del móvil)
+  // dispara un evento de window/document como lo haría el navegador
+  const fire = (bag) => (type, extra) => {
+    const ev = Object.assign({ type, preventDefault() {}, stopPropagation() {} }, extra);
+    for (const fn of bag[type] || []) fn(ev);
+  };
+  const fireWin = fire(winListeners);
   // lo que el test observa "desde fuera": qué se copió al portapapeles, qué se abrió/imprimió
   const spy = { copied: [], opened: [], printed: 0, alerts: [] };
   const sandbox = {
@@ -277,10 +306,12 @@ function makeContext(store, opts = {}) {
       { get: (t, p) => (p in t ? t[p] : noop) }, // log/warn/debug/... -> noop
     ),
     // queueMicrotask envuelto: captura el crash del boot en vez de tumbar el proceso
+    // El callback del boot es `async`: su rechazo NO pasa por el try, se va como
+    // unhandledRejection y tumba el proceso de test sin decir qué clave lo rompió.
     queueMicrotask: (cb) =>
       Promise.resolve().then(() => {
         try {
-          cb();
+          return Promise.resolve(cb()).catch((e) => bootErrors.push(e));
         } catch (e) {
           bootErrors.push(e);
         }
@@ -316,7 +347,24 @@ function makeContext(store, opts = {}) {
       },
     },
     location: { reload: noop, href: "", search: opts.search || "", pathname: "/", assign: noop },
-    history: { pushState: noop, replaceState: noop, back: noop, forward: noop, go: noop, length: 1, state: null },
+    // historial de verdad: `back()` dispara popstate como el navegador. Con un noop, el
+    // botón atrás del móvil (la única "capa" sin botón propio en pantalla) no lo probaba nadie.
+    history: {
+      pushState: (s) => hist.push(s),
+      replaceState: (s) => (hist.length ? (hist[hist.length - 1] = s) : hist.push(s)),
+      back: () => {
+        hist.pop();
+        fireWin("popstate", { state: hist[hist.length - 1] ?? null });
+      },
+      forward: noop,
+      go: noop,
+      get length() {
+        return hist.length + 1;
+      },
+      get state() {
+        return hist[hist.length - 1] ?? null;
+      },
+    },
     matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
     getComputedStyle: () => makeAny(),
     alert: (m) => spy.alerts.push(String(m)),
@@ -325,8 +373,10 @@ function makeContext(store, opts = {}) {
     IntersectionObserver: Obs,
     ResizeObserver: Obs,
     MutationObserver: Obs,
-    addEventListener: noop,
-    removeEventListener: noop,
+    addEventListener: (t, fn) => (winListeners[t] ||= []).push(fn),
+    removeEventListener: (t, fn) => {
+      winListeners[t] = (winListeners[t] || []).filter((f) => f !== fn);
+    },
     dispatchEvent: () => true,
     scrollTo: noop,
     scroll: noop,
@@ -347,7 +397,7 @@ function makeContext(store, opts = {}) {
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
-  return { sandbox, bootErrors, q, spy, docListeners };
+  return { sandbox, bootErrors, q, spy, docListeners, winListeners, hist, fireWin, fireDoc: fire(docListeners) };
 }
 
 // Evalúa app.js con `store` como localStorage inicial; devuelve los errores de boot.
@@ -361,7 +411,7 @@ async function boot(store, opts) {
     bootErrors.push(e); // el bug viejo (bloque síncrono) tiraba aquí, en plena evaluación
   }
   await new Promise((r) => setImmediate(r)); // vacía los microtasks del queueMicrotask del boot
-  return { errs: bootErrors, sandbox, q: ctx.q, spy: ctx.spy, docListeners: ctx.docListeners, store };
+  return Object.assign({}, ctx, { errs: bootErrors, store });
 }
 const bootErrs = async (store, opts) => (await boot(store, opts)).errs;
 
@@ -374,12 +424,51 @@ async function main() {
   let errs = await bootErrs({});
   if (errs.length) fail("boot en blanco lanzó: " + (errs[0].message || errs[0]));
 
-  // 1b. arranque con UNA clave corrupta: el valor roto se ignora, la app arranca igual.
-  //     Sin readJSON() cualquiera de estas dejaba la app inerte en toda carga futura.
-  for (const k of ["wp_blocksel", "wp_rejected", "wp_favorite", "wp_interested", "wp_stamp",
-                   "wp_excl", "wp_lim", "wp_catexcl", "wp_catmode", "wp_alias"]) {
-    const e = await bootErrs({ [k]: "{json roto" });
-    if (e.length) fail("boot con " + k + " corrupto lanzó: " + (e[0].message || e[0]));
+  // 1b. arranque Y USO con UNA clave envenenada, clave a clave y veneno a veneno.
+  //     Dos venenos, no uno: texto que no es JSON (escritura cortada por la cuota) y JSON
+  //     válido con la forma equivocada (versión vieja, otra pestaña, edición a mano).
+  //     app.js es un módulo único: un throw en la evaluación deja la app inerte PARA SIEMPRE
+  //     y el usuario no tiene botón con el que recuperarse. Ninguna clave puede hacer eso.
+  //     Arrancar no basta: hay claves (wp_lastseen) que solo se leen al usar la app.
+  const CLAVES = ["wp_estado", "wp_searches", "wp_lastseen", "wp_lastcsv", "wp_rejected",
+                  "wp_favorite", "wp_interested", "wp_blocksel", "wp_stamp", "wp_excl",
+                  "wp_lim", "wp_catexcl", "wp_catmode", "wp_alias", "wp_rows", "wp_aisent",
+                  "wp_pesos", "wp_loc", "wp_lejoskm", "wp_autoexcllejos", "wp_csv",
+                  "wp_perfil", "wp_perfiles"];
+  const VENENOS = ["{json roto", "null", "5", '"texto"', "[]", '{"ford.csv":5}', "[1,2]"];
+  const USO = 'loadCSV(__CSV, "ford.csv"); renderQlist(""); openManager(); paintSearches(); render()';
+  for (const k of CLAVES) {
+    for (const v of VENENOS) {
+      const b = await boot({ [k]: v });
+      if (b.errs.length) fail(`boot con ${k}=${v} lanzó: ` + (b.errs[0].message || b.errs[0]));
+      b.sandbox.__CSV = CSV;
+      try {
+        vm.runInContext(USO, b.sandbox);
+      } catch (e) {
+        fail(`con ${k}=${v} la app arranca pero se rompe al usarla: ` + (e.message || e));
+      }
+      if (b.errs.length) fail(`con ${k}=${v} usar la app lanzó: ` + (b.errs[0].message || b.errs[0]));
+    }
+  }
+
+  // 1c. el blob `wp_estado` bien formado pero con UN campo de la forma equivocada. La clave
+  //     entera envenenada ya se prueba arriba; esto es el escalón de dentro: una versión vieja
+  //     del blob (o un merge de dos pestañas) trae `blockSel` como objeto o `trash` como número
+  //     y hydrateEstado corre en el boot, fuera de todo try: el rechazo se pierde y el arranque
+  //     muere en silencio a mitad, sin render() ni restoreLastCsv().
+  const CAMPOS = ["trash", "fav", "star", "blockSel", "excl", "catExcl", "catMode", "alias", "stamp"];
+  for (const campo of CAMPOS) {
+    for (const forma of [5, "texto", [], {}, null, [1, 2], { "ford.csv": 5 }]) {
+      const b = await boot({ wp_estado: JSON.stringify({ [campo]: forma }), wp_lastcsv: "ford.csv" });
+      if (b.errs.length)
+        fail(`wp_estado con ${campo}=${JSON.stringify(forma)} tumbó el boot: ` + (b.errs[0].message || b.errs[0]));
+      b.sandbox.__CSV = CSV;
+      try {
+        vm.runInContext(USO, b.sandbox);
+      } catch (e) {
+        fail(`wp_estado con ${campo}=${JSON.stringify(forma)} rompe la app al usarla: ` + (e.message || e));
+      }
+    }
   }
 
   // 2. arranque con estado guardado en la clave fija `wp_estado`: hydrateEstado()->render()
@@ -599,6 +688,63 @@ async function main() {
   if (lj.errs.length) fail("boot con autoExclLejos lanzó: " + (lj.errs[0].message || lj.errs[0]));
   if (typeof lj.sandbox.enforceLejos === "function")
     fail("enforceLejos sigue vivo: re-rechaza en cada render lo que restauras");
+
+  // 12b. CSV degenerado: vacío, y con una fila más corta que la cabecera. Un scrape abortado
+  //      o un cache truncado producen las dos formas. parseCSV("") devuelve [], así que
+  //      `headers` quedaba undefined y loadCSV lanzaba un TypeError que runScrape le enseñaba
+  //      al usuario como fallo de red. Y la fila corta dejaba huecos `undefined`: la celda
+  //      salía "undefined" y ordenar por esa columna tumbaba render() PARA SIEMPRE, porque
+  //      toggleSort apunta la columna antes de que render lance.
+  {
+    const b = await boot({});
+    const ev = (expr) => vm.runInContext(expr, b.sandbox);
+    b.sandbox.__CSV = "";
+    try {
+      ev('loadCSV(__CSV, "vacio.csv"); render()');
+    } catch (e) {
+      fail("loadCSV con un CSV vacío lanzó: " + (e.message || e));
+    }
+    if (ev("headers.length") !== 15) fail("un CSV vacío dejó la cabecera en " + ev("JSON.stringify(headers)"));
+
+    b.sandbox.__CSV = CSV_FIELDS + "\r\n" + "a1,Ford Focus,1000\r\n" + CSV.split("\r\n")[1] + "\r\n";
+    try {
+      ev('loadCSV(__CSV, "corta.csv"); render()');
+    } catch (e) {
+      fail("loadCSV con una fila corta lanzó: " + (e.message || e));
+    }
+    if (ev("data[0].length") !== ev("headers.length"))
+      fail("la fila corta no se rellenó: " + ev("data[0].length") + " celdas de " + ev("headers.length"));
+    if (ev("data[0].some((c) => typeof c !== 'string')"))
+      fail("la fila corta dejó celdas que no son texto: " + ev("JSON.stringify(data[0])"));
+    try {
+      ev('toggleSort(headers.indexOf("descripcion")); render(); view = "rejected"; listSort = "descripcion"; sortList(data.slice()); view = ""');
+    } catch (e) {
+      fail("ordenar por una columna que la fila corta no trae lanzó: " + (e.message || e));
+    }
+  }
+
+  // 12c. contrato scrape.js -> app.js: lo que escribe toCSV, parseCSV lo lee IGUAL.
+  //      Cada fichero probaba su mitad (el demo de scrape.js comprueba el entrecomillado al
+  //      escribir), pero nadie cerraba el círculo con comas, comillas y saltos dentro del campo.
+  {
+    const { toCSV, FIELDS } = require("./scrape.js");
+    const raro = {
+      id: "x1", titulo: 'Ford "Focus", 1.6', precio: 1000, categoria: "Coches, usados",
+      ciudad: "Jaén", cp: "23001", km: 3, dias: 1, reservado: false, envio: true,
+      url: "https://w/x1?a=1&b=2", vendedor: 'Ana "la del taller"', imagen: "", imagenes: "",
+      descripcion: "primera línea\nsegunda, con coma\ny una \"cita\"",
+    };
+    const b = await boot({});
+    b.sandbox.__CSV = toCSV([raro]);
+    vm.runInContext('loadCSV(__CSV, "raro.csv")', b.sandbox);
+    for (const f of FIELDS) {
+      const got = vm.runInContext(`data[0][headers.indexOf(${JSON.stringify(f)})]`, b.sandbox);
+      const want = String(raro[f] === true ? "True" : raro[f] === false ? "False" : raro[f]);
+      if (got !== want) fail(`ida y vuelta del CSV: ${f} salió ${JSON.stringify(got)}, se escribió ${JSON.stringify(want)}`);
+    }
+    if (vm.runInContext("data.length", b.sandbox) !== 1)
+      fail("el salto de línea dentro del campo partió la fila en " + vm.runInContext("data.length", b.sandbox));
+  }
 
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });

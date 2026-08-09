@@ -44,7 +44,16 @@ function setLS(k, v) {
 // en cualquier clave tiraba una excepción al evaluar el módulo y la app quedaba inerte en TODA
 // carga futura, sin forma de auto-repararse (el usuario no puede borrar lo que no puede abrir).
 // `??` y no `||`: un "" guardado cae al fallback igual que antes.
-const readJSON = (k, fb) => { try { return JSON.parse(localStorage.getItem(k) ?? JSON.stringify(fb)); } catch { return fb; } };
+// No basta con parsear: un JSON VÁLIDO de la forma equivocada (5, "texto", [] donde se
+// espera {}) crashea igual al primer uso. Si el fallback dice la forma, se exige la forma.
+// Con fallback null no se exige nada: ahí el llamador ya sabe distinguir formatos viejos.
+const readJSON = (k, fb) => {
+  try {
+    const v = JSON.parse(localStorage.getItem(k) ?? "null");
+    if (v == null) return fb;
+    return fb !== null && (typeof v !== "object" || Array.isArray(v) !== Array.isArray(fb)) ? fb : v;
+  } catch { return fb; }
+};
 // ── IndexedDB: almacén clave/valor para lo que no cabe en localStorage ──
 // localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
 // (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
@@ -130,7 +139,8 @@ const toMap = (val) => {
   // real e inalcanzable: `allQueries` se puebla solo desde wp_searches, así que nadie podía
   // volver a verlo, pero seguía contando y ocupando. Convención: nada se archiva bajo "".
   if (Array.isArray(val)) for (const id of val) { const c = rowCache[id]?._csv; if (c) add(c, id); }
-  else if (val && typeof val === "object") for (const c in val) for (const id of val[c]) add(c, id);
+  // `val[c]` tiene que ser una lista de ids: si no lo es, ese cajón se tira entero
+  else if (val && typeof val === "object") for (const c in val) for (const id of Array.isArray(val[c]) ? val[c] : []) add(c, id);
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
@@ -284,6 +294,8 @@ function hydrateEstado() {
     {
       // ponytail: doble bloque solo para conservar la indentación del cuerpo original intacta
       const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}); // ignora formatos viejos
+      const arr = (v) => (Array.isArray(v) ? v : []);
+      e = obj(e); // el blob puede venir siendo null/5/"texto"/[]: entonces no hay blob
       // Cada campo vive en dos sitios: su clave espejo (wp_rejected, wp_excl…) y el blob
       // wp_estado, que lo duplica todo. Reasignar desde el blob machacaba la clave espejo, y
       // el blob es el que más fácil falla por cuota (es el grande, y se escribe el último).
@@ -302,7 +314,7 @@ function hydrateEstado() {
       }
       pointBuckets(curCsv); // reapunta rejected/favorite al cajón activo
       blockSel.clear();
-      (mir("wp_blocksel", e.blockSel) || []).forEach((x) => blockSel.add(x));
+      arr(mir("wp_blocksel", e.blockSel)).forEach((x) => blockSel.add(x));
       setLS("wp_blocksel", JSON.stringify([...blockSel]));
       // los tres se funden por cajón: "ps4--dia" y "ps4--semana" comparten exclusiones
       exclMap = foldDrawers(obj(mir("wp_excl", e.excl)), uni); // {cajon:[palabras]}
@@ -369,7 +381,7 @@ const porte = (kg) => (SHIP.find(([b]) => kg <= b) || SHIP[SHIP.length - 1])[1];
 const finalPrice = (precio, kg = 5) => precio + 0.7 + 0.05 * precio + porte(kg);
 // peso real (tramo up_to_kg) por id, cacheado del detalle de la API (botón "Precio exacto").
 // número -> porte exacto; sin entrada -> se estima con 5 kg y un '*'.
-let pesos = JSON.parse(localStorage.getItem("wp_pesos") || "{}");
+let pesos = readJSON("wp_pesos", {});
 console.assert(
   porte(1.5) === 3.5 &&
     porte(2) === 3.5 &&
@@ -1320,8 +1332,11 @@ function loadCSV(text, name) {
   loadedCsv = name; // a partir de aquí hay dataset real: se acabó la pantalla de bienvenida
   pointBuckets(name); // apunta al cajón de este CSV antes de render (runScrape carga antes de selectQueryUI)
   const rows = parseCSV(text);
-  headers = rows[0];
-  data = rows.slice(1);
+  // Un CSV vacío (scrape abortado, cache truncado) no puede tumbar la carga: sin cabecera se
+  // usa el esquema del scraper. Y las filas se rellenan hasta la cabecera, porque una celda
+  // `undefined` se pinta literal ("undefined€") y revienta cmpCell al ordenar por esa columna.
+  headers = rows[0] || DEFAULT_HEADERS.slice();
+  data = rows.slice(1).map((r) => (r.length === headers.length ? r : Array.from(headers, (_, i) => r[i] ?? "")));
   sortKeys = [];
   view = "";
   iId = headers.indexOf("id");
@@ -1378,7 +1393,7 @@ async function loadQuery(csv) {
 const lastSeenKey = () => "wp_lastseen";
 function stampSeen(csv) {
   if (!csv) return;
-  const m = JSON.parse(localStorage.getItem(lastSeenKey()) || "{}");
+  const m = readJSON(lastSeenKey(), {});
   m[csv] = Date.now();
   setLS(lastSeenKey(), JSON.stringify(m));
 }
@@ -1412,7 +1427,7 @@ function chooseQuery(csv) {
 // pinta la lista filtrada por el texto tecleado (substring, sin acentos/mayúsculas)
 function renderQlist(term) {
   const t = norm(term);
-  const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || "{}"); // última interacción por perfil
+  const seen = readJSON(lastSeenKey(), {}); // última interacción por perfil
   const hits = allQueries
     .filter((q) => norm(q.label).includes(t))
     .sort(
@@ -1512,13 +1527,8 @@ console.assert(
 // ── búsquedas guardadas: definiciones (kw+since) en localStorage ──
 // No se guardan result sets: abrir una búsqueda = re-scrapear. {csv, rows, mtime(s)} por entrada.
 const searchesKey = () => "wp_searches";
-const loadSearches = () => {
-  try {
-    return JSON.parse(localStorage.getItem(searchesKey()) || "[]");
-  } catch {
-    return [];
-  }
-};
+// filtra las entradas sin csv: una sola envenenada rompía el arranque entero
+const loadSearches = () => readJSON(searchesKey(), []).filter((s) => s && typeof s.csv === "string");
 const writeSearches = (list) =>
   setLS(searchesKey(), JSON.stringify(list));
 function saveSearch(csv, rows) {
@@ -1787,7 +1797,7 @@ function paintSearches() {
   const hits = allSearches.filter((s) =>
     norm((aliasMap[s.csv] || "") + " " + queryParts(s.csv).kw).includes(q),
   );
-  const seen = JSON.parse(localStorage.getItem(lastSeenKey()) || "{}");
+  const seen = readJSON(lastSeenKey(), {});
   const touched = (s) => Math.max(seen[s.csv] || 0, s.mtime * 1000); // abierta o rescrapeada: lo más reciente manda
   // "¿qué búsqueda tiene carne?": se cuenta contra el CSV cacheado, sin red y sin abrirla. Las que
   // tienen algo sin ver suben arriba: era lo único que no podías saber sin re-scrapear una a una.
