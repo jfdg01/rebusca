@@ -31,6 +31,13 @@ const CSV_ANA =
   row({ id: "a4", titulo: "Ford Puma", precio: "800", categoria: "Coches", ciudad: "Jaen", km: "4", dias: "3", reservado: "False", envio: "False", url: "https://w/a4", vendedor: "Ana", descripcion: "impecable" }) +
   "\r\n";
 
+// variante con una republicación: Ana vuelve a subir el Ford Focus con otro id, otro acento y
+// otro espaciado. Es lo que hace un vendedor para subir en la lista, y el scraper no lo ve.
+const CSV_DUP =
+  CSV +
+  row({ id: "a6", titulo: "Fórd  Focus", precio: "990", categoria: "Coches", ciudad: "Jaen", km: "3", dias: "0", reservado: "False", envio: "False", url: "https://w/a6", vendedor: "ana", descripcion: "rebajado" }) +
+  "\r\n";
+
 // variante con una segunda categoría: con una sola, "incluir" y "sin filtro" dan el mismo mazo
 const CSV_CATS =
   CSV +
@@ -939,6 +946,27 @@ async function main() {
     ev(b, 'exclMap[curDrawer()] = ["averiado"]; limMap[curDrawer()] = { precio: 1000 }; render()');
     ok(b.q("#excl").open === true, "un filtro activo se queda escondido");
     ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántos filtros hay: " + b.q("#exclCount").textContent);
+  }
+
+  // ── 41. la tarjeta avisa de la republicación (item 24) ──
+  //     El scraper deduplica por id, así que el mismo coche con otro id vuelve a la cola de
+  //     "sin ver" y el usuario lo tría dos veces. Aquí Ana tiene el Focus repetido (a1 y a6)
+  //     y el Ka suelto (a3): el aviso sale en los dos primeros y NO en el tercero.
+  {
+    const b = await loaded({ csv: CSV_DUP });
+    ev(b, 'favorite.add("a1"); favorite.add("a3"); favorite.add("a6"); save("wp_favorite", favorite); view = "favorite"; render()');
+    const textos = byClass(ev(b, "tbody"), "li-extra").map((e) => e.textContent);
+    const avisos = textos.filter((t) => /2 anuncios iguales/.test(t));
+    ok(avisos.length === 2, "el aviso de republicación no sale en las dos copias: " + JSON.stringify(textos));
+    ok(
+      !textos.some((t) => /iguales/.test(t) && /piezas|Ka/.test(t)),
+      "el aviso de republicación marca un anuncio que no se repite: " + JSON.stringify(textos),
+    );
+    // el recuento se rehace en cada carga: si se quedara pegado, la búsqueda siguiente heredaría
+    // los duplicados de la anterior
+    ev(b, "loadCSV(" + JSON.stringify(CSV) + ', "otra.csv"); favorite.add("a1"); favorite.add("a3"); view = "favorite"; render()');
+    const tras = byClass(ev(b, "tbody"), "li-extra").map((e) => e.textContent);
+    ok(!tras.some((t) => /iguales/.test(t)), "el recuento de duplicados no se rehace al cargar otro CSV: " + JSON.stringify(tras));
   }
 
   console.log("ok (" + n + " comprobaciones)");

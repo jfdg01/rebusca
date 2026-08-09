@@ -586,6 +586,47 @@ const dealOff = (precio) => {
   return off >= DEAL_MIN ? off : 0;
 };
 
+const norm = (s) =>
+  s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+// ── posibles duplicados: el mismo vendedor republica el mismo producto con otro id ──
+// El scraper solo deduplica por id exacto, así que una republicación entra como anuncio nuevo y
+// vuelve a la cola de "sin ver". Aquí se agrupa por vendedor + título normalizado, una vez por
+// carga, igual que la mediana.
+// ponytail: heurística, no verdad. Un vendedor con dos unidades del mismo modelo cae en el mismo
+// grupo y se marca igual. Por eso el chip solo informa: no filtra, no oculta y no rechaza nada.
+// Si algún día molesta el falso positivo, compara también el precio dentro del grupo.
+let dupCount = new Map(); // "vendedor|titulo" -> cuántos anuncios del lote comparten esa clave
+// sin vendedor o sin título no se agrupa: la clave vacía juntaría anuncios que no tienen que ver.
+// Los espacios de más se colapsan aquí y no en norm(), que lo comparte el filtro de búsqueda:
+// al republicar, el mismo título vuelve con otro espaciado y si no, el grupo se parte en dos.
+const dupKey = (v, t) => (v && t ? norm(v) + "|" + norm(t).replace(/\s+/g, " ") : "");
+function countDups(rows, iVend, iTit) {
+  const m = new Map();
+  if (iVend < 0 || iTit < 0) return m;
+  for (const r of rows) {
+    const k = dupKey(r[iVend], r[iTit]);
+    if (k) m.set(k, (m.get(k) || 0) + 1);
+  }
+  return m;
+}
+console.assert(
+  (() => {
+    const m = countDups(
+      [["Ana", "Ford Focus"], ["ana", " ford  focus"], ["Ana", "Fórd Focus"], ["Luis", "Ford Focus"], ["", "Ford Focus"]],
+      0,
+      1,
+    );
+    // los espacios de más y los acentos no parten el grupo; el vendedor vacío no entra
+    return m.get("ana|ford focus") === 3 && m.get("luis|ford focus") === 1 && m.size === 2;
+  })(),
+  "countDups() roto",
+);
+
 // tarjeta compuesta (Destacados/Papelera + swipe): precio + ubicación + antigüedad + flags + descripción
 function fillCard(el, r) {
   const add = (cls, txt) => {
@@ -677,6 +718,8 @@ function fillCard(el, r) {
   if (col(r, "garantia") === "True") extra.push("garantía");
   if (col(r, "reacond") === "True") extra.push("reacondicionado");
   if (col(r, "top") === "True") extra.push("perfil top");
+  const nDup = dupCount.get(dupKey(col(r, "vendedor"), col(r, "titulo"))) || 0;
+  if (nDup > 1) extra.push(`${nDup} anuncios iguales`);
   if (extra.length) {
     const ex = document.createElement("span");
     ex.className = "li-extra"; // span y no un nodo de texto suelto: así hay algo que mirar
@@ -1512,6 +1555,7 @@ function loadCSV(text, name) {
   if (iTitulo < 0) iTitulo = 0;
   // referencia de precio del lote: una vez por carga, no por tarjeta
   medianPrice = iPrecio < 0 ? null : median(data.map((r) => +r[iPrecio]));
+  dupCount = countDups(data, headers.indexOf("vendedor"), iTitulo);
 
   thead.innerHTML = "";
   const tr = document.createElement("tr");
@@ -1623,12 +1667,6 @@ function renderQlist(term) {
   }
   qlist.hidden = false;
 }
-const norm = (s) =>
-  s
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
 function openQlist() {
   renderQlist(pick.value);
 }
