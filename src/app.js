@@ -1,3 +1,18 @@
+// ── red de seguridad global: ningún fallo muere en silencio ──
+// El fichero está lleno de promesas fire-and-forget (idb.set, el boot, los handlers async). Sin
+// esto, cada una moría en un unhandledrejection que nadie escuchaba: cero rastro en consola y
+// cero aviso al usuario. Es la primera console.error del repo, y el motivo por el que los
+// .catch mudos del wrapper de IndexedDB se pueden quitar sin romper a los llamadores.
+// ponytail: dos listeners globales en vez de un try/catch por cada await del fichero.
+if (typeof addEventListener === "function") {
+  const ruido = (etiqueta, err) => {
+    console.error("Rebusca: " + etiqueta, err);
+    // snack se define más abajo; para cuando esto dispare ya existe
+    if (typeof snack === "function") snack("Fallo interno: " + ((err && err.message) || err), null);
+  };
+  addEventListener("unhandledrejection", (ev) => ruido("promesa sin capturar", ev.reason));
+  addEventListener("error", (ev) => ruido("error no capturado", ev.error || ev.message));
+}
 // ── parser CSV (respeta comas, comillas y saltos dentro de campo) ──
 function parseCSV(text) {
   const rows = [[]];
@@ -34,11 +49,19 @@ function parseCSV(text) {
 // ("los botones no funcionan"). Ahora nunca lanza: avisa una vez y sigue.
 // ponytail: una sola red para los ~30 setItem del fichero, en vez de try/catch en cada sitio.
 const csvCacheKey = "wp_csv"; // cache de CSVs viejo (localStorage): solo se lee para migrarlo a IDB
-let lleno = false;
+// El aviso NO puede ser una vez por sesión: el snack dura 5 s y en modo swipe lo tapa la carta.
+// El usuario seguía clasificando 40 cartas con toda la UI confirmando lo que no se guardaba.
+// Throttle de 30 s: vuelve a avisar mientras el fallo siga vivo, sin convertirse en un bucle.
+let avisoLleno = 0; // epoch del último aviso
 function setLS(k, v) {
-  try { localStorage.setItem(k, v); return true; } catch {}
-  if (!lleno) { lleno = true; setTimeout(() => snack("Almacenamiento lleno: borra búsquedas viejas en ☰"), 0); }
-  return false;
+  try { localStorage.setItem(k, v); return true; } catch (e) {
+    console.error("Rebusca: no se pudo escribir " + k, e);
+    if (Date.now() - avisoLleno > 30000) {
+      avisoLleno = Date.now();
+      setTimeout(() => snack("Almacenamiento lleno: NO se está guardando. Borra búsquedas viejas en ☰"), 0);
+    }
+    return false;
+  }
 }
 // Lectura simétrica: un valor corrupto se comporta como ausente. Sin esto, un solo JSON roto
 // en cualquier clave tiraba una excepción al evaluar el módulo y la app quedaba inerte en TODA
@@ -53,13 +76,24 @@ function setLS(k, v) {
 // ponytail: copia y deja el original donde está, así el llamador no tiene que acordarse de
 // reescribir la clave y apartar dos veces la misma no hace nada.
 const apartadas = new Set(); // una vez por clave y sesión: readJSON se llama en cada render
+// Claves cuya copia de seguridad NO se pudo escribir. hydrateEstado no debe machacarlas: sin
+// copia, esa escritura espejo destruye el único original que queda.
+const sinRespaldo = new Set();
 function aparta(k, motivo) {
   if (apartadas.has(k)) return;
   apartadas.add(k);
-  console.warn(`Rebusca: ${k} tiene la forma equivocada (${motivo}); se ignora. Copia en roto:${k}`);
+  // `warn` y no `error`: el dato dañado es una condición del entorno que SÍ manejamos (copia +
+  // aviso). El nivel `error` queda para lo que de verdad falla, y test_app.js cuenta con eso.
+  console.warn(`Rebusca: ${k} tiene la forma equivocada (${motivo}); se ignora.`);
   const crudo = localStorage.getItem(k);
-  try { if (crudo != null) localStorage.setItem("roto:" + k, crudo); } catch {} // sin cuota: el aviso ya salió
+  // setLS y no un try/catch mudo: la copia a roto: es la ÚNICA copia, y su fallo ya no se traga.
+  const ok = crudo == null || setLS("roto:" + k, crudo);
+  if (!ok) sinRespaldo.add(k);
+  // console.error no se ve en un móvil. El usuario tiene que enterarse de que pierde datos.
+  setTimeout(() => snack(`Datos dañados en ${k}: se ignoran` + (ok ? ` (copia en roto:${k})` : " y NO se han podido respaldar"), null), 0);
 }
+// escritura espejo: nunca sobrescribe una clave dañada que no se pudo respaldar
+const espejo = (k, v) => { if (!sinRespaldo.has(k)) setLS(k, v); };
 const readJSON = (k, fb) => {
   let v;
   try { v = JSON.parse(localStorage.getItem(k) ?? "null"); }
@@ -74,18 +108,23 @@ const readJSON = (k, fb) => {
 // (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
 // y congelaba el triaje. En localStorage solo quedan listas de ids, unos KB.
 // ponytail: 20 líneas de wrapper en vez de una librería; sin `indexedDB` (tests) cae a un Map.
+// El almacén falló al LEER: rowCache/csvIndex están vacíos por el fallo, no porque no haya datos.
+// Escribir encima con ese vacío es la pérdida silenciosa. Se cierra el grifo hasta recargar.
+let almacenRoto = false;
 const idb = (() => {
   if (typeof indexedDB === "undefined") {
     const mem = new Map();
     return { get: async (k) => mem.get(k) ?? null, set: async (k, v) => void mem.set(k, v), del: async (k) => void mem.delete(k) };
   }
   let db;
+  // El fallo NO se cachea: `db ||= promesa` guardaba la promesa rechazada, así que un bloqueo
+  // transitorio (otra pestaña con la base abierta) rompía IndexedDB para el resto de la sesión.
   const open = () => (db ||= new Promise((res, rej) => {
     const r = indexedDB.open("rebusca", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("kv");
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
-  }));
+  }).catch((e) => { db = null; throw e; }));
   const tx = async (mode, fn) => {
     const d = await open();
     return new Promise((res, rej) => {
@@ -95,10 +134,13 @@ const idb = (() => {
     });
   };
   return {
-    // fallar aquí no debe romper nada: el CSV se re-scrapea y las filas se recuperan al cargar
-    get: (k) => tx("readonly", (s) => s.get(k)).catch(() => null),
-    set: (k, v) => tx("readwrite", (s) => s.put(v, k)).catch(() => {}),
-    del: (k) => tx("readwrite", (s) => s.delete(k)).catch(() => {}),
+    // Sin .catch mudo. Un `get` que devolvía null confundía "el almacén falló" con "no hay dato",
+    // y un `set` que resolvía sin escribir era la pérdida silenciosa de favoritos. Los llamadores
+    // fire-and-forget quedan cubiertos por el listener global de unhandledrejection de arriba.
+    get: (k) => tx("readonly", (s) => s.get(k)),
+    // Único punto de guardia: cubre saveRows, cacheCsv, dropCsvCache y setAisent de una vez.
+    set: (k, v) => (almacenRoto ? Promise.resolve() : tx("readwrite", (s) => s.put(v, k))),
+    del: (k) => (almacenRoto ? Promise.resolve() : tx("readwrite", (s) => s.delete(k))),
   };
 })();
 // ── cajón = búsqueda SIN ventana temporal ──
@@ -158,6 +200,10 @@ const toMap = (val, k) => {
     if (!Array.isArray(val[c])) { aparta(k, `el cajón ${c} no es una lista de ids`); continue; }
     for (const id of val[c]) add(c, id);
   }
+  // Un escalar (5, "texto", true) es JSON válido, así que readJSON con fb=null no lo filtra:
+  // los dos formatos legítimos (lista vieja y {cajon:[ids]}) obligan a fb=null. Sin esta rama
+  // el cubo se vaciaba en silencio y la escritura espejo lo machacaba sin copia a roto:.
+  else if (val != null) aparta(k, "no es una lista ni un mapa de cajones");
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
@@ -188,7 +234,15 @@ const save = (k, _set) => {
 };
 // último lote copiado/exportado a la IA: {csv, ids}. Su respuesta es un enlace ?keep=<ids>:
 // esos ids se conservan como favoritos y el RESTO del lote se rechaza de una vez.
-const aisent = () => { try { return JSON.parse(localStorage.getItem("wp_aisent") || "null"); } catch { return null; } };
+// null tiene que significar "no hay lote", no "el lote se corrompió": con un catch mudo el
+// veredicto de la IA se aplicaba a medias y msg() reportaba que se aplicó entero. Y un escalar
+// pasaba el `if (sent)` de fromURL para reventar en `sent.ids` durante el boot.
+const aisent = () => {
+  const v = readJSON("wp_aisent", null);
+  if (v == null) return null;
+  if (typeof v !== "object" || !Array.isArray(v.ids)) return aparta("wp_aisent", "no es un lote {csv, ids}"), null;
+  return v;
+};
 // `originCsv` se captura ANTES del await del llamador. Leer curDrawer() aquí lo leía tarde:
 // entre el clic de copiar y su resolución el usuario puede cambiar de búsqueda, y el lote
 // quedaba etiquetado con la búsqueda equivocada. Su ?keep= aterrizaba en el cajón que no era.
@@ -214,10 +268,19 @@ function saveRows() {
   idb.set("rows", rowCache); // a IndexedDB: en localStorage se comía la cuota y tumbaba el triaje
 }
 // filas del cubo activo = las de `data` + las que solo viven en cache (item vendido/expirado)
+// Un id del cubo que no está ni en `data` ni en rowCache se caía por el borde: el contador lo
+// sigue contando y la lista no lo enseña. Deja rastro una vez por id, sin ensuciar cada render.
+const huerfanosVistos = new Set();
 function bucketRows(set) {
   const seen = new Set(), out = [];
   for (const r of data) { const k = key(r); if (set.has(k)) { seen.add(k); out.push(r); } }
-  for (const id of set) if (!seen.has(id) && rowCache[id]) out.push(objToRow(rowCache[id]));
+  const huerfanos = [];
+  for (const id of set)
+    if (!seen.has(id)) {
+      if (rowCache[id]) out.push(objToRow(rowCache[id]));
+      else if (!huerfanosVistos.has(id)) { huerfanosVistos.add(id); huerfanos.push(id); }
+    }
+  if (huerfanos.length) console.warn(`Rebusca: ${huerfanos.length} ids clasificados sin fila en cache, no se muestran:`, huerfanos);
   return out;
 }
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
@@ -273,16 +336,22 @@ const saveAlias = () => {
 // Migración one-shot del modelo multi-perfil: adopta el estado del perfil activo (wp_perfil)
 // a las claves fijas y retira los índices de perfiles. Las claves viejas wp_*_<nombre>
 // quedan inertes (no se borran: revertir la rama restauraría los perfiles con sus datos).
+// El borrado NO puede ser incondicional. La migración duplica el estado, así que es justo el
+// caso que llena la cuota. Si una copia falla y wp_perfil ya no está, la migración no vuelve a
+// intentarse nunca: la app aparece vacía con los datos intactos en localStorage e inalcanzables.
 (function migrateFromPerfiles() {
   const old = localStorage.getItem("wp_perfil");
+  let ok = true;
   if (old)
     for (const b of ["wp_estado", "wp_searches", "wp_lastcsv", "wp_lastseen"])
       if (localStorage.getItem(b) == null) {
         const v = localStorage.getItem(b + "_" + old);
-        if (v != null) setLS(b, v);
+        if (v != null) ok = setLS(b, v) && ok;
       }
-  localStorage.removeItem("wp_perfil");
-  localStorage.removeItem("wp_perfiles");
+  if (ok) {
+    localStorage.removeItem("wp_perfil");
+    localStorage.removeItem("wp_perfiles");
+  } else setTimeout(() => snack("No se pudo migrar tu estado: libera espacio y recarga", null), 0);
 })();
 const estadoKey = () => "wp_estado"; // estado durable (un usuario por navegador)
 function pushEstado() {
@@ -303,10 +372,9 @@ function pushEstado() {
 }
 // carga el estado del perfil actual desde localStorage (fuente de verdad en estático)
 function hydrateEstado() {
-  let e = {};
-  try {
-    e = JSON.parse(localStorage.getItem(estadoKey()) || "{}");
-  } catch {}
+  // readJSON y no un JSON.parse suelto: wp_estado lo contiene TODO y era la única clave del
+  // fichero que se corrompía en silencio. Ahora avisa, copia a roto:wp_estado y saca snack.
+  let e = readJSON(estadoKey(), {});
   {
     {
       // ponytail: doble bloque solo para conservar la indentación del cuerpo original intacta
@@ -332,22 +400,24 @@ function hydrateEstado() {
       pointBuckets(curCsv); // reapunta rejected/favorite al cajón activo
       blockSel.clear();
       arr(mir("wp_blocksel", e.blockSel)).forEach((x) => blockSel.add(x));
-      setLS("wp_blocksel", JSON.stringify([...blockSel]));
+      // `espejo` y no `setLS`: si la clave estaba dañada y su copia a roto: no cupo, esta
+      // escritura destruía el único original que quedaba.
+      espejo("wp_blocksel", JSON.stringify([...blockSel]));
       // los tres se funden por cajón: "ps4--dia" y "ps4--semana" comparten exclusiones
       exclMap = foldDrawers(obj(mir("wp_excl", e.excl)), uni); // {cajon:[palabras]}
       catExclMap = foldDrawers(obj(mir("wp_catexcl", e.catExcl)), uni); // {cajon:[categorias]}
       catModeMap = foldDrawers(obj(mir("wp_catmode", e.catMode)), (a, b) => a || b); // {cajon:"incluir"}
       limMap = foldDrawers(obj(mir("wp_lim", e.lim)), (a, b) => ({ ...b, ...a })); // {cajon:{precio,dias,km}}
-      setLS("wp_lim", JSON.stringify(limMap));
+      espejo("wp_lim", JSON.stringify(limMap));
       aliasMap = obj(mir("wp_alias", e.alias)); // {csv:"apodo"}
-      setLS("wp_alias", JSON.stringify(aliasMap));
+      espejo("wp_alias", JSON.stringify(aliasMap));
       // wp_stamp se escribe SIN pasar por pushEstado (stampNow/unstamp), así que su clave
       // espejo es estructuralmente más nueva que el blob para este campo.
       stamp = obj(mir("wp_stamp", e.stamp)); // {key:epochMs} cuándo se clasificó
-      setLS("wp_stamp", JSON.stringify(stamp));
-      for (const n of BUCKET_NAMES) setLS("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
-      setLS("wp_excl", JSON.stringify(exclMap));
-      setLS("wp_catexcl", JSON.stringify(catExclMap));
+      espejo("wp_stamp", JSON.stringify(stamp));
+      for (const n of BUCKET_NAMES) espejo("wp_" + n, JSON.stringify(fromMap(buckets[n]))); // espejo offline (por cajón)
+      espejo("wp_excl", JSON.stringify(exclMap));
+      espejo("wp_catexcl", JSON.stringify(catExclMap));
       if (data.length) render();
     }
   }
@@ -577,7 +647,8 @@ function fillCard(el, r) {
     chip.textContent = "#" + id;
     chip.title = "copiar el id";
     chip.onclick = () =>
-      navigator.clipboard.writeText(id).then(() => snack("Id copiado", null)).catch(() => {});
+      // los otros tres puntos de copia del fichero ya avisan; este era el único mudo
+      navigator.clipboard.writeText(id).then(() => snack("Id copiado", null)).catch(() => snack("No se pudo copiar el id", null));
     flags.append(document.createTextNode(" · "), chip);
   }
 
@@ -1602,15 +1673,26 @@ function unseenCount(csv) {
 // Hasta ahora compartían los 5 MB con el triaje; al llenarse, clasificar una carta lanzaba y el
 // mazo se congelaba. Tras esto, localStorage solo guarda ids.
 async function hydrateStores() {
+  try {
+    await hydrateStoresRaw();
+  } catch (e) {
+    // Cierra el grifo: idb.set/del ya no escriben, así que el primer swipe no machaca el
+    // cache bueno con el vacío que dejó el fallo de lectura.
+    almacenRoto = true;
+    console.error("Rebusca: no se pudo leer el almacén local", e);
+    setTimeout(() => snack("No se pudo abrir el almacén: esta sesión NO guardará cambios", null), 0);
+  }
+}
+async function hydrateStoresRaw() {
   if (localStorage.getItem("wp_rows") !== null) {
     await idb.set("rows", rowCache); // rowCache ya se leyó de localStorage al evaluar el módulo
-    localStorage.removeItem("wp_rows");
+    localStorage.removeItem("wp_rows"); // solo si el set de arriba no lanzó: `await` corta el borrado
   } else rowCache = (await idb.get("rows")) || {};
   const viejo = localStorage.getItem(csvCacheKey);
   if (viejo === null) { csvIndex = (await idb.get("csvIndex")) || {}; return; }
-  localStorage.removeItem(csvCacheKey); // libera la cuota YA, pase lo que pase debajo
-  let m = {};
-  try { m = JSON.parse(viejo) || {}; } catch {}
+  // readJSON avisa y copia a roto:wp_csv; el catch mudo tiraba TODOS los CSVs cacheados sin rastro
+  const m = readJSON(csvCacheKey, {});
+  localStorage.removeItem(csvCacheKey); // ya leído (o ya apartado): libera la cuota
   for (const k in m) {
     const rows = parseCSV(m[k].text || ""), i = (rows[0] || []).indexOf("id");
     if (i < 0) continue;
@@ -1641,12 +1723,15 @@ const csvNameOf = (kw, since) =>
   ".csv";
 // ubicación del scrape: ciudad manual (Fase 6, aún sin UI) o Jaén por defecto
 const JAEN_LOC = { lat: 37.7796, lon: -3.7849 };
+// El spread metía lat/lon no numéricos tal cual en la petición a la API: JSON válido con la
+// forma equivocada no lo filtraba ningún catch. readJSON cubre el JSON roto; la comprobación
+// de finitud cubre el JSON válido con basura dentro.
 const getLoc = () => {
-  try {
-    return { ...JAEN_LOC, ...JSON.parse(localStorage.getItem("wp_loc") || "{}") };
-  } catch {
-    return JAEN_LOC;
-  }
+  const v = readJSON("wp_loc", {});
+  const num = (x) => typeof x === "number" && Number.isFinite(x);
+  if (v.lat === undefined && v.lon === undefined) return JAEN_LOC;
+  if (!num(v.lat) || !num(v.lon)) return aparta("wp_loc", "lat/lon no son números"), JAEN_LOC;
+  return { lat: v.lat, lon: v.lon };
 };
 // pinta el overlay: n = contador de encontrados (o null al arrancar, sin dato aun)
 function setLoading(on, n) {
@@ -1716,7 +1801,15 @@ async function runScrape(kw, since, titleOnly) {
     if (ctrl !== scrapeCtrl) { const e = new Error("scrape superado"); e.name = "AbortError"; throw e; }
     curCsvScrape = Date.now(); // CSV recién generado: base para la edad real de cada anuncio
     loadCSV(text, csv);
-    cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
+    // Un CSV parcial (rama caída, 403 de DataDome, botón parar) se guardaba como definitivo: al
+    // volver a abrir la búsqueda se servía el recorte desde cache y no se re-scrapeaba nunca más.
+    // No se cachea Y se dice por qué. El cache anterior, si lo hay, se respeta: es mejor que este.
+    const diag = Rebusca.lastScrape;
+    if (diag && diag.parcial) {
+      snack(diag.abortado
+        ? "Búsqueda parada: resultado parcial, no se guarda"
+        : `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`, null);
+    } else cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
   } finally {
@@ -2053,11 +2146,17 @@ function fromURL() {
   if (words.length) { const d = drawerOf(csvNameOf(q, since)); exclMap[d] = uni(exclMap[d] || [], words); saveExcl(); } // se aplican al renderizar
   // ?maxp=/&maxd= (precio/antigüedad máximos) = los topes del cajón: se aplican al renderizar,
   // igual que si los hubieras tecleado en el menú ⚙ (y quedan guardados para la próxima).
-  const lim = {};
+  // `NaN > 0` es false, así que un ?maxp=barato se descartaba sin decir nada y el usuario veía
+  // resultados por encima de su tope creyendo que el enlace lo aplicaba.
+  const lim = {}, malos = [];
   for (const [k, c] of [["maxp", "precio"], ["maxd", "dias"]]) {
-    const v = parseFloat(p.get(k));
+    const crudo = p.get(k);
+    if (crudo == null) continue;
+    const v = parseFloat(crudo);
     if (v > 0) lim[c] = v;
+    else malos.push(`${k}=${crudo}`);
   }
+  if (malos.length) setTimeout(() => snack(`Tope del enlace ignorado: ${malos.join(", ")}`, null), 0);
   if (Object.keys(lim).length) {
     Object.assign((limMap[drawerOf(csvNameOf(q, since))] ||= {}), lim);
     saveLimits();
@@ -2073,11 +2172,20 @@ function fromURL() {
 
 // arranque: sin perfiles, un usuario por navegador. Hidrata estado y restaura la última búsqueda.
 // queueMicrotask difiere el boot a tras evaluar el módulo -> render() no toca consts en TDZ (p.ej. `col`).
+// El boot era una promesa sin catch: cualquier fallo dentro moría en un unhandledrejection y
+// la app se quedaba a medio arrancar, en blanco y sin una línea en consola. Ahora el fallo se
+// ve, y se intenta render() igual: llegar a los favoritos importa más que arrancar entero.
 queueMicrotask(async () => {
-  await hydrateStores(); // CSVs y cache de filas desde IndexedDB (y migra los que quedaran en localStorage)
-  hydrateEstado();
-  render();
-  if (!fromURL()) restoreLastCsv(); // ?q=… dispara su búsqueda; si no, la última vista
+  try {
+    await hydrateStores(); // CSVs y cache de filas desde IndexedDB (y migra los que quedaran en localStorage)
+    hydrateEstado();
+    render();
+    if (!fromURL()) restoreLastCsv(); // ?q=… dispara su búsqueda; si no, la última vista
+  } catch (e) {
+    console.error("Rebusca: el arranque falló", e);
+    snack("El arranque falló: " + (e.message || e), null);
+    try { render(); } catch (e2) { console.error("Rebusca: render() tampoco arrancó", e2); }
+  }
 });
 
 // ── modo swipe (tinder): una tarjeta a la vez; arrastra ← rechazar / → favorito ──
@@ -2563,6 +2671,11 @@ async function dossierFav(btn) {
     );
     setAisent(rows, originCsv); // el PDF también es un lote enviado: su ?keep resuelve el resto
     window.print();
+  } catch (e) {
+    // Solo había `finally`: el throw se perdía en un unhandledrejection, el botón volvía a su
+    // sitio y el usuario veía un botón que no hace nada. Y setAisent ya había marcado el lote.
+    console.error("Rebusca: el dossier falló", e);
+    snack("No se pudo preparar el dossier: " + (e.message || e), null);
   } finally {
     btn.disabled = false;
     btn.textContent = prev;

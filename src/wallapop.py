@@ -22,6 +22,7 @@ def title_matches(title, keywords):   # todas las palabras del término aparecen
 
 
 _TOK = re.compile(r'\(|\)|"[^"]*"|[^\s()]+')
+MAX_RAMAS = 32   # ponytail: tope anti-explosión del producto cartesiano (igual que scrape.js)
 
 
 def branches(keywords):
@@ -60,15 +61,26 @@ def branches(keywords):
         t = nxt()
         if t == "(":
             inner = p_expr()
-            if peek() == ")":
-                nxt()
+            # Antes: `if peek() == ")": nxt()`. Sin cierre, el resto de tokens se quedaba sin
+            # consumir y la búsqueda salía recortada sin error. Mismo cambio que en scrape.js.
+            if peek() != ")":
+                raise ValueError(f"falta un paréntesis de cierre en: {keywords}")
+            nxt()
             return inner
         if t and len(t) >= 2 and t[0] == '"' == t[-1]:
             return [t[1:-1].strip()]
         return [t]
 
     res = [b.strip() for b in p_expr() if b.strip()]
-    return (res or [keywords.strip()])[:32]   # ponytail: tope anti-explosión del producto cartesiano
+    # Un ')' de más paraba el parser a media expresión y lo que sobraba se tiraba en silencio.
+    if i[0] < len(toks):
+        raise ValueError(f"sobra un paréntesis de cierre en: {keywords}")
+    if not res:
+        raise ValueError(f"la búsqueda no tiene ninguna palabra: {keywords}")
+    # El `[:32]` recortaba combinaciones sin avisar: se pedían 40 ramas y se buscaban 32.
+    if len(res) > MAX_RAMAS:
+        raise ValueError(f"la búsqueda da {len(res)} ramas OR (máximo {MAX_RAMAS}): acótala")
+    return res
 
 API = "https://api.wallapop.com/api/v3/search"
 HEADERS = {"X-DeviceOS": "0", "User-Agent": "Mozilla/5.0", "Accept": "application/json",
@@ -123,7 +135,7 @@ def _warn(msg):
     print("  ! " + msg, file=sys.stderr)
 
 
-def search(keywords, lat, lon, order_by=None, time_filter=None):
+def search(keywords, lat, lon, order_by=None, time_filter=None, incidencias=None):
     """Generador: suelta cada PÁGINA de items segun llega, para escribir a disco ya.
 
     order_by='newest' -> mas reciente primero. time_filter='today'|'lastWeek'|'lastMonth'
@@ -138,6 +150,11 @@ def search(keywords, lat, lon, order_by=None, time_filter=None):
             d = get(params)
         except Blocked as e:
             _warn(f"parada por bloqueo: {e}")
+            # El aviso se perdía entre el ruido y main() seguía como si nada: borraba el sidecar,
+            # ordenaba, imprimía "N resultados" y salía con codigo 0. Un CSV recortado por un
+            # bloqueo parecía un scrape completo. `incidencias` lleva eso hasta el codigo de salida.
+            if incidencias is not None:
+                incidencias.append(f"rama {keywords!r}: {e}")
             return                    # lo ya escrito a disco esta a salvo
         yield d["data"]["section"]["payload"]["items"]
         nxt = d.get("meta", {}).get("next_page")
@@ -167,7 +184,9 @@ def row(it, origin):
     lat, lon = loc.get("latitude"), loc.get("longitude")
     dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if lat and lon else ""
     ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
-    dias = round((time.time() * 1000 - ca) / 86400000, 1) if ca else ""
+    # Sin comprobar el tipo, un created_at en segundos descartaba todo por viejo y uno de texto
+    # reventaba la resta. Mismo criterio que scrape.js: fuera del rango esperado -> celda vacía.
+    dias = round((time.time() * 1000 - ca) / 86400000, 1) if isinstance(ca, (int, float)) and not isinstance(ca, bool) else ""
     tax = it.get("taxonomy") or []   # breadcrumb de categorias; la hoja es la mas especifica
     return {
         "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
@@ -218,7 +237,9 @@ def main():
     if len(brs) > 1:
         print(f"búsqueda OR: {len(brs)} ramas -> {brs}", file=sys.stderr)
     seen = set()   # ids ya escritos: dedup al unir las ramas (un anuncio puede salir en varias)
-    state = {"n": 0}
+    # motivos por los que el CSV puede estar incompleto. list.append es atomico: no hace falta lock.
+    incidencias = []
+    state = {"n": 0, "sin_id": 0}
     lock = threading.Lock()   # protege writer, seen, contador y prog (la red va fuera del lock)
     stop = threading.Event()  # límite alcanzado o Ctrl-C -> todas las ramas paran
     prog = Path(str(a.out) + ".progress")   # sidecar con el contador de encontrados; el server lo lee en vivo
@@ -229,13 +250,18 @@ def main():
         w.writeheader()
 
         def scrape_branch(kw):        # una rama OR: se pagina secuencial (cursor), pero varias ramas van en paralelo
-            for page in search(kw, a.lat, a.lon, order_by, time_filter):
+            for page in search(kw, a.lat, a.lon, order_by, time_filter, incidencias):
                 if stop.is_set():
                     return
                 old = False
                 with lock:            # el fetch (search) fue fuera del lock; aquí solo escritura rápida
                     for it in page:
                         r = row(it, origin)
+                        # Sin id no hay dedup posible: todos caían como "duplicados" del primer
+                        # id vacío y no se contaban. Mismo cambio que en scrape.js.
+                        if not r["id"]:
+                            state["sin_id"] += 1
+                            continue
                         if r["id"] in seen:
                             continue                  # ya lo trajo otra rama
                         if a.title_only and not title_matches(r["titulo"], kw):
@@ -267,10 +293,22 @@ def main():
                 list(ex.map(scrape_branch, brs))
         except KeyboardInterrupt:
             stop.set()                # corte limpio: lo ya flusheado queda intacto
+            # `stop.set()` aquí llega tarde: el __exit__ del ThreadPoolExecutor ya esperó a todos
+            # los workers. Lo que sí arregla es el codigo de salida: antes un Ctrl-C se tragaba
+            # y el script imprimía "N resultados" y salía con 0, como un scrape completo.
+            incidencias.append("interrumpido con Ctrl-C")
     prog.unlink(missing_ok=True)      # busqueda acabada: fuera el sidecar
     print(f"{state['n']} resultados -> {a.out}")
+    if state["sin_id"]:
+        print(f"AVISO: {state['sin_id']} anuncios sin id, descartados", file=sys.stderr)
     if a.max_km is None:             # ordenar por cercania solo si no filtramos ya
         _sort_by_km(a.out)
+    # Un CSV recortado no puede salir con codigo 0: quien encadene este comando tiene que verlo.
+    if incidencias:
+        print(f"AVISO: el CSV está INCOMPLETO ({len(incidencias)} incidencias):", file=sys.stderr)
+        for x in incidencias:
+            print(f"  - {x}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _sort_by_km(path):
@@ -308,6 +346,23 @@ def demo():
     assert branches("(a OR b) (c OR d)") == ["a c", "a d", "b c", "b d"], "branches: producto de dos grupos"
     assert branches('"be quiet" OR corsair') == ["be quiet", "corsair"], "branches: frase entre comillas"
     assert branches("corsair OR seasonic gold") == ["corsair", "seasonic gold"], "branches: OR liga más flojo que el espacio"
+    # lo que antes se recortaba en silencio ahora lanza (mismos casos que el demo de scrape.js)
+    def _lanza(kw, frag):
+        try:
+            branches(kw)
+        except ValueError as e:
+            assert frag in str(e), f"branches({kw!r}): mensaje inesperado {e}"
+            return
+        assert False, f"branches({kw!r}) no lanzó"
+    _lanza("(corsair OR seasonic gold", "falta un paréntesis")
+    _lanza("corsair) gold", "sobra un paréntesis")
+    _lanza("   ", "ninguna palabra")
+    _lanza("(a | b | c | d) (e | f | g | h) (i | j | k)", "máximo 32")
+    assert len(branches("(a | b | c | d) (e | f | g | h)")) == 16, "branches: 16 ramas sí pasan"
+    # forma inesperada de created_at -> celda vacía, no una excepción ni un número absurdo
+    assert row({"id": "d", "title": "x", "location": {}, "created_at": "ayer"}, (0, 0))["dias"] == ""
+    assert isinstance(row({"id": "d", "title": "x", "location": {},
+                           "created_at": time.time() * 1000 - 86400000}, (0, 0))["dias"], float)
     assert _deemoji("Aleron 🔥 AMG 🚗💨") == "Aleron AMG", "deemoji: quita emojis y colapsa huecos"
     assert _deemoji("café ñ 5€ ✅") == "café ñ 5€", "deemoji: conserva acentos/€, quita check"
     assert _deemoji("🇪🇸 España") == "España", "deemoji: quita banderas"

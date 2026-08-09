@@ -60,8 +60,18 @@ def stamp_versions(html, mtimes):
 def stamped_mtimes(html):
     # Descubre solo los estáticos locales referenciados en el HTML que existen en disco.
     # Automático: añadir/quitar un <script>/<link>/<img> se cachebustea sin tocar este fichero.
-    return {f: int((HERE / f).stat().st_mtime)
-            for f in REF.findall(html) if (HERE / f).is_file()}
+    # Un fichero referenciado que NO existe se descartaba en silencio: la portada salía 200 con
+    # una ref rota y sin ?v=, así que Cloudflare cacheaba el 404 cuatro horas. Ahora deja rastro.
+    encontrados, faltan = {}, []
+    for f in REF.findall(html):
+        if (HERE / f).is_file():
+            encontrados[f] = int((HERE / f).stat().st_mtime)
+        elif "://" not in f:   # una URL externa no tiene por qué existir en disco
+            faltan.append(f)
+    if faltan:
+        print(f"AVISO: index.html referencia ficheros que no existen: {', '.join(faltan)}",
+              file=sys.stderr, flush=True)
+    return encontrados
 
 
 class H(SimpleHTTPRequestHandler):
@@ -107,8 +117,19 @@ class H(SimpleHTTPRequestHandler):
             return None
         return super().send_head()   # app.js/app.css/scrape.js/imágenes (anti-traversal propio)
 
-    def log_message(self, *a):   # menos ruido
+    # Solo el access-log. Antes esto era `log_message`, y BaseHTTPRequestHandler delega
+    # log_error EN log_message: silenciaba TODOS los errores del server, así que el journal
+    # del VPS salía vacío pasara lo que pasara. log_error se deja como está (a stderr).
+    def log_request(self, *a):   # menos ruido
         pass
+
+    def log_error(self, fmt, *a):
+        # Un dominio público recibe bots probando rutas todo el día: el 404 es ruido esperado.
+        # Todo lo demás (500, 501, errores de socket) SÍ va al journal. Eso es lo nuevo.
+        msg = fmt % a if a else fmt
+        if msg.startswith("code 404"):
+            return
+        super().log_error(fmt, *a)
 
 
 def demo():

@@ -642,6 +642,26 @@ async function main() {
     ok(b2.q("#scrape").disabled === false, "tras parar, el botón Buscar se quedó bloqueado");
   }
 
+  // ── 31b. un resultado PARCIAL no se cachea ni se da por bueno ──
+  // scrape() resuelve con lo que haya recogido aunque una rama OR se caiga (403 de DataDome) o
+  // aunque el usuario pare. Se cacheaba igual, así que reabrir esa búsqueda servía el recorte
+  // desde cache y no volvía a scrapear nunca: los anuncios que faltaban se perdían para siempre.
+  {
+    const b = await boot({}, { timers: true, scrape: async () => CSV });
+    b.sandbox.Rebusca.lastScrape = { ramas: 2, ramasRotas: 1, sinId: 0, abortado: false, parcial: true };
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ok(ev(b, "data.length") === 3, "el resultado parcial ni se pintó");
+    ok(!ev(b, 'csvIndex["ford.csv"]'), "un resultado parcial se guardó en cache como definitivo");
+    ok(/incompleto/i.test(b.q("#snackmsg").textContent), "no avisó de que el resultado es parcial: " + b.q("#snackmsg").textContent);
+    // el completo sí se cachea: el aviso no puede costar el cache de una búsqueda buena
+    b.sandbox.Rebusca.lastScrape = { ramas: 1, ramasRotas: 0, sinId: 0, abortado: false, parcial: false };
+    await b.q("#scrape").click();
+    await flush();
+    ok(!!ev(b, 'csvIndex["ford.csv"]'), "un resultado completo no se guardó en cache");
+  }
+
   // ── 32. gesto de arrastre del mazo: los umbrales de decide() y el eje del arrastre ──
   // Los botones del mazo (#swYes/#swNo) sí se probaban; el dedo, que es como se usa de verdad, no.
   {

@@ -34,8 +34,21 @@
     return 2 * r * Math.asin(Math.sqrt(a));
   }
 
+  // La forma de la respuesta de la API es un invariante: si un campo cambia, se pierde en TODAS
+  // las filas a la vez. Un aviso por campo y sesión, para no llenar la consola con 60 items.
+  const avisados = new Set();
+  const avisaForma = (campo, valor) => {
+    if (avisados.has(campo)) return;
+    avisados.add(campo);
+    console.error(`Rebusca: el campo "${campo}" de la API cambió de forma; se pierde en todas las filas. Valor:`, valor);
+  };
+
   // expande una búsqueda booleana OR a ramas (mismo parser que wallapop.py branches)
   const TOK = /\(|\)|"[^"]*"|[^\s()]+/g;
+  const MAX_RAMAS = 32; // más ramas = más peticiones de las que Wallapop deja hacer seguidas
+  // Único sitio del proyecto donde se lanza en vez de avisar: el error YA tiene receptor (el
+  // onclick de Buscar y loadQuery hacen snack("No se pudo buscar: " + e.message)). Lanzar
+  // cancela una búsqueda que iba a salir mal igual; no deja la app en blanco.
   function branches(keywords) {
     const toks = keywords.match(TOK) || [];
     let i = 0;
@@ -55,12 +68,33 @@
     }
     function pFactor() {
       const t = nxt();
-      if (t === "(") { const inner = pExpr(); if (peek() === ")") nxt(); return inner; }
+      if (t === "(") {
+        const inner = pExpr();
+        // Antes: `if (peek() === ")") nxt();`. Sin cierre, el paréntesis se tragaba y la
+        // búsqueda salía recortada. "(corsair OR seasonic gold" buscaba menos de lo pedido.
+        if (peek() !== ")") throw new Error(`falta un paréntesis de cierre en: ${keywords}`);
+        nxt();
+        return inner;
+      }
       if (t && t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') return [t.slice(1, -1).trim()];
       return [t];
     }
     const res = pExpr().map((b) => b.trim()).filter(Boolean);
-    return (res.length ? res : [keywords.trim()]).slice(0, 32);
+    // Un `)` de más paraba el parser a media expresión y lo que sobraba se tiraba sin error.
+    if (i < toks.length) throw new Error(`sobra un paréntesis de cierre en: ${keywords}`);
+    if (!res.length) throw new Error(`la búsqueda no tiene ninguna palabra: ${keywords}`);
+    // El `.slice(0, 32)` recortaba combinaciones en silencio: el usuario pedía 40 ramas, se
+    // buscaban 32, y el resultado parecía completo.
+    if (res.length > MAX_RAMAS) throw new Error(`la búsqueda da ${res.length} ramas OR (máximo ${MAX_RAMAS}): acótala`);
+    return res;
+  }
+
+  // null/ausente = anuncio sin precio, legítimo. Cualquier otra forma = la API cambió.
+  function precioDe(it) {
+    const p = it.price;
+    if (p == null) return "";
+    if (typeof p === "object" && p.amount != null) return p.amount;
+    return avisaForma("price", p), "";
   }
 
   function row(it, origin) {
@@ -68,12 +102,21 @@
     const lat = loc.latitude, lon = loc.longitude;
     const dist = lat && lon ? round1(haversineKm(origin[0], origin[1], lat, lon)) : "";
     const ca = it.created_at;               // epoch ms
-    const dias = ca ? round1((Date.now() - ca) / 86400000) : "";
+    // Sin comprobar el tipo: un created_at en segundos descartaba TODOS los anuncios por viejos,
+    // y uno no numérico daba NaN, que no es "" ni mayor que maxDays -> el filtro de frescura
+    // dejaba de filtrar y nadie se enteraba.
+    let dias = "";
+    if (ca != null && ca !== "") {
+      if (typeof ca === "number" && Number.isFinite(ca)) dias = round1((Date.now() - ca) / 86400000);
+      else avisaForma("created_at", ca);
+    }
     const tax = it.taxonomy || [];
     return {
       id: it.id || "",
       titulo: deemoji(it.title),
-      precio: it.price ? it.price.amount : "",
+      // `it.price ? it.price.amount : ""` daba celda vacía cuando `price` cambiaba de forma, y
+      // eso es indistinguible de "este anuncio no tiene precio". El precio es el producto entero.
+      precio: precioDe(it),
       categoria: tax.length ? tax[tax.length - 1].name : "",
       descripcion: deemoji(it.description || ""),
       ciudad: loc.city || "",
@@ -137,22 +180,37 @@
     const origin = [lat, lon];
     const seen = new Set();
     const rows = [];
+    // Canal único de "este resultado está incompleto". Antes, una rama caída, un 403 de DataDome
+    // y un scrape completo daban exactamente el mismo CSV: el llamador no podía distinguirlos y
+    // lo cacheaba como definitivo. `scrape()` sigue devolviendo un string, así que nada cambia
+    // para quien no mire el diagnóstico.
+    const diag = { ramas: 0, ramasRotas: 0, sinId: 0, abortado: false, parcial: false };
     const finish = () => {
       // ordena por cercanía al terminar (el server siempre lo hace: nunca pasa --max-km)
       rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
+      diag.parcial = diag.ramasRotas > 0 || diag.abortado;
+      api.lastScrape = diag;
+      if (diag.parcial) console.warn("Rebusca: scrape incompleto", diag);
+      if (diag.sinId) console.warn(`Rebusca: ${diag.sinId} anuncios sin id, descartados`);
       return toCSV(rows);
     };
-    for (const kw of branches(keywords)) {
+    const ramas = branches(keywords);
+    diag.ramas = ramas.length;
+    for (const kw of ramas) {
       let params = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
       if (orderBy) params.order_by = orderBy;
       if (tf) params.time_filter = tf;
       let old = false;
       while (!old) {
-        if (signal && signal.aborted) return finish();
+        if (signal && signal.aborted) { diag.abortado = true; return finish(); }
         let d;
         try { d = await getJSON(API + "?" + new URLSearchParams(params), signal); }
         catch (e) {
-          if (e.name === "AbortError") return finish();
+          if (e.name === "AbortError") { diag.abortado = true; return finish(); }
+          // El `break` era mudo: ni consola, ni contador, ni marca. Con todas las ramas caídas,
+          // scrape() resolvía con un CSV de solo cabecera y eso se leía como "no hay nada".
+          console.error(`Rebusca: la rama "${kw}" se corta`, e);
+          diag.ramasRotas++;
           if (String(e.message).startsWith("403")) break;   // bloqueo: corta esta rama, conserva lo ya recogido
           // `break`, igual que el 403: muere ESTA rama, las siguientes se piden igual. Lo ya
           // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). Sin filas
@@ -163,6 +221,9 @@
         const items = (((d || {}).data || {}).section || {}).payload;
         for (const it of (items && items.items) || []) {
           const r = row(it, origin);
+          // Sin id no hay dedup ni clasificación. Antes caían todos como "duplicados" del
+          // primer id vacío, sin contarse: la lista salía corta y nadie sabía por qué.
+          if (!r.id) { diag.sinId++; continue; }
           if (seen.has(r.id)) continue;
           if (titleOnly && !titleMatches(r.titulo, kw)) continue;
           if (maxDays != null) {
@@ -205,6 +266,22 @@
     eq("(a OR b) (c OR d)", ["a c", "a d", "b c", "b d"], "producto");
     eq('"be quiet" OR corsair', ["be quiet", "corsair"], "frase comillas");
     eq("corsair OR seasonic gold", ["corsair", "seasonic gold"], "OR liga flojo");
+    // lo que antes se recortaba en silencio ahora lanza
+    const lanza = (fn, frag, m) => {
+      try { fn(); } catch (e) { a(String(e.message).includes(frag), m + " (mensaje: " + e.message + ")"); return; }
+      a(false, m + ": no lanzó");
+    };
+    lanza(() => branches("(corsair OR seasonic gold"), "falta un paréntesis", "paréntesis sin cerrar");
+    lanza(() => branches("corsair) gold"), "sobra un paréntesis", "paréntesis de más");
+    lanza(() => branches("   "), "ninguna palabra", "búsqueda vacía");
+    // ojo: el tokenizador parte por espacios, así que "a|b" es UN token, no un OR
+    lanza(() => branches("(a | b | c | d) (e | f | g | h) (i | j | k)"), "máximo 32", "tope de ramas");
+    a(branches("(a | b | c | d) (e | f | g | h)").length === 16, "16 ramas sí pasan");
+    // forma inesperada de la API: celda vacía, pero con rastro en consola
+    a(row({ id: "p", title: "x", price: { amount: 0 }, location: {} }, [0, 0]).precio === 0, "precio 0 no es vacío");
+    a(row({ id: "p", title: "x", price: 5, location: {} }, [0, 0]).precio === "", "precio escalar -> vacío");
+    a(row({ id: "d", title: "x", location: {}, created_at: "ayer" }, [0, 0]).dias === "", "created_at no numérico -> vacío");
+    a(typeof row({ id: "d", title: "x", location: {}, created_at: Date.now() - 86400000 }, [0, 0]).dias === "number", "created_at ms -> número");
     a(deemoji("Aleron 🔥 AMG 🚗💨") === "Aleron AMG", "deemoji colapsa");
     a(deemoji("café ñ 5€ ✅") === "café ñ 5€", "deemoji conserva acentos/€");
     a(deemoji("🇪🇸 España") === "España", "deemoji banderas");

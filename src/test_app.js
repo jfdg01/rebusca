@@ -481,6 +481,9 @@ async function main() {
     const CASOS = [
       ["wp_excl", "5", "un objeto donde va un objeto"],
       ["wp_excl", "{", "un JSON que ni parsea"],
+      // el blob entero: era el único descarte mudo que quedaba (un try/catch vacío en hydrateEstado)
+      ["wp_estado", "{", "un JSON que ni parsea"],
+      ["wp_estado", "5", "un escalar donde va el blob"],
       ["wp_blocksel", '{"a":1}', "un objeto donde va una lista"],
       ["wp_rejected", '{"ford.csv":5}', "un cajón que no es lista de ids"],
       ["wp_searches", '[{"csv":"ford.csv","rows":2,"mtime":1},{"rows":9}]', "una entrada sin csv"],
