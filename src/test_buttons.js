@@ -475,12 +475,17 @@ async function main() {
     const quitar = byClass(b.q("tbody"), "quitar");
     ok(quitar.length === 1 && String(quitar[0].textContent) === "Quitar",
       "la fila de favoritos no pintó su botón Quitar");
+    // el rojo de reposo (app.css) lo lleva el botón que destruye, no el que restaura
+    ok(!String(quitar[0].className).includes("restaura"),
+      "el botón que destruye salió con la pinta neutra de Restaurar: " + quitar[0].className);
     quitar[0].click();
     ok(!bucket(b, "favorite").includes("a1"), "'Quitar' no sacó el anuncio de favoritos");
     ok(bucket(b, "rejected").includes("a1"), "'Quitar' desde favoritos debería rechazar el anuncio");
     ev(b, 'view = "rejected"; render()');
     const restaurar = byClass(b.q("tbody"), "quitar");
     ok(String(restaurar[0].textContent) === "Restaurar", "en la papelera el botón debería decir Restaurar");
+    ok(String(restaurar[0].className).includes("restaura"),
+      "Restaurar salió con el rojo del botón que destruye: " + restaurar[0].className);
     restaurar[0].click();
     ok(bucket(b, "rejected").length === 0, "'Restaurar' no sacó el anuncio de la papelera");
   }

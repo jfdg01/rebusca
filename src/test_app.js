@@ -923,6 +923,14 @@ async function main() {
       fail(`#${id} no es una región viva: ` + tag);
   }
 
+  // 12j. el botón que destruye es rojo en REPOSO: en un móvil no hay ratón y un rojo que solo
+  //      sale con :hover no lo ve nadie.
+  {
+    const css = fs.readFileSync(path.join(__dirname, "app.css"), "utf8");
+    const reposo = (css.match(/\.btn\.quitar \{[^}]*\}/) || [])[0] || "";
+    if (!/#b03024/.test(reposo)) fail("el botón Quitar no es rojo en reposo: " + reposo);
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

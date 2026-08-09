@@ -897,7 +897,8 @@ function rowTr(r) {
       ver.setAttribute("aria-disabled", "true");
     }
     const quit = document.createElement("button");
-    quit.className = "btn quitar";
+    // el rojo de reposo lo lleva el botón que destruye; en la papelera el mismo botón restaura
+    quit.className = "btn quitar" + (view === "rejected" ? " restaura" : "");
     quit.textContent = view === "rejected" ? "Restaurar" : "Quitar";
     quit.onclick = () =>
       view === "rejected"
