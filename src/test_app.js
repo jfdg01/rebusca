@@ -16,6 +16,7 @@ const APP = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
 // Estado inicial real de cada id según el HTML (hidden/disabled/value): sin esto un
 // `#swipeMenu` que nace oculto arrancaría visible en el test y taparía el bug de verdad.
 const HTML = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+const CSS = fs.readFileSync(path.join(__dirname, "app.css"), "utf8");
 
 // CSV de juguete con las columnas que produce scrape.js
 // las columnas salen del scraper, no de una copia a mano: una columna nueva descolocaba las
@@ -937,9 +938,8 @@ async function main() {
   // 12j. el botón que destruye es rojo en REPOSO: en un móvil no hay ratón y un rojo que solo
   //      sale con :hover no lo ve nadie.
   {
-    const css = fs.readFileSync(path.join(__dirname, "app.css"), "utf8");
-    const reposo = (css.match(/\.btn\.quitar \{[^}]*\}/) || [])[0] || "";
-    if (!/#b03024/.test(reposo)) fail("el botón Quitar no es rojo en reposo: " + reposo);
+    const reposo = (CSS.match(/\.btn\.quitar \{[^}]*\}/) || [])[0] || "";
+    if (!/--danger/.test(reposo)) fail("el botón Quitar no es rojo en reposo: " + reposo);
   }
 
   // 12k. manifest: sin él la app no se instala en la pantalla de inicio. Un icono con la ruta mal
@@ -1004,6 +1004,22 @@ async function main() {
     const tag = (HTML.match(/<input[^>]*id="kw"[^>]*>/) || [])[0] || ""; // el tag ocupa varias líneas; [^>] las cruza
     if (!/placeholder="[^"]*\bOR\b[^"]*"/.test(tag)) fail("el buscador no enseña la gramática OR: " + tag);
     if (!/aria-label="/.test(tag)) fail("el buscador se quedó sin nombre accesible: " + tag);
+  }
+
+  // 12o. el modo oscuro no se pudre (item 23). Solo se invierten variables, así que un color
+  //      escrito a pelo en una regla se queda claro sobre fondo oscuro y nadie lo ve hasta prod.
+  {
+    const dark = (CSS.match(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n  \}\n/) || [])[0];
+    if (!dark) fail("no hay bloque @media (prefers-color-scheme: dark) en app.css");
+    for (const v of dark.match(/--[\w-]+(?=:)/g) || [])
+      if (!new RegExp("^\\s*\\" + v + ":", "m").test(CSS.slice(0, CSS.indexOf(dark))))
+        fail("el modo oscuro redefine " + v + ", que no existe en :root");
+    // blancos y negros sobre sólidos de marca (--pine/--amber/--danger) o sobre foto: iguales en los dos temas
+    const OK = /^(#fff|#ffffff|#000|#f3f5f1|#fff0)$/i;
+    const cuerpo = CSS.slice(CSS.indexOf(dark) + dark.length, CSS.indexOf("@media print"));
+    for (const [linea] of cuerpo.matchAll(/^.*#[0-9a-f]{3,8}\b.*$/gim))
+      for (const c of linea.match(/#[0-9a-f]{3,8}\b/gi) || [])
+        if (!OK.test(c)) fail("color a pelo fuera de :root, no se invierte en oscuro: " + linea.trim());
   }
 
   // 12. el scraper del browser (scrape.js) sigue verde

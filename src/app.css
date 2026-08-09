@@ -15,10 +15,48 @@
     --amber-ink: #8A5E0F;  /* ámbar como enlace/hover sobre superficies claras */
     --ship-no: #9C4E00;    /* "sin envío": naranja oscuro legible sobre paper/surface */
     --pine-soft: #D3F1EC;  /* tinte teal para fondos suaves / track del spinner */
+    --line-strong: #B7BCB0; /* borde de los botones: un punto más marcado que --line */
+    --line-hover: #9CA298;
+    --amber-soft: #FBF1DC;  /* banda de aviso ámbar, con --ink encima */
+    --danger: #b03024;     /* rojo sólido: siempre con blanco encima */
+    --danger-hover: #c0392b;
+    --danger-ink: #b03024; /* rojo como texto/borde sobre superficies claras */
+    --danger-ink-hover: #8f251b;
+    --danger-line: #d0a59f;
+    /* la barra de deshacer va oscura en los dos temas, como cualquier toast: no se invierte */
+    --snack-bg: #1B211E;
+    --snack-ink: #f4f5f1;
+    --snack-line: #565e59;
+    --snack-hover: #2b322e;
     /* gutter del body; las bandas edge-to-edge lo anulan con margen negativo.
        max(gutter, (100vw-600)/2): <600px fluido con gutter normal; >600px el cuerpo
        se clava a 600px centrado y el resto es blanco. Sin @media, transición continua. */
     --bleed: max(clamp(.75rem, 2vw, 1.5rem), (100vw - 600px) / 2);
+    color-scheme: light dark;   /* barras de scroll y controles nativos siguen al tema */
+  }
+  /* modo oscuro: solo se redefinen las variables. Los sólidos de marca (--pine, --amber,
+     --danger, --ship-no) NO se aclaran: llevan texto blanco encima y, subidos de luz,
+     ese blanco deja de pasar el contraste AA. Lo que sí sube es su versión "ink", que es
+     la que se lee como texto sobre el papel. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #141816;
+      --surface: #1D2320;
+      --surface-2: #262D29;
+      --field: #2A322E;
+      --ink: #E7EBE6;
+      --ink-soft: #A3ACA5;
+      --line: #3A423D;
+      --line-strong: #4A534D;
+      --line-hover: #5A635B;
+      --amber-soft: #3A2F14;
+      --pine-ink: #5FD6C6;
+      --amber-ink: #E0B564;
+      --pine-soft: #123B37;
+      --danger-ink: #FF9184;
+      --danger-ink-hover: #FFB4AA;
+      --danger-line: #6B3B36;
+    }
   }
   * { box-sizing: border-box; }
   main { display: contents; }   /* landmark a11y sin caja: el full-bleed sigue midiendo contra el body */
@@ -160,12 +198,12 @@
   }
   input[type=search] { min-width: 180px; flex: 1 1 100%; max-width: none; }
   button {
-    padding: .38rem .7rem; border: 1px solid #B7BCB0; border-radius: 6px;
+    padding: .38rem .7rem; border: 1px solid var(--line-strong); border-radius: 6px;
     background: var(--surface); color: var(--ink); cursor: pointer;
     box-shadow: 0 2px 5px rgba(27,33,30,.16);
     transition: box-shadow .12s, transform .05s, background .12s, border-color .12s;
   }
-  button:hover { background: var(--surface-2); border-color: #9CA298;
+  button:hover { background: var(--surface-2); border-color: var(--line-hover);
     box-shadow: 0 3px 8px rgba(27,33,30,.2); }
   button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(27,33,30,.14); }
   /* botones de acento (pino): sólidos, redondeados, con sombra proyectada */
@@ -204,7 +242,7 @@
   .seller-banner {
     margin: 0 calc(-1 * (var(--bleed) + .8rem));
     padding: .7rem calc(var(--bleed) + .9rem);
-    background: #FBF1DC; border-bottom: 1px solid var(--line);
+    background: var(--amber-soft); border-bottom: 1px solid var(--line);
     font: 12px/1.35 var(--sans); color: var(--ink);
   }
   .seller-banner[hidden] { display: none; }
@@ -218,11 +256,11 @@
   .sb-info { min-width: 0; white-space: nowrap; color: var(--ink-soft); }
   .sb-info b { color: var(--ink); }
   .sb-info .link { color: var(--amber-ink); cursor: pointer; text-decoration: underline; }
-  .sb-block { flex: 0 0 auto; white-space: nowrap; color: #b03024; border-color: #d0a59f; background: var(--field); }
+  .sb-block { flex: 0 0 auto; white-space: nowrap; color: var(--danger-ink); border-color: var(--danger-line); background: var(--field); }
   /* banner estrecho (320px): encoge fila para que texto + botón quepan en una línea */
   .swipe-menu .sb-info { font-size: 12px; }
   .swipe-menu .sb-block { font-size: 10px; padding: .28rem .6rem; }
-  .sb-block:hover { color: #fff; background: #b03024; border-color: #b03024; }
+  .sb-block:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
   .stat .link[hidden] { display: none; }
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
@@ -287,9 +325,9 @@
   .rejected-bulk .tb-all input { width: 1.2rem; height: 1.2rem; accent-color: var(--pine); flex: 0 0 auto; }
   .rejected-bulk .btn { margin: 0; padding: .4rem .9rem; }
   .rejected-bulk .tb-empty { margin-left: auto; background: none; border: none; box-shadow: none;
-    color: #b03024; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: .3rem;
+    color: var(--danger-ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: .3rem;
     font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
-  .rejected-bulk .tb-empty:hover { background: none; box-shadow: none; color: #8f251b; }
+  .rejected-bulk .tb-empty:hover { background: none; box-shadow: none; color: var(--danger-ink-hover); }
   /* checkbox de selección por fila en la papelera: primero en la fila de acciones */
   .tb-check { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; accent-color: var(--pine); align-self: center; margin: 0; }
 
@@ -336,10 +374,10 @@
     color: var(--ink-soft); box-shadow: none; opacity: .55; pointer-events: none; }
   /* Quitar = destruye: rojo apagado YA en reposo. En un móvil no hay ratón, así que un rojo que
      solo sale con :hover no lo ve nadie. Mismos tonos que .sb-block (rojo/borde apagado). */
-  .btn.quitar { color: #b03024; border-color: #d0a59f; }
+  .btn.quitar { color: var(--danger-ink); border-color: var(--danger-line); }
   /* Restaurar es el mismo botón en la papelera y NO destruye nada: se queda neutro */
   .btn.quitar.restaura { color: var(--ink-soft); border-color: var(--line); }
-  .btn.quitar:hover, .btn.quitar:active { color: #fff; background: #b03024; border-color: #b03024;
+  .btn.quitar:hover, .btn.quitar:active { color: #fff; background: var(--danger); border-color: var(--danger);
     box-shadow: 0 2px 6px rgba(176,48,36,.3); }
   /* ── tarjeta de lista: la foto es el escaparate; el precio, su etiqueta ──
      media a sangre (ancho card + los dos paddings), la foto absoluta debajo de los overlays */
@@ -413,18 +451,18 @@
   /* snackbar de deshacer */
   .snack {
     position: fixed; left: 50%; bottom: 1.3rem; transform: translate(-50%, 140%);
-    background: var(--ink); color: #f4f5f1; padding: .6rem .7rem .6rem 1rem;
+    background: var(--snack-bg); color: var(--snack-ink); padding: .6rem .7rem .6rem 1rem;
     border-radius: 8px; display: flex; align-items: center; gap: .9rem;
     font: 12px var(--sans); box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 40;
   }
   .snack.show { transform: translate(-50%, 0); }
-  .snack button { background: none; border: 1px solid #565e59; color: #fff; }
-  .snack button:hover { background: #2b322e; }
+  .snack button { background: none; border: 1px solid var(--snack-line); color: #fff; }
+  .snack button:hover { background: var(--snack-hover); }
   @media (prefers-reduced-motion: no-preference) { .snack { transition: transform .22s ease; } }
 
   /* perfil: chip en cabecera con avatar del color de la persona */
   .chip { display: inline-flex; align-items: center; padding: .3rem .85rem;
-    border: 1px solid transparent; border-radius: 999px; cursor: pointer; color: #1A1E1B;
+    border: 1px solid transparent; border-radius: 999px; cursor: pointer; color: var(--ink);
     font: 700 11px var(--mono); letter-spacing: .02em; }
   .chip:hover { filter: brightness(1.08); }
   .chip.empty:hover { filter: none; border-color: var(--pine); }
@@ -513,7 +551,7 @@
   .swipe-hint:active { opacity: .5; transform: none; box-shadow: none; }
   .swipe-hint .icon { width: 21px; height: 21px; stroke-width: 2.4; }
   .swipe-hint.yes { color: var(--pine); }
-  .swipe-hint.no { color: #b03024; }
+  .swipe-hint.no { color: var(--danger-ink); }
   .swipe-stage { position: relative; flex: 1 1 auto; min-height: 0; width: min(440px, 100%); display: grid; place-items: center; }
   .swipe-done { color: var(--ink); text-align: center; font: 700 1.34rem var(--mono); }
 
@@ -540,7 +578,7 @@
   .sc-badge > span { border: 5px solid; border-radius: 12px; padding: .5rem 1.3rem;
     font: 800 1.94rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
   .sc-badge.like > span { color: var(--pine); transform: rotate(-9deg); }
-  .sc-badge.nope > span { color: #b03024; transform: rotate(9deg); }
+  .sc-badge.nope > span { color: var(--danger-ink); transform: rotate(9deg); }
 
   /* barra sutil de exclusión dentro del swipe: chips vetados + input pequeño, sin robar protagonismo a la tarjeta */
   .swipe-excl { width: min(440px, 100%); display: flex; flex-direction: column; gap: .6rem; padding: .5rem 0 0; }
@@ -556,7 +594,7 @@
   .swipe-actions { display: flex; justify-content: center; gap: .6rem; padding: 1.2rem 0 .4rem; width: min(440px, 100%); }
   .swipe-actions button { padding: .7rem 1.6rem; font-size: .94rem; }
   .swipe-actions button:disabled { opacity: .4; cursor: default; box-shadow: none; }
-  .swipe-actions button:disabled:hover { background: var(--surface); border-color: #B7BCB0; box-shadow: none; }
+  .swipe-actions button:disabled:hover { background: var(--surface); border-color: var(--line-strong); box-shadow: none; }
   .swipe-actions button.primary:disabled:hover { background: var(--pine); border-color: var(--pine); }
 
   /* ── gestión de búsquedas ──────────────────────────────── */
@@ -586,9 +624,9 @@
   .sc-new { color: var(--pine); }  /* lo único accionable de la ficha: anuncios sin triar */
   .sc-btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
   .sc-btns button { flex: 1 1 45%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }   /* 2 por fila en 320px */
-  .sc-btns .danger { color: #fff; background: #b03024; border-color: #b03024;
+  .sc-btns .danger { color: #fff; background: var(--danger); border-color: var(--danger);
     box-shadow: 0 1px 3px rgba(176,48,36,.35), inset 0 1px 0 rgba(255,255,255,.2); }
-  .sc-btns .danger:hover { background: #c0392b; border-color: #c0392b; }
+  .sc-btns .danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
 
 /* ── PDF dossier de favoritos: oculto en pantalla, único visible al imprimir ── */
 #dossier { display: none; }
