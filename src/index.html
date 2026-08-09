@@ -191,7 +191,12 @@
                 data-icon="list"
             ></button>
         </div>
-        <div class="excl" id="excl" hidden>
+        <!-- plegado por defecto: con resultados en pantalla, la cabecera se comía la mitad del
+             móvil y las cartas empezaban fuera de la vista. Se abre solo si el cajón ya veta algo. -->
+        <details class="excl" id="excl" hidden>
+            <summary>
+                <span>Afinar</span><span id="exclCount"></span>
+            </summary>
             <span class="panel-label">Excluir items que contengan...</span>
             <div class="chips" id="exclChips"></div>
             <input
@@ -213,7 +218,7 @@
                     ><input type="number" id="lim_km" min="0" step="1" placeholder="—" />km</label
                 >
             </div>
-        </div>
+        </details>
         <details class="cats" id="cats" hidden>
             <summary>
                 <span id="catLabel">Excluir por categoría</span><span id="catCount"></span><span

@@ -930,6 +930,17 @@ async function main() {
       "el aviso sigue puesto sin nada sin ver: " + b.q("#cogBadge").textContent);
   }
 
+  // ── 40. la cabecera no se come la pantalla: "Afinar" empieza plegado ──
+  {
+    const b = await loaded();
+    ok(!b.q("#excl").open, "el bloque de afinar tapa los resultados nada más buscar");
+    ok(!b.q("#exclCount").textContent, "el resumen cuenta filtros que no hay: " + b.q("#exclCount").textContent);
+    // con un filtro puesto se abre solo: un tope invisible parece una búsqueda sin resultados
+    ev(b, 'exclMap[curDrawer()] = ["averiado"]; limMap[curDrawer()] = { precio: 1000 }; render()');
+    ok(b.q("#excl").open === true, "un filtro activo se queda escondido");
+    ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántos filtros hay: " + b.q("#exclCount").textContent);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

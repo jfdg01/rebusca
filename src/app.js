@@ -1089,6 +1089,11 @@ function renderExcl() {
   box.hidden = !(loadedCsv && view === "" && curCsv);
   fillExclChips($("#exclChips"), render);
   for (const [c] of LIMITS) $("#lim_" + c).value = limits()[c] ?? "";
+  // El resumen dice cuántos filtros hay puestos, y el desplegable se abre solo si hay alguno:
+  // un tope activo que no se ve es la forma más rápida de creer que la búsqueda no trae nada.
+  const puestos = exclTerms().length + Object.keys(limits()).length;
+  $("#exclCount").textContent = puestos ? " (" + puestos + ")" : "";
+  if (puestos) box.open = true;
 }
 // topes máximos del cajón: vacío o 0 = sin tope
 for (const [c] of LIMITS)

@@ -100,6 +100,7 @@ function makeEl(sel, any) {
     indeterminate: false,
     disabled: false,
     hidden: false,
+    open: false, // <details> cerrado. Sin esto el stub universal responde truthy y "está plegado" nunca falla
     scrollLeft: 0,
     scrollWidth: 0,
     clientWidth: 0,

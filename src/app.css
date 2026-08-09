@@ -227,6 +227,9 @@
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
   .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+  /* mismo resumen que .cats: los dos desplegables de la cabecera se leen igual */
+  .excl > summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-soft); }
   .excl .panel-label { margin-bottom: 0; }
   .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
   .excl .chips:empty { display: none; }
