@@ -353,6 +353,9 @@ const saveAlias = () => {
     localStorage.removeItem("wp_perfiles");
   } else setTimeout(() => snack("No se pudo migrar tu estado: libera espacio y recarga", null), 0);
 })();
+// el cache de pesos reales por anuncio: la feature se quitó y esto solo ocupa cuota.
+// ponytail: borrable a partir de 2027 (para entonces ya no queda ningún navegador con la clave).
+localStorage.removeItem("wp_pesos");
 const estadoKey = () => "wp_estado"; // estado durable (un usuario por navegador)
 function pushEstado() {
   setLS(
@@ -454,33 +457,15 @@ const itemId = (r) => (iId >= 0 && r[iId]) || r[iTitulo] + "|" + r[iPrecio];
 const key = (r) => itemId(r); // id de Wallapop; el cajón lo pone curCsv (buckets[…][curCsv])
 
 // --- precio final estimado al comprador (envío protegido de Wallapop) ---
-// tarifa de envío por tramo de peso (up_to_kg), verificada contra la API: kg <= tope -> €
-const SHIP = [
-  [2, 3.5],
-  [5, 4.5],
-  [10, 6.5],
-  [20, 9.5],
-  [30, 14.5],
-];
-const porte = (kg) => (SHIP.find(([b]) => kg <= b) || SHIP[SHIP.length - 1])[1];
+// La tarifa de envío va por tramo de peso (kg <= tope -> €), verificada contra la API:
+// 2 -> 3,50 | 5 -> 4,50 | 10 -> 6,50 | 20 -> 9,50 | 30 -> 14,50.
+// El anuncio NO trae el peso: había que pedir cada item a la API (1 request por anuncio) y el
+// dato salía mal a menudo. Se estima el tramo de 5 kg para todos, que cubre la mayoría.
+const PORTE = 4.5;
 // ponytail: comisión de protección ~0,70€ + 5% del precio; las fuentes divergen (5–10%),
 // ajústalo aquí si cambia. Un solo sitio para toda la app.
-const finalPrice = (precio, kg = 5) => precio + 0.7 + 0.05 * precio + porte(kg);
-// peso real (tramo up_to_kg) por id, cacheado del detalle de la API (botón "Precio exacto").
-// número -> porte exacto; sin entrada -> se estima con 5 kg y un '*'.
-let pesos = readJSON("wp_pesos", {});
-console.assert(
-  porte(1.5) === 3.5 &&
-    porte(2) === 3.5 &&
-    porte(2.1) === 4.5 &&
-    porte(40) === 14.5,
-  "porte() por tramo roto",
-);
-console.assert(
-  finalPrice(50, 1.5).toFixed(2) === "56.70" &&
-    finalPrice(50).toFixed(2) === "57.70",
-  "finalPrice roto",
-);
+const finalPrice = (precio) => precio + 0.7 + 0.05 * precio + PORTE;
+console.assert(finalPrice(50).toFixed(2) === "57.70", "finalPrice roto");
 // número → precio con 1 decimal COMO MÁXIMO (sin ",0" sobrante), coma decimal a la española.
 // 90 -> "90", 90.0 -> "90", 92.75 -> "92,8", "7990.0" -> "7990". No numérico: se muestra tal cual.
 const dec1 = (n) => {
@@ -604,9 +589,7 @@ function fillCard(el, r) {
   const price = document.createElement("span");
   price.className = "li-price";
   if (conEnvio && isNum(precio)) {
-    const kg = pesos[col(r, "id")]; // peso real cacheado; si no hay, 5 kg
-    const exact = typeof kg === "number";
-    price.textContent = eur(finalPrice(+precio, exact ? kg : undefined));
+    price.textContent = eur(finalPrice(+precio));
   } else {
     price.textContent = precio !== "" ? `${dec1(precio)}€` : "—";
   }
@@ -2422,17 +2405,11 @@ $("#listBack").onclick = (e) => {
   } // volver justo a donde vino: swipe + ajustes abiertos (frena el "cerrar al tocar fuera")
   render();
 };
-// precio a copiar/mostrar: final estimado al comprador si lleva envío (con '(aprox)' si no hay peso real), si no el del anuncio
+// precio a copiar/mostrar: final estimado al comprador si lleva envío, si no el del anuncio.
+// Siempre "aprox": el porte sale del tramo estimado de 5 kg, no del peso real del anuncio.
 function priceLabel(r) {
   const precio = col(r, "precio");
-  if (col(r, "envio") === "True" && isNum(precio)) {
-    const kg = pesos[col(r, "id")],
-      exact = typeof kg === "number";
-    return (
-      eur(finalPrice(+precio, exact ? kg : undefined)) +
-      (exact ? " (con envío)" : " (con envío, aprox)")
-    );
-  }
+  if (col(r, "envio") === "True" && isNum(precio)) return eur(finalPrice(+precio)) + " (con envío, aprox)";
   return precio !== "" ? `${dec1(precio)}€` : "—";
 }
 // par de precios para el prompt: el estimado final al comprador y el que pone el vendedor
@@ -2541,7 +2518,7 @@ function copyAsync(makeText) {
 }
 // copia un lote de filas como prompt para la IA y lo registra (wp_aisent): su veredicto
 // vuelve como enlace ?keep=<ids> que conserva esos como favoritos y rechaza el resto del lote.
-// ponytail: precio ESTIMADO (sin fetchPesos): el bucle de peso exacto es demasiado para un mazo de cientos; feature aparcada.
+// ponytail: el precio con envío es el estimado a 5 kg, como en toda la app.
 function copyForAI(btn, all, vacio) {
   if (!all.length) return snack(vacio, null);
   const rows = all.slice(0, UNSEEN_CAP); // tope: más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
@@ -2615,7 +2592,7 @@ $("#copyAskPrompt").onclick = (e) => {
 // ── "copiar sin ver": el mazo entero a la IA, sin triar ─────────────────────────
 // Flujo principal para quien no conoce el mercado del producto: en vez de triar a ciegas,
 // le pasa a la IA todo lo que no ha clasificado y esta le devuelve la criba en un enlace.
-// ponytail: sin fetchPesos (sería 1 request por anuncio, ~40s con 60 fichas) → precios "aprox".
+// ponytail: precios "aprox" (porte estimado a 5 kg); el peso real costaba 1 request por anuncio.
 const UNSEEN_CAP = 60; // más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
 const UNSEEN_DESC = 200; // descripciones más largas hinchan el pegado sin aportar a la criba
 // orden activo del mazo, en cristiano: la IA se lo cita al usuario ("ordenados por …")
@@ -2660,7 +2637,6 @@ async function dossierFav(btn) {
   btn.disabled = true;
   btn.textContent = "Preparando…";
   try {
-    // ponytail: precio estimado; fetchPesos aparcado (sin linkear)
     const box = $("#dossier");
     box.innerHTML = dossierHTML(rows);
     // espera a que carguen las fotos (o fallen) antes de imprimir, si no salen en blanco
@@ -2682,41 +2658,6 @@ async function dossierFav(btn) {
   }
 }
 $("#dossierFav").onclick = (e) => dossierFav(e.currentTarget);
-// precio exacto: pide a la API el peso real (tramo up_to_kg) de los items con envío que aún no conocemos.
-// cachea, repinta y devuelve cuántos pesos numéricos llegaron. -1 si no había nada que pedir.
-async function fetchPesos(rows) {
-  const ids = rows
-    .filter((r) => col(r, "envio") === "True")
-    .map((r) => col(r, "id"))
-    .filter((id) => id && !(id in pesos)); // sin recalcular lo ya conocido (incluye nulos: ítems sin peso)
-  if (!ids.length) return -1;
-  let got = 0;
-  for (const id of ids.slice(0, 200)) {
-    // ponytail: tope 200; una lista de favoritos nunca llega ahí. Sin AbortController (listas cortas).
-    const w = await itemWeight(id);
-    pesos[id] = w; // cachea también los nulos (ítem borrado / sin peso) para no re-pedirlos
-    if (typeof w === "number") got++;
-    await new Promise((r) => setTimeout(r, 250 + Math.random() * 250)); // jitter anti-DataDome
-  }
-  setLS("wp_pesos", JSON.stringify(pesos));
-  render();
-  return got;
-}
-// peso real (tramo up_to_kg) de un item vía el detalle de la API; null si borrado/sin peso/bloqueo
-async function itemWeight(id) {
-  if (!/^[a-zA-Z0-9_-]+$/.test(id)) return null; // id opaco de Wallapop; evita meter basura en la URL
-  try {
-    const r = await fetch("https://api.wallapop.com/api/v3/items/" + id, {
-      headers: { "X-DeviceOS": "0", Accept: "application/json" },
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const v = ((d.type_attributes || {}).up_to_kg || {}).value;
-    return v ? parseFloat(v) : null;
-  } catch {
-    return null;
-  }
-}
 $("#swYes").onclick = () => card && fling(1); // los hints ✓→ / ←✕ también clasifican, no solo el swipe
 $("#swNo").onclick = () => card && fling(-1);
 $("#swipeFab").onclick = () => fabAction();

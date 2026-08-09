@@ -434,7 +434,7 @@ async function main() {
   const CLAVES = ["wp_estado", "wp_searches", "wp_lastseen", "wp_lastcsv", "wp_rejected",
                   "wp_favorite", "wp_interested", "wp_blocksel", "wp_stamp", "wp_excl",
                   "wp_lim", "wp_catexcl", "wp_catmode", "wp_alias", "wp_rows", "wp_aisent",
-                  "wp_pesos", "wp_loc", "wp_lejoskm", "wp_autoexcllejos", "wp_csv",
+                  "wp_loc", "wp_lejoskm", "wp_autoexcllejos", "wp_csv",
                   "wp_perfil", "wp_perfiles"];
   const VENENOS = ["{json roto", "null", "5", '"texto"', "[]", '{"ford.csv":5}', "[1,2]"];
   const USO = 'loadCSV(__CSV, "ford.csv"); renderQlist(""); openManager(); paintSearches(); render()';

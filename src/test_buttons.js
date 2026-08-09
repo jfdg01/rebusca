@@ -662,6 +662,17 @@ async function main() {
     ok(!!ev(b, 'csvIndex["ford.csv"]'), "un resultado completo no se guardó en cache");
   }
 
+  // ── 31c. el precio con envío es el precio FINAL, no el del anuncio ──
+  // Es la cifra por la que el usuario decide comprar. La fórmula (0,70€ + 5% + porte de 5 kg)
+  // solo tenía un console.assert, y el proxy de consola de los tests lo traga.
+  {
+    const b = await loaded();
+    ok(ev(b, "priceLabel(data.find((r) => col(r, 'id') === 'a3'))") === "57,7€ (con envío, aprox)",
+       "el precio con envío no sale: " + ev(b, "priceLabel(data.find((r) => col(r, 'id') === 'a3'))"));
+    ok(ev(b, "priceLabel(data.find((r) => col(r, 'id') === 'a1'))") === "1000€",
+       "un anuncio sin envío no muestra su precio tal cual: " + ev(b, "priceLabel(data.find((r) => col(r, 'id') === 'a1'))"));
+  }
+
   // ── 32. gesto de arrastre del mazo: los umbrales de decide() y el eje del arrastre ──
   // Los botones del mazo (#swYes/#swNo) sí se probaban; el dedo, que es como se usa de verdad, no.
   {
