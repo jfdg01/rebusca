@@ -969,6 +969,92 @@ async function main() {
     ok(!tras.some((t) => /iguales/.test(t)), "el recuento de duplicados no se rehace al cargar otro CSV: " + JSON.stringify(tras));
   }
 
+  // ── 42. una restauración que no cabe no te puede dejar sin nada ──
+  //     El importador borraba todas las claves y solo después escribía las de la copia, con un
+  //     `setItem` crudo. Si la cuota reventaba a media escritura, el triaje del usuario se
+  //     quedaba en el borrado y el aviso echaba la culpa al fichero.
+  {
+    const opts = { csv: CSV, timers: true };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ok(b.store.wp_estado, "el arranque no dejó estado que perder: " + Object.keys(b.store).join());
+
+    // una copia sana, pero que ya no cabe en este navegador: revienta en la segunda clave
+    const copia = JSON.stringify({
+      app: "rebusca", v: 1,
+      datos: { wp_favorite: '{"x.csv":["z9"]}', wp_searches: JSON.stringify(["x".repeat(400)]) },
+    });
+    opts.limit = 300; // el almacén de partida ocupa ~242 bytes: la primera clave entra, la segunda no
+    b.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    ok(b.store.wp_estado, "una restauración a medias se llevó el estado por delante");
+    ok(b.spy.reloads === 0, "la app recargó con la restauración a medias: " + b.spy.reloads);
+    ok(/no cabe|espacio/i.test(b.q("#snackmsg").textContent),
+      "el aviso culpa al fichero de un problema de espacio: " + b.q("#snackmsg").textContent);
+
+    // una copia manipulada no escribe claves ajenas a la app
+    const b2 = await boot({}, { csv: CSV });
+    const sucia = JSON.stringify({ app: "rebusca", v: 1, datos: { wp_favorite: "{}", token: "robado" } });
+    b2.q("#importState").dispatch("change", { target: { files: [{ text: async () => sucia }] } });
+    await flush();
+    ok(!("token" in b2.store), "la copia escribió una clave que no es de la app: " + Object.keys(b2.store).join());
+  }
+
+  // ── 43. la copia se lleva también las filas cacheadas (defecto 3) ──
+  //     Los ids del triaje viven en localStorage, pero el título/precio/foto de cada anuncio
+  //     están en IndexedDB. Sin las filas, un favorito que Wallapop ya retiró se cae por el
+  //     borde al restaurar: el id sigue ahí y la lista no enseña nada.
+  {
+    const b = await loaded();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    b.q("#exportState").click();
+    const copia = b.spy.blobs.at(-1).partes.join("");
+    ok(/Ford Focus/.test(copia), "la copia no lleva la fila del favorito, solo su id");
+
+    // restaurar en otro navegador deja la fila lista antes de recargar
+    const b2 = await boot({}, { csv: CSV });
+    b2.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    await flush();
+    const fila = await ev(b2, 'idb.get("rows")');
+    ok(fila && fila.a1 && /Ford Focus/.test(fila.a1.titulo),
+      "restaurar no repuso la fila del favorito: " + JSON.stringify(fila));
+    ok(b2.spy.reloads === 1, "restaurar no recargó la página: " + b2.spy.reloads);
+  }
+
+  // ── 44. "Afinar" se deja cerrar (defecto 4) ──
+  //     `renderExcl()` corre en cada `render()`, y con un filtro puesto volvía a abrir el
+  //     desplegable. Marcar un favorito, hacer swipe o un `storage` de otra pestaña lo
+  //     reabrían: la cabecera se quedaba desplegada para siempre.
+  {
+    const b = await loaded();
+    ev(b, 'exclMap[curDrawer()] = ["averiado"]; render()');
+    ok(b.q("#excl").open === true, "un filtro nuevo no abre el desplegable");
+    b.q("#excl").open = false; // el usuario lo cierra
+    ev(b, 'favorite.add("a2"); save("wp_favorite", favorite); render()');
+    ok(b.q("#excl").open === false, "el desplegable se reabrió solo con un render ajeno");
+    // …pero un filtro más sí vuelve a abrirlo: un tope invisible parece una búsqueda vacía
+    ev(b, 'limMap[curDrawer()] = { precio: 1000 }; render()');
+    ok(b.q("#excl").open === true, "un filtro nuevo no avisa si el desplegable está cerrado");
+  }
+
+  // ── 45. una rama que llena su cupo se dice tal cual ──
+  //     Con el tope repartido, una rama puede quedarse corta sin que el total llegue al tope
+  //     global. El aviso caía en el mensaje de ramas caídas y anunciaba "0 de 3 ramas fallaron".
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    ev(b, "Rebusca.lastScrape = { ramas: 3, ramasRotas: 0, ramasTope: 2, sinId: 0, abortado: false, tope: 0, parcial: true }");
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    const msg = b.q("#snackmsg").textContent;
+    ok(!/0 de 3/.test(msg), "el aviso inventa ramas caídas que no hubo: " + msg);
+    ok(/2 de 3/.test(msg) && /cupo/.test(msg), "el aviso no dice que las ramas llenaron su cupo: " + msg);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

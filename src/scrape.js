@@ -195,11 +195,11 @@
     // y un scrape completo daban exactamente el mismo CSV: el llamador no podía distinguirlos y
     // lo cacheaba como definitivo. `scrape()` sigue devolviendo un string, así que nada cambia
     // para quien no mire el diagnóstico.
-    const diag = { ramas: 0, ramasRotas: 0, sinId: 0, abortado: false, tope: 0, parcial: false };
+    const diag = { ramas: 0, ramasRotas: 0, ramasTope: 0, sinId: 0, abortado: false, tope: 0, parcial: false };
     const finish = () => {
       // ordena por cercanía al terminar (el server siempre lo hace: nunca pasa --max-km)
       rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
-      diag.parcial = diag.ramasRotas > 0 || diag.abortado || diag.tope > 0;
+      diag.parcial = diag.ramasRotas > 0 || diag.abortado || diag.tope > 0 || diag.ramasTope > 0;
       api.lastScrape = diag;
       if (diag.parcial) console.warn("Rebusca: scrape incompleto", diag);
       if (diag.sinId) console.warn(`Rebusca: ${diag.sinId} anuncios sin id, descartados`);
@@ -207,14 +207,19 @@
     };
     const ramas = branches(keywords);
     diag.ramas = ramas.length;
+    // Cupo acumulado por rama. El tope se medía solo contra el total, así que la primera rama
+    // se lo comía entero y las siguientes no llegaban a pedir ni una página: "iphone OR xiaomi"
+    // devolvía 1500 iPhones y cero Xiaomis. El cupo se mide sobre `rows`, no por rama, así que
+    // lo que una rama no gasta queda para las de después.
+    const cupo = (i) => Math.ceil((maxRows * (i + 1)) / ramas.length);
     for (const [iRama, kw] of ramas.entries()) {
       const aviso = () => onProgress && onProgress(rows.length, iRama + 1, ramas.length);
       aviso(); // al entrar en la rama: una rama sin resultados también mueve el contador
       let params = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
       if (orderBy) params.order_by = orderBy;
       if (tf) params.time_filter = tf;
-      let old = false;
-      while (!old) {
+      let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo, se pasa a la siguiente
+      while (!old && !lleno) {
         if (signal && signal.aborted) { diag.abortado = true; return finish(); }
         let d;
         try { d = await getJSON(API + "?" + new URLSearchParams(params), signal); }
@@ -250,9 +255,10 @@
           // minutos de peticiones. Sale por el mismo canal que una rama caída (diag.parcial),
           // así que el llamador ya sabe no cachear esto como definitivo.
           if (rows.length >= maxRows) { diag.tope = maxRows; return finish(); }
+          if (rows.length >= cupo(iRama)) { diag.ramasTope++; lleno = true; break; }
         }
         const np = ((d || {}).meta || {}).next_page;
-        if (!np || old) break;
+        if (!np || old || lleno) break;
         params = { next_page: np };                            // el cursor ya lleva keywords/lat/lon
         await sleep(500 + Math.random() * 500);                // jitter anti-patrón
       }

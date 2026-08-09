@@ -165,12 +165,42 @@ async function main() {
     ok(filas(csv).length === 1, "al parar se perdió lo ya recogido");
   }
 
-  // ── 12. onProgress: un aviso por anuncio nuevo, con el total acumulado ──
+  // ── 12. onProgress: un aviso al entrar en cada rama y otro por anuncio nuevo ──
+  //      El 0 de cabeza es el aviso de entrada: sin él, una rama que no devuelve nada deja el
+  //      contador congelado y la búsqueda parece colgada.
   {
     const vistos = [];
     const { api } = load(async () => resp(200, page([item("a"), item("b")])));
     await api.scrape({ keywords: "ford", onProgress: (k) => vistos.push(k) });
-    ok(vistos.join() === "1,2", "onProgress no contó bien: " + vistos.join());
+    ok(vistos.join() === "0,1,2", "onProgress no contó bien: " + vistos.join());
+  }
+
+  // ── 13. el tope se reparte entre las ramas del OR ──
+  //      Sin reparto, la primera rama se come el tope entero y las siguientes no llegan a pedir
+  //      ni una página: buscas "iphone OR pixel OR xiaomi" y ves 1500 iPhones y cero Xiaomis.
+  {
+    const kwDe = (url) => (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
+    const { api } = load(async (url) => {
+      const kw = kwDe(url);
+      return resp(200, page(Array.from({ length: 10 }, (_, i) => item(kw + i))));
+    });
+    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc", maxRows: 9 });
+    const ids = filas(csv).map((l) => col(l, 0));
+    for (const kw of ["aaa", "bbb", "ccc"])
+      ok(ids.some((id) => id.startsWith(kw)), `la rama "${kw}" se quedó sin pedir: ` + ids.join());
+    ok(filas(csv).length === 9, "el reparto se pasa del tope total: " + filas(csv).length);
+    ok(api.lastScrape.parcial, "un resultado recortado por el tope no se marca como parcial");
+  }
+
+  // ── 13b. lo que una rama no gasta pasa a las siguientes ──
+  //      Un cupo rígido de maxRows/ramas dejaría el resultado corto cuando una rama viene vacía.
+  {
+    const { api } = load(async (url) => {
+      const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
+      return resp(200, page(kw === "bbb" ? [] : Array.from({ length: 10 }, (_, i) => item(kw + i))));
+    });
+    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc", maxRows: 9 });
+    ok(filas(csv).length === 9, "el cupo de la rama vacía se perdió: " + filas(csv).length + " de 9");
   }
 
   console.log("ok (" + n + " comprobaciones)");

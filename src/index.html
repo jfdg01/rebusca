@@ -296,14 +296,15 @@
 </table>
 <div class="empty" id="empty">Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar. ¿No sabes qué modelos buscar? Dale a "Que la IA me monte la búsqueda".</div>
 
-<!-- role="status" + aria-live: el lector de pantalla canta "Buscando…", el contador y el aviso
-     del snack. Sin esto la búsqueda empieza y termina en silencio para quien no ve la pantalla. -->
-<div class="loading" id="loading" role="status" aria-live="polite" hidden>
+<!-- role="status" + aria-live: el lector de pantalla canta "Buscando…" y el contador. La región
+     viva es SOLO el contador: con la caja entera dentro, el cronómetro de al lado (que se reescribe
+     cada segundo) hacía que el lector repitiera el estado completo una vez por segundo. -->
+<div class="loading" id="loading" hidden>
     <svg class="spin" viewBox="0 0 44 44" aria-hidden="true">
         <circle class="track" cx="22" cy="22" r="19"></circle>
         <circle class="arc" cx="22" cy="22" r="19"></circle>
     </svg>
-    <div class="loading-count" id="loadingCount">Buscando anuncios.</div>
+    <div class="loading-count" id="loadingCount" role="status" aria-live="polite">Buscando anuncios.</div>
     <div class="loading-note">
         <span id="loadingTime">0s</span> buscando… ·
         <span class="link" id="stopScrape">parar búsqueda</span>

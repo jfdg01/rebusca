@@ -927,12 +927,22 @@ async function main() {
     if (n() !== 0) fail("al volver al mazo la tabla se quedó con " + n() + " <tr>");
   }
 
-  // 12i. lo que cambia solo (el overlay de carga y el snack) tiene que anunciarse: sin una región
-  //      viva, quien usa lector de pantalla no sabe que la búsqueda arrancó ni que hay "Deshacer".
-  for (const id of ["loading", "snack"]) {
+  // 12i. lo que cambia solo (el contador de la búsqueda y el snack) tiene que anunciarse: sin una
+  //      región viva, quien usa lector de pantalla no sabe que la búsqueda arrancó ni que hay
+  //      "Deshacer".
+  for (const id of ["loadingCount", "snack"]) {
     const tag = (HTML.match(new RegExp('<div[^>]*id="' + id + '"[^>]*>')) || [])[0] || "";
     if (!/role="status"/.test(tag) || !/aria-live="polite"/.test(tag))
       fail(`#${id} no es una región viva: ` + tag);
+  }
+
+  // 12i-bis. …pero el cronómetro NO. `startTimer` lo reescribe cada segundo, y dentro de la región
+  //          viva el lector repetía el estado entero una vez por segundo durante toda la búsqueda.
+  {
+    const vivo = (HTML.match(/<div[^>]*id="loadingCount"[^>]*>[\s\S]*?<\/div>/) || [])[0] || "";
+    if (/loadingTime/.test(vivo)) fail("el cronómetro vive dentro de la región viva: " + vivo);
+    const caja = (HTML.match(/<div[^>]*id="loading"[^>]*>/) || [])[0] || "";
+    if (/aria-live|role="status"/.test(caja)) fail("la caja entera sigue siendo región viva: " + caja);
   }
 
   // 12j. el botón que destruye es rojo en REPOSO: en un móvil no hay ratón y un rojo que solo

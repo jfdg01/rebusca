@@ -1134,9 +1134,12 @@ function renderExcl() {
   for (const [c] of LIMITS) $("#lim_" + c).value = limits()[c] ?? "";
   // El resumen dice cuántos filtros hay puestos, y el desplegable se abre solo si hay alguno:
   // un tope activo que no se ve es la forma más rápida de creer que la búsqueda no trae nada.
+  // Solo al CAMBIAR el número: `render()` corre por cualquier cosa (un favorito, un swipe, un
+  // `storage` de otra pestaña) y un `open = true` incondicional no dejaba cerrar la cabecera.
   const puestos = exclTerms().length + Object.keys(limits()).length;
   $("#exclCount").textContent = puestos ? " (" + puestos + ")" : "";
-  if (puestos) box.open = true;
+  if (puestos && box.dataset.n !== String(puestos)) box.open = true;
+  box.dataset.n = String(puestos); // `dataset` guarda strings; explícito para que la comparación no dependa de eso
 }
 // topes máximos del cajón: vacío o 0 = sin tope
 for (const [c] of LIMITS)
@@ -1943,7 +1946,10 @@ async function runScrape(kw, since, titleOnly) {
         ? "Búsqueda parada: resultado parcial, no se guarda"
         : diag.tope
           ? `Tope de ${diag.tope} anuncios: resultado recortado, no se guarda. Afina la búsqueda.`
-          : `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`, null);
+          : diag.ramasRotas
+            ? `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`
+            // el tope se reparte entre ramas: una rama puede quedarse corta sin que el total llegue
+            : `${diag.ramasTope} de ${diag.ramas} ramas llenaron su cupo: resultado recortado, no se guarda. Afina la búsqueda.`, null);
     } else cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
@@ -2270,12 +2276,16 @@ const backupKeys = () => {
   }
   return out;
 };
+// `filas` = el cache de filas de IndexedDB. En localStorage solo hay ids: sin las filas, un
+// favorito que Wallapop ya retiró se restaura sin título, sin precio y sin foto, y `bucketRows`
+// lo tira por el borde. `rowCache` ya viene podado a los ids clasificados, así que no engorda.
 const backupJSON = () =>
   JSON.stringify({
     app: "rebusca",
     v: 1,
     fecha: new Date().toISOString(),
     datos: Object.fromEntries(backupKeys().map((k) => [k, localStorage.getItem(k)])),
+    filas: rowCache,
   });
 $("#exportState").onclick = () => {
   const url = URL.createObjectURL(new Blob([backupJSON()], { type: "application/json" }));
@@ -2291,16 +2301,30 @@ $("#importState").onchange = (e) => {
   const f = (e.target.files || [])[0];
   if (!f) return;
   f.text()
-    .then((t) => {
-      const datos = (JSON.parse(t) || {}).datos;
+    .then(async (t) => {
+      const copia = JSON.parse(t) || {};
+      const datos = copia.datos;
       if (!datos || typeof datos !== "object") throw new Error("no es una copia de Rebusca");
-      // Borra antes de escribir: si no, lo viejo y lo nuevo se mezclan y aparecen favoritos que
-      // la copia no traía. Las claves se listan antes de borrar, porque borrar mueve los índices.
-      for (const k of backupKeys()) localStorage.removeItem(k);
-      for (const k in datos) localStorage.setItem(k, datos[k]);
+      // Escribe antes de borrar. Al revés, una cuota reventada a media escritura dejaba al
+      // usuario sin nada: el borrado ya había pasado y el `setItem` es crudo, sin `setLS`.
+      // Así lo viejo sobrevive al fallo. Solo claves `wp_`: una copia manipulada no escribe
+      // en el almacén de nadie más. Las sobrantes se borran después, con la lista ya leída.
+      const nuevas = Object.keys(datos).filter((k) => k.startsWith("wp_"));
+      for (const k of nuevas) localStorage.setItem(k, datos[k]);
+      for (const k of backupKeys()) if (!nuevas.includes(k)) localStorage.removeItem(k);
+      // Se espera a IndexedDB: `location.reload()` mata la transacción a medias y el favorito
+      // restaurado se quedaría sin fila. Una copia vieja no trae `filas` y sigue valiendo.
+      if (copia.filas) await idb.set("rows", copia.filas);
       location.reload(); // el estado vive en variables ya leídas: recargar es lo único honesto
     })
-    .catch((err) => snack("Copia no válida: " + (err.message || err), null));
+    .catch((err) =>
+      snack(
+        err.name === "QuotaExceededError"
+          ? "La copia no cabe en este navegador: no se ha restaurado nada, tu triaje sigue intacto"
+          : "Copia no válida: " + (err.message || err),
+        null,
+      ),
+    );
 };
 // deep-link: ?q=<búsqueda>&since=<hora|dia|semana|mes>&excl=palabra,otra&title=1
 //            &maxp=<€>&maxd=<días>&keep=<ids>&fav=<ids>&no=<ids>
