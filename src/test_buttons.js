@@ -385,6 +385,15 @@ async function main() {
     lb.click();
     ok(ev(b, 'filteredRows().map((r) => col(r, "precio")).join()') === "50,1000",
       "#listSort precio no ordenó la lista de favoritos");
+    // el orden se elige una vez y se quiere para siempre: otra sesión con el mismo almacén lo mantiene
+    ok(b.store.wp_listsort === "precio|1", "el orden de la lista no se guardó: " + b.store.wp_listsort);
+    const b2 = await loaded({ store: b.store });
+    ev(b2, 'view = "favorite"; render()');
+    ok(ev(b2, 'filteredRows().map((r) => col(r, "precio")).join()') === "50,1000",
+      "al recargar, la lista volvió al orden de entrada");
+    const on = ev(b2, 'document.querySelectorAll("#listSort button")').find((x) => x.dataset.sort === "precio");
+    ok(on.classList.contains("on") && on.dataset.dir === "▲",
+      "la barra de orden no marca el botón recordado: " + on.dataset.dir);
   }
 
   // ── 18. topes del cajón (#lim_precio): filtran el mazo y quedan guardados ──

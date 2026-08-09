@@ -739,6 +739,7 @@ function applyListSort(name) {
     listSort = name;
     listSortDir = name ? 1 : -1;
   } // columnas asc (barato/cerca/reciente); entrada: recién añadido arriba
+  localStorage.setItem("wp_listsort", listSort + "|" + listSortDir);
   render();
 }
 function paintListSort() {
@@ -794,8 +795,11 @@ function cmpCell(x, y) {
   return x.localeCompare(y, "es", { numeric: true });
 }
 // orden de la lista (papelera/destacados): '' = momento de entrada (Set preserva inserción) | columna del CSV
-let listSort = "",
-  listSortDir = -1; // por defecto: recién añadido arriba
+// Se recuerda: quien ordena su papelera por precio la quiere así mañana también. Todo lo demás de
+// la pantalla (filtros, umbrales, ajustes) ya sobrevive a la recarga; esto era lo único que no.
+const [sort0, dir0] = (localStorage.getItem("wp_listsort") || "|-1").split("|");
+let listSort = sort0,
+  listSortDir = +dir0 || -1; // por defecto: recién añadido arriba
 function sortList(rows) {
   if (!listSort) {
     const order = [...(view === "rejected" ? rejected : favorite)]; // orden de llegada a la lista
