@@ -1,0 +1,16 @@
+{
+  "name": "Rebusca — cazador de chollos",
+  "short_name": "Rebusca",
+  "lang": "es",
+  "description": "Cazador de chollos de Wallapop: búsquedas con OR, lo más nuevo y cercano primero, triaje tipo Tinder y memoria de lo ya visto.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E1E4DD",
+  "theme_color": "#E1E4DD",
+  "icons": [
+    { "src": "/wallapop-logo.webp", "sizes": "690x690", "type": "image/webp", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

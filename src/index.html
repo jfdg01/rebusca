@@ -31,6 +31,12 @@
 }
 </script>
 <link rel="icon" href="wallapop-logo.webp" type="image/webp" />
+<!-- instalable en la pantalla de inicio: es una app que se abre a diario desde el móvil, y una
+     app instalada además conserva mejor su almacenamiento (todo el estado vive en localStorage).
+     iOS no lee el manifest: el icono se lo da apple-touch-icon, y por eso es PNG y no webp. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="theme-color" content="#E1E4DD" />
 <link rel="alternate" type="text/plain" title="Guía para IA (llms.txt)" href="/llms.txt" />
 <link rel="stylesheet" href="app.css" />
 
