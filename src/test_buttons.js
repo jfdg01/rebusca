@@ -919,6 +919,17 @@ async function main() {
       "un fichero cualquiera pasó por copia: " + b3.q("#snackmsg").textContent);
   }
 
+  // ── 39. el aviso de novedades se ve con el menú cerrado ──
+  {
+    const b = await loaded();
+    ok(b.q("#cogBadge").hidden === false && +b.q("#cogBadge").textContent === 3,
+      "el cog no avisa de los anuncios sin ver: " + b.q("#cogBadge").textContent);
+    // clasificar los tres lo apaga: ya no hay nada nuevo que mirar
+    ev(b, 'for (const id of csvIndex["ford.csv"].ids) favorite.add(id); pushEstado(); render()');
+    ok(b.q("#cogBadge").hidden === true,
+      "el aviso sigue puesto sin nada sin ver: " + b.q("#cogBadge").textContent);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

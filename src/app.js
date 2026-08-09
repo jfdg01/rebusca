@@ -876,6 +876,7 @@ function render() {
     for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
     tbody.append(frag);
   }
+  paintCogBadge();
   return finishRender(rows, listView);
 }
 function rowTr(r) {
@@ -1742,6 +1743,18 @@ function unseenCount(csv) {
   const done = new Set();
   for (const n of BUCKET_NAMES) for (const id of buckets[n][d] || []) done.add(id);
   return e.ids.filter((id) => !done.has(id)).length;
+}
+// El mismo recuento, pero fuera del gestor: sin esto, una búsqueda guardada acumula anuncios en
+// silencio y el usuario solo se entera si abre el gestor. Un backend mandaría un aviso push;
+// sin backend, esto es lo más cerca que se llega.
+// ponytail: se recalcula en cada render(), que ya reconstruye la tabla entera. Guarda el número
+// en una variable si algún día se notan las búsquedas cacheadas.
+function paintCogBadge() {
+  const b = $("#cogBadge");
+  if (!b) return;
+  const n = loadSearches().reduce((t, s) => t + (unseenCount(s.csv) || 0), 0);
+  b.hidden = !n;
+  b.textContent = n > 99 ? "99+" : n;
 }
 // migración one-shot: saca de localStorage lo gordo (CSVs + cache de filas) y lo mete en IndexedDB.
 // Hasta ahora compartían los 5 MB con el triaje; al llenarse, clasificar una carta lanzaba y el

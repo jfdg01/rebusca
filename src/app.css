@@ -482,10 +482,10 @@
   .swipe-tool .icon { width: 1.05rem; height: 1.05rem; }
   .swipe-tool:disabled { opacity: .4; }
   .swipe-top .swipe-tool { padding: 0 .7rem; gap: .35rem; }   /* tres botones: aprieta para caber a 320px */
-  .swipe-cog-badge { position: absolute; top: -.35rem; right: -.35rem; min-width: 1.15rem; height: 1.15rem; padding: 0 .28rem;
+  .cog-badge { position: absolute; top: -.35rem; right: -.35rem; min-width: 1.15rem; height: 1.15rem; padding: 0 .28rem;
     border-radius: 999px; background: var(--amber); color: #fff; font: 700 10px var(--mono);
     display: flex; align-items: center; justify-content: center; }
-  .swipe-cog-badge[hidden] { display: none; }
+  .cog-badge[hidden] { display: none; }
   /* menú (cog): flota sobre la tarjeta anclado bajo la barra, no la reescala */
   .swipe-menu { position: absolute; z-index: 5; top: 4.4rem; left: max(1rem, calc(50% - 220px)); right: max(1rem, calc(50% - 220px));
     background: var(--surface); border: 1px solid var(--line); border-radius: .8rem; padding: 1rem;

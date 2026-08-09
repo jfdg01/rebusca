@@ -55,7 +55,13 @@
 <header>
     <div class="brand">
         <details class="opts" id="perfilOpts">
-            <summary title="opciones" data-icon="settings"></summary>
+            <summary title="opciones">
+                <!-- el icono baja a un <i> propio: data-icon se pinta con innerHTML y se llevaría
+                     por delante al badge. Y el badge va dentro del <summary>, porque lo que cuelga
+                     del <details> cerrado no se ve, y este aviso tiene que verse con el menú cerrado. -->
+                <i data-icon="settings"></i>
+                <b class="cog-badge" id="cogBadge" hidden></b>
+            </summary>
             <div class="menu">
                 <div class="opt-group">
                     <label class="opt-row check"
@@ -334,7 +340,7 @@
         </button>
         <button class="swipe-tool" id="swipeCog" title="ordenar y vendedores">
             <i data-icon="cog"></i><span>Ajustes</span>
-            <b class="swipe-cog-badge" id="swipeCogBadge" hidden></b>
+            <b class="cog-badge" id="swipeCogBadge" hidden></b>
         </button>
     </div>
     <div class="swipe-count-row">
