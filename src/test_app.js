@@ -989,6 +989,14 @@ async function main() {
     if (diag.tope !== 5 || !diag.parcial) fail("el tope no marca el resultado como parcial: " + JSON.stringify(diag));
   }
 
+  // 12n. el buscador enseña la gramática OR en su placeholder: el icono de ayuda está en otra fila
+  //      y quien busca una palabra suelta nunca descubre que existen OR, comillas y paréntesis (item 16)
+  {
+    const tag = (HTML.match(/<input[^>]*id="kw"[^>]*>/) || [])[0] || ""; // el tag ocupa varias líneas; [^>] las cruza
+    if (!/placeholder="[^"]*\bOR\b[^"]*"/.test(tag)) fail("el buscador no enseña la gramática OR: " + tag);
+    if (!/aria-label="/.test(tag)) fail("el buscador se quedó sin nombre accesible: " + tag);
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 
