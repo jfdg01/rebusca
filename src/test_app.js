@@ -811,6 +811,39 @@ async function main() {
     if (b.q(".picker").hidden !== false) fail("el panel de búsqueda activa sigue oculto con un CSV cargado");
   }
 
+  // 12f. señal de precio: el chip "−N %" sale en la tarjeta del anuncio muy por debajo de la
+  //      mediana del lote, y CALLA con muestra corta (una búsqueda con OR mezcla productos y
+  //      ahí la mediana engaña).
+  {
+    // recorre la tarjeta que pinta fillCard y devuelve "clase:texto" de cada hijo
+    const carta = (b, i) =>
+      vm.runInContext(
+        `(() => { const el = document.createElement("div"); fillCard(el, data[${i}]); const out = [];
+          (function walk(n) { for (const c of n.children || []) { out.push(c.className + ":" + c.textContent); walk(c); } })(el);
+          return out.join("|"); })()`,
+        b.sandbox,
+      );
+    const fila = (id, precio) =>
+      `${id},Ford Focus,${precio},Coches,Jaen,23001,3,1,False,False,https://w/${id},Ana,,,buen estado`;
+    const lote = (precios) =>
+      [CSV_FIELDS, ...precios.map((p, i) => fila("a" + i, p))].join("\r\n") + "\r\n";
+
+    const b = await boot({});
+    // 9 precios: mediana 1000. El primero (500) está un 50 % por debajo; el segundo (900), un 10 %.
+    b.sandbox.__CSV = lote([500, 900, 1000, 1000, 1000, 1000, 1000, 1100, 1200]);
+    vm.runInContext('loadCSV(__CSV, "lote.csv")', b.sandbox);
+    if (vm.runInContext("medianPrice", b.sandbox) !== 1000)
+      fail("la mediana del lote no es 1000: " + vm.runInContext("medianPrice", b.sandbox));
+    if (!/li-deal:−50 %/.test(carta(b, 0))) fail("el anuncio a mitad de precio no lleva chip: " + carta(b, 0));
+    if (/li-deal/.test(carta(b, 1))) fail("un 10 % por debajo no es un chollo y llevó chip: " + carta(b, 1));
+
+    // muestra corta: la misma diferencia, pero con 4 anuncios no hay referencia que valga
+    b.sandbox.__CSV = lote([500, 1000, 1000, 1000]);
+    vm.runInContext('loadCSV(__CSV, "corto.csv")', b.sandbox);
+    if (vm.runInContext("medianPrice", b.sandbox) !== null) fail("con 4 precios la mediana debería ser null");
+    if (/li-deal/.test(carta(b, 0))) fail("salió chip con una muestra de 4 anuncios: " + carta(b, 0));
+  }
+
   // 12. el scraper del browser (scrape.js) sigue verde
   execFileSync("node", [path.join(__dirname, "scrape.js"), "demo"], { stdio: "pipe" });
 

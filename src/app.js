@@ -558,6 +558,33 @@ console.assert(
   "ago() roto",
 );
 
+// ── señal de precio: ¿este anuncio es un chollo DENTRO de su propio lote? ──
+// La app tenía todos los precios en memoria y no comparaba nada; el usuario lo hacía de cabeza.
+// La mediana (no la media) porque un solo anuncio de 12.000€ no la mueve.
+// Aviso: una búsqueda con OR mezcla productos distintos y ahí la mediana engaña. Por eso el chip
+// pide DOS cosas: muestra suficiente (8 precios) y una desviación grande (30%). Con menos, calla.
+let medianPrice = null; // mediana del lote cargado; la recalcula loadCSV
+const DEAL_MIN = 30; // % por debajo de la mediana a partir del cual sale el chip
+// null con menos de 8 precios: con cuatro anuncios la mediana no es una referencia, es una anécdota
+function median(nums) {
+  const p = nums.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+  const n = p.length;
+  return n < 8 ? null : n % 2 ? p[(n - 1) / 2] : (p[n / 2 - 1] + p[n / 2]) / 2;
+}
+console.assert(
+  median([1, 2, 3]) === null &&
+    median([9, 1, 2, 3, 4, 5, 6, 7, 8]) === 5 &&
+    median([8, 1, 2, 3, 4, 5, 6, 7]) === 4.5 &&
+    median([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, -3, NaN]) === 5, // 0, negativos y basura fuera
+  "median() roto",
+);
+// % por debajo de la mediana, o 0 si no hay chollo que anunciar
+const dealOff = (precio) => {
+  if (!medianPrice || !isNum(precio) || +precio <= 0) return 0;
+  const off = Math.round((1 - +precio / medianPrice) * 100);
+  return off >= DEAL_MIN ? off : 0;
+};
+
 // tarjeta compuesta (Destacados/Papelera + swipe): precio + ubicación + antigüedad + flags + descripción
 function fillCard(el, r) {
   const add = (cls, txt) => {
@@ -594,6 +621,15 @@ function fillCard(el, r) {
     price.textContent = precio !== "" ? `${dec1(precio)}€` : "—";
   }
   media.append(price);
+  // chollo: cuánto por debajo de la mediana del lote está este precio (solo si es mucho)
+  const off = dealOff(precio);
+  if (off) {
+    const d = document.createElement("span");
+    d.className = "li-deal";
+    d.textContent = "−" + off + " %";
+    d.title = `${off} % por debajo de la mediana del lote (${eur(medianPrice)})`;
+    media.append(d);
+  }
   // frescura: chip esmerilado en la esquina superior (sin color de urgencia)
   if (isNum(dias)) {
     const a = document.createElement("span");
@@ -1418,6 +1454,8 @@ function loadCSV(text, name) {
   iTitulo = headers.indexOf("titulo");
   iPrecio = headers.indexOf("precio");
   if (iTitulo < 0) iTitulo = 0;
+  // referencia de precio del lote: una vez por carga, no por tarjeta
+  medianPrice = iPrecio < 0 ? null : median(data.map((r) => +r[iPrecio]));
 
   thead.innerHTML = "";
   const tr = document.createElement("tr");
