@@ -284,7 +284,7 @@ function makeContext(store, opts = {}) {
   };
   const fireWin = fire(winListeners);
   // lo que el test observa "desde fuera": qué se copió al portapapeles, qué se abrió/imprimió
-  const spy = { copied: [], opened: [], printed: 0, alerts: [] };
+  const spy = { copied: [], opened: [], printed: 0, alerts: [], warns: [] };
   const sandbox = {
     document,
     localStorage,
@@ -302,6 +302,7 @@ function makeContext(store, opts = {}) {
         error: (...a) => bootErrors.push(a),
         // los console.assert() de app.js son checks reales: si fallan, la suite se entera
         assert: (cond, ...a) => cond || bootErrors.push(["console.assert:", ...a]),
+        warn: (...a) => spy.warns.push(a.join(" ")), // el aviso de un descarte, no un fallo
       },
       { get: (t, p) => (p in t ? t[p] : noop) }, // log/warn/debug/... -> noop
     ),
@@ -469,6 +470,41 @@ async function main() {
         fail(`wp_estado con ${campo}=${JSON.stringify(forma)} rompe la app al usarla: ` + (e.message || e));
       }
     }
+  }
+
+  // 1d. un descarte NO puede ser mudo. La app se protege tirando lo que tiene la forma
+  //     equivocada, y eso está bien; lo que no vale es que el dato desaparezca sin dejar
+  //     nada. Sin rastro, "me faltan búsquedas" no se puede diagnosticar, y el original se
+  //     pierde de verdad en la siguiente escritura de esa clave.
+  //     Contrato: aviso por consola + copia intacta en "roto:<clave>" + el original se queda.
+  {
+    const CASOS = [
+      ["wp_excl", "5", "un objeto donde va un objeto"],
+      ["wp_excl", "{", "un JSON que ni parsea"],
+      ["wp_blocksel", '{"a":1}', "un objeto donde va una lista"],
+      ["wp_rejected", '{"ford.csv":5}', "un cajón que no es lista de ids"],
+      ["wp_searches", '[{"csv":"ford.csv","rows":2,"mtime":1},{"rows":9}]', "una entrada sin csv"],
+    ];
+    for (const [clave, crudo, que] of CASOS) {
+      const b = await boot({ [clave]: crudo, wp_lastcsv: "ford.csv" });
+      if (b.errs.length) fail(`${clave} con ${que} tumbó el boot: ` + (b.errs[0].message || b.errs[0]));
+      if (!b.store["roto:" + clave])
+        fail(`${clave} con ${que}: se descartó sin copia en roto:${clave}`);
+      if (b.store["roto:" + clave] !== crudo)
+        fail(`roto:${clave} no guarda el original tal cual: ` + b.store["roto:" + clave]);
+      // el original NO se comprueba a propósito: hydrateEstado reescribe varias de estas
+      // claves saneadas en el mismo boot. Por eso hace falta la copia y no basta con dejarlo.
+      if (!b.spy.warns.some((w) => w.includes(clave)))
+        fail(`${clave} con ${que}: ni un aviso por consola. Avisos: ` + JSON.stringify(b.spy.warns));
+    }
+    // la búsqueda sana del lote envenenado sobrevive: se tira la entrada, no la lista
+    const b = await boot({ wp_searches: '[{"csv":"ford.csv","rows":2,"mtime":1},{"rows":9}]' });
+    if (vm.runInContext("loadSearches().length", b.sandbox) !== 1)
+      fail("una entrada sin csv se llevó por delante la búsqueda sana");
+    // y un arranque limpio no aparta nada ni avisa de nada
+    const limpio = await boot({ wp_excl: '{"ford.csv":["roto"]}' });
+    if (limpio.spy.warns.length) fail("aviso de descarte con un estado sano: " + JSON.stringify(limpio.spy.warns));
+    if (Object.keys(limpio.store).some((k) => k.startsWith("roto:"))) fail("apartó una clave sana");
   }
 
   // 2. arranque con estado guardado en la clave fija `wp_estado`: hydrateEstado()->render()

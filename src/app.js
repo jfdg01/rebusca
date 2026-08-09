@@ -47,12 +47,27 @@ function setLS(k, v) {
 // No basta con parsear: un JSON VÁLIDO de la forma equivocada (5, "texto", [] donde se
 // espera {}) crashea igual al primer uso. Si el fallback dice la forma, se exige la forma.
 // Con fallback null no se exige nada: ahí el llamador ya sabe distinguir formatos viejos.
+// Descartar es correcto; descartar en silencio no. El dato se copia a "roto:<clave>" antes de
+// ignorarlo: la app arranca limpia, queda un aviso que mirar y el original sobrevive a la
+// siguiente escritura de esa clave. Nadie escribe nunca "roto:*".
+// ponytail: copia y deja el original donde está, así el llamador no tiene que acordarse de
+// reescribir la clave y apartar dos veces la misma no hace nada.
+const apartadas = new Set(); // una vez por clave y sesión: readJSON se llama en cada render
+function aparta(k, motivo) {
+  if (apartadas.has(k)) return;
+  apartadas.add(k);
+  console.warn(`Rebusca: ${k} tiene la forma equivocada (${motivo}); se ignora. Copia en roto:${k}`);
+  const crudo = localStorage.getItem(k);
+  try { if (crudo != null) localStorage.setItem("roto:" + k, crudo); } catch {} // sin cuota: el aviso ya salió
+}
 const readJSON = (k, fb) => {
-  try {
-    const v = JSON.parse(localStorage.getItem(k) ?? "null");
-    if (v == null) return fb;
-    return fb !== null && (typeof v !== "object" || Array.isArray(v) !== Array.isArray(fb)) ? fb : v;
-  } catch { return fb; }
+  let v;
+  try { v = JSON.parse(localStorage.getItem(k) ?? "null"); }
+  catch { return aparta(k, "no es JSON"), fb; }
+  if (v == null) return fb;
+  if (fb !== null && (typeof v !== "object" || Array.isArray(v) !== Array.isArray(fb)))
+    return aparta(k, "se esperaba " + (Array.isArray(fb) ? "una lista" : "un objeto")), fb;
+  return v;
 };
 // ── IndexedDB: almacén clave/valor para lo que no cabe en localStorage ──
 // localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
@@ -124,30 +139,32 @@ const BUCKET_NAMES = ["rejected", "favorite"]; // los "ficheros" de cada cajón 
 const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
 // cache de filas por id (objeto {columna:valor}). Permite ver favoritos aunque su
 // CSV no esté cargado; guarda _csv (cajón de origen) para migrar el modelo global viejo.
-let rowCache = {};
-try { rowCache = JSON.parse(localStorage.getItem("wp_rows") || "{}"); } catch {}
+let rowCache = readJSON("wp_rows", {});
 // ── cubos POR CAJÓN (búsqueda): cada csv tiene sus propios ficheros, sin fugas entre cajones.
 // buckets[nombre] = {csv: Set<id>}. `rejected/favorite` apuntan al cajón activo (curCsv)
 // vía pointBuckets(), así el resto del código sigue usando `.has/.add/.delete` sin cambios.
 const buckets = { rejected: {}, favorite: {} };
 // Array = formato global viejo → reparte por origen (rowCache._csv). {csv:[ids]} = ya por cajón.
 // Las claves se funden por cajón (drawerOf) al leer: fusiona los cajones "--dia"/"--semana" viejos.
-const toMap = (val) => {
+const toMap = (val, k) => {
   const map = {};
   const add = (c, id) => (map[drawerOf(c)] ||= new Set()).add(id);
   // Sin _csv no se sabe de qué búsqueda salió el id. Archivarlo bajo "" lo metía en un cajón
   // real e inalcanzable: `allQueries` se puebla solo desde wp_searches, así que nadie podía
   // volver a verlo, pero seguía contando y ocupando. Convención: nada se archiva bajo "".
   if (Array.isArray(val)) for (const id of val) { const c = rowCache[id]?._csv; if (c) add(c, id); }
-  // `val[c]` tiene que ser una lista de ids: si no lo es, ese cajón se tira entero
-  else if (val && typeof val === "object") for (const c in val) for (const id of Array.isArray(val[c]) ? val[c] : []) add(c, id);
+  // `val[c]` tiene que ser una lista de ids: si no lo es, ese cajón se tira entero (con aviso)
+  else if (val && typeof val === "object") for (const c in val) {
+    if (!Array.isArray(val[c])) { aparta(k, `el cajón ${c} no es una lista de ids`); continue; }
+    for (const id of val[c]) add(c, id);
+  }
   return map;
 };
 const fromMap = (map) => { const o = {}; for (const c in map) if (map[c].size) o[c] = [...map[c]]; return o; };
 const mergeInto = (into, from) => { for (const c in from) { const s = into[c] ||= new Set(); from[c].forEach((id) => s.add(id)); } };
-for (const n of BUCKET_NAMES) buckets[n] = toMap(readJSON("wp_" + n, null));
+for (const n of BUCKET_NAMES) buckets[n] = toMap(readJSON("wp_" + n, null), "wp_" + n);
 // migración: el cubo "interesantes" desaparece; sus ids ascienden a favoritos (y la clave se retira)
-mergeInto(buckets.favorite, toMap(readJSON("wp_interested", null)));
+mergeInto(buckets.favorite, toMap(readJSON("wp_interested", null), "wp_interested"));
 localStorage.removeItem("wp_interested");
 let rejected = new Set(), favorite = new Set(); // apuntados a curCsv por pointBuckets()
 let pointedDrawer = null; // cajón al que apuntan rejected/favorite ahora mismo
@@ -304,8 +321,8 @@ function hydrateEstado() {
       // No se fusionan: una unión no sabe representar un borrado, así que resucitaría en cada
       // arranque un rechazo que el usuario acaba de retirar.
       const mir = (k, blobVal) => (localStorage.getItem(k) != null ? readJSON(k, null) : blobVal);
-      for (const n of BUCKET_NAMES) buckets[n] = toMap(mir("wp_" + n, e[n])); // reparte por cajón (o migra el global viejo)
-      mergeInto(buckets.favorite, toMap(e.interested)); // migración: interesantes viejos ascienden a favoritos
+      for (const n of BUCKET_NAMES) buckets[n] = toMap(mir("wp_" + n, e[n]), "wp_" + n); // reparte por cajón (o migra el global viejo)
+      mergeInto(buckets.favorite, toMap(e.interested, "wp_estado")); // migración: interesantes viejos ascienden a favoritos
       // cubos exclusivos POR CAJÓN: papelera > favoritos.
       const cajones = new Set([...Object.keys(buckets.rejected), ...Object.keys(buckets.favorite)]);
       for (const c of cajones) {
@@ -1527,8 +1544,14 @@ console.assert(
 // ── búsquedas guardadas: definiciones (kw+since) en localStorage ──
 // No se guardan result sets: abrir una búsqueda = re-scrapear. {csv, rows, mtime(s)} por entrada.
 const searchesKey = () => "wp_searches";
-// filtra las entradas sin csv: una sola envenenada rompía el arranque entero
-const loadSearches = () => readJSON(searchesKey(), []).filter((s) => s && typeof s.csv === "string");
+// filtra las entradas sin csv: una sola envenenada rompía el arranque entero. Las sanas de
+// esa misma lista se quedan, y el original entero se aparta para poder rescatarlo.
+const loadSearches = () => {
+  const l = readJSON(searchesKey(), []);
+  const sanas = l.filter((s) => s && typeof s.csv === "string");
+  if (sanas.length !== l.length) aparta(searchesKey(), "hay entradas sin csv");
+  return sanas;
+};
 const writeSearches = (list) =>
   setLS(searchesKey(), JSON.stringify(list));
 function saveSearch(csv, rows) {
