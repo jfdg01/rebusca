@@ -837,6 +837,29 @@ async function main() {
     ok(visto[2] === "9 encontrados", "con una sola rama el sufijo sobra: " + visto[2]);
   }
 
+  // ── 36. la hoja de compartir del móvil va antes que el portapapeles; si se cierra, se copia ──
+  {
+    const b = await loaded();
+    const enviados = [];
+    b.sandbox.navigator.share = async (d) => void enviados.push(d.text);
+    b.q("#kw").value = "teclado";
+    const copiadosAntes = b.spy.copied.length;
+    b.q("#copyAskPrompt").click();
+    await flush();
+    ok(enviados.length === 1 && /teclado/.test(enviados[0]),
+      "el prompt no salió por la hoja de compartir: " + JSON.stringify(enviados));
+    ok(b.spy.copied.length === copiadosAntes, "compartió y además copió: el portapapeles sobra");
+    ok(/Prompt enviado/.test(b.q("#snackmsg").textContent),
+      "el aviso no dice que se compartió: " + b.q("#snackmsg").textContent);
+    // el usuario cierra la hoja de compartir: el texto tiene que acabar en el portapapeles igual
+    b.sandbox.navigator.share = async () => { throw new Error("AbortError"); };
+    b.q("#copyAskPrompt").click();
+    await flush();
+    ok(/teclado/.test(b.spy.copied.at(-1) || ""), "al cerrar la hoja el prompt se perdió");
+    ok(/Prompt copiado/.test(b.q("#snackmsg").textContent),
+      "tras copiar, el aviso sigue diciendo que compartió: " + b.q("#snackmsg").textContent);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

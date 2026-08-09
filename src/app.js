@@ -2045,7 +2045,7 @@ console.assert(
 );
 function shareSearch(kw, since) {
   copyAsync(() => searchURL(kw, since))
-    .then(() => snack("Enlace copiado", null))
+    .then((compartido) => snack(compartido ? "Enlace compartido" : "Enlace copiado", null))
     .catch(() => snack("No se pudo copiar el enlace", null));
 }
 function relaunch(kw, since) {
@@ -2650,19 +2650,28 @@ function ficha(r, i, maxDesc) {
 const fichas = (rows, maxDesc) => rows.map((r, i) => ficha(r, i, maxDesc)).join("\n\n");
 // mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada anuncio (precio final estimado)
 const aiPrompt = (rows, total) => promptIntro(rows.length, total) + "\n\n" + fichas(rows, UNSEEN_DESC);
-// copia texto al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
+// Manda el texto adonde el usuario lo quiere. En el móvil, "copiado" obliga a cambiar de app a
+// mano y a buscar dónde pegar: si hay hoja de compartir, se usa. Si no la hay, o si el usuario la
+// cierra, el texto va al portapapeles igual. Resuelve con true cuando compartió, porque el aviso
+// tiene que decir lo que de verdad pasó.
 function copyAsync(makeText) {
-  if (window.ClipboardItem && navigator.clipboard.write) {
-    const blob = Promise.resolve()
-      .then(makeText)
-      .then((t) => new Blob([t], { type: "text/plain" }));
+  let t;
+  try { t = makeText(); } catch (e) { return Promise.reject(e); }
+  // navigator.share necesita el texto YA: no acepta una promesa. Con texto asíncrono se va por el
+  // portapapeles, que sí sabe esperar sin perder el gesto del usuario.
+  if (typeof t === "string" && navigator.share)
+    return navigator.share({ text: t }).then(() => true, () => toClipboard(t).then(() => false));
+  return toClipboard(t).then(() => false);
+}
+// copia al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
+function toClipboard(t) {
+  if (typeof t !== "string" && window.ClipboardItem && navigator.clipboard.write) {
+    const blob = Promise.resolve(t).then((s) => new Blob([s], { type: "text/plain" }));
     return navigator.clipboard.write([
       new ClipboardItem({ "text/plain": blob }),
     ]);
   }
-  return Promise.resolve()
-    .then(makeText)
-    .then((t) => navigator.clipboard.writeText(t)); // fallback sin ClipboardItem
+  return Promise.resolve(t).then((s) => navigator.clipboard.writeText(s)); // fallback sin ClipboardItem
 }
 // copia un lote de filas como prompt para la IA y lo registra (wp_aisent): su veredicto
 // vuelve como enlace ?keep=<ids> que conserva esos como favoritos y rechaza el resto del lote.
@@ -2675,9 +2684,11 @@ function copyForAI(btn, all, vacio) {
   btn.disabled = true;
   btn.textContent = "Preparando…";
   copyAsync(() => aiPrompt(rows, all.length))
-    .then(() => {
+    .then((compartido) => {
       setAisent(rows, originCsv);
-      snack(`${rows.length} anuncios copiados — pégaselos a tu IA`, null);
+      snack(compartido
+        ? `${rows.length} anuncios enviados a tu IA`
+        : `${rows.length} anuncios copiados — pégaselos a tu IA`, null);
     })
     .catch(() => snack("No se pudo copiar", null))
     .finally(() => {
@@ -2725,11 +2736,13 @@ $("#copyAskPrompt").onclick = (e) => {
   const intent = $("#kw").value.trim(); // lo ya tecleado va como intención; si está vacío, el usuario escribe al final
   btn.disabled = true;
   copyAsync(() => askPrompt(intent))
-    .then(() =>
+    .then((compartido) =>
       snack(
-        intent
-          ? `Prompt copiado con \"${intent}\". Pégalo en tu IA.`
-          : "Prompt copiado. Pégalo en tu IA y describe qué buscas.",
+        compartido
+          ? `Prompt enviado${intent ? ` con \"${intent}\"` : ""}.`
+          : intent
+            ? `Prompt copiado con \"${intent}\". Pégalo en tu IA.`
+            : "Prompt copiado. Pégalo en tu IA y describe qué buscas.",
         null,
       ),
     )
