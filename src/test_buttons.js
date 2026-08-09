@@ -870,6 +870,19 @@ async function main() {
       "tras copiar, el aviso sigue diciendo que compartió: " + b.q("#snackmsg").textContent);
   }
 
+  // ── 37. la foto de la tarjeta se decodifica fuera del hilo de la interfaz ──
+  {
+    const b = await loaded();
+    const card = ev(b, `
+      const el = document.createElement("div");
+      fillCard(el, headers.map((h) => (h === "imagen" ? "https://w/foto.jpg" : h === "id" ? "z1" : "")));
+      el`);
+    const img = byClass(card, "li-img")[0];
+    ok(img, "la tarjeta no montó la foto");
+    ok(img.loading === "lazy" && img.decoding === "async",
+      "la foto bloquea el hilo de la interfaz: loading=" + img.loading + " decoding=" + img.decoding);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

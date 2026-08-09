@@ -609,6 +609,9 @@ function fillCard(el, r) {
     const im = document.createElement("img");
     im.className = "li-img";
     im.loading = "lazy";
+    // decodifica fuera del hilo de la interfaz: en el móvil, una foto grande decodificada en el
+    // hilo principal congela el swipe justo cuando el dedo está encima de la tarjeta
+    im.decoding = "async";
     im.src = img;
     im.onerror = () => im.remove(); // si falla, queda el fondo neutro del media
     media.append(im);
