@@ -53,7 +53,7 @@ harness aparte. Ningún punto se apuntó sin verificarlo.
 
 ## 1. Botones ✓ y ✕ del swipe a 44 px
 
-- [ ] Valor 4 · Coste XS · **Retorno 8,0**
+- [x] Valor 4 · Coste XS · **Retorno 8,0**
 
 Miden unos 27 px de alto. Es la acción más repetida de toda la app.
 
@@ -64,7 +64,7 @@ Miden unos 27 px de alto. Es la acción más repetida de toda la app.
 
 ## 2. Listener del evento `storage`: dos pestañas se pisan el estado
 
-- [ ] Valor 3 · Coste XS · **Retorno 6,0**
+- [x] Valor 3 · Coste XS · **Retorno 6,0**
 
 `hydrateEstado()` corre una sola vez, en el arranque. No hay ningún listener del evento
 `storage`. La pestaña que guarda la última machaca el triaje de la otra, sin error visible.
@@ -76,7 +76,7 @@ Miden unos 27 px de alto. Es la acción más repetida de toda la app.
 
 ## 3. Título a dos líneas en las listas
 
-- [ ] Valor 3 · Coste XS · **Retorno 6,0**
+- [x] Valor 3 · Coste XS · **Retorno 6,0**
 
 `src/app.css:363` recorta a una sola línea. El propio código ya corrigió esto para el swipe
 (`src/app.css:504`) y nunca lo extendió. En Wallapop el modelo y el estado van al final del
@@ -86,7 +86,7 @@ título, así que la línea que se corta es la que decide la compra.
 
 ## 4. Esconder el panel "Búsqueda activa" en el primer arranque
 
-- [ ] Valor 3 · Coste XS · **Retorno 6,0**
+- [x] Valor 3 · Coste XS · **Retorno 6,0**
 
 Sin ninguna búsqueda guardada, esa segunda caja no hace nada y compite con el buscador real.
 Se ve en la captura del arranque en blanco.
@@ -96,7 +96,7 @@ Se ve en la captura del arranque en blanco.
 
 ## 5. La ubicación real del usuario. Hoy todo se mide desde Jaén
 
-- [ ] Valor 5 · Coste S · **Retorno 5,0**
+- [x] Valor 5 · Coste S · **Retorno 5,0**
 
 `getLoc()` lee `localStorage["wp_loc"]`, pero **nada en la app escribe esa clave**. No hay
 selector de ciudad, ni botón de geolocalización, ni parámetro en el enlace. Quien no viva en
@@ -113,7 +113,7 @@ esas coordenadas a Wallapop.
 
 ## 6. Señal de precio. Hoy el cazador de chollos no dice qué es un chollo
 
-- [ ] Valor 5 · Coste S · **Retorno 5,0**
+- [x] Valor 5 · Coste S · **Retorno 5,0**
 
 El usuario compara precios de cabeza. La app tiene todos los precios del lote en memoria y no
 calcula nada.
@@ -126,7 +126,7 @@ calcula nada.
 
 ## 7. La tarjeta enseña lo que la app ya sabe
 
-- [ ] Valor 4 · Coste S · **Retorno 4,0**
+- [x] Valor 4 · Coste S · **Retorno 4,0**
 
 El dato ya está en el CSV, o la API ya lo manda, y la tarjeta no lo pinta. Cero peticiones
 nuevas. Por orden de valor:
@@ -144,7 +144,7 @@ nuevas. Por orden de valor:
 
 ## 8. No construir cientos de `<tr>` que nadie ve
 
-- [ ] Valor 4 · Coste S · **Retorno 4,0**
+- [x] Valor 4 · Coste S · **Retorno 4,0**
 
 `render()` crea un `<tr>` completo por cada fila aunque la tabla esté oculta en la vista de
 mazo. El swipe construye su propia tarjeta aparte, así que ese trabajo se tira. Pasa justo en
@@ -156,7 +156,7 @@ el instante en que el usuario espera resultados.
 
 ## 9. `aria-live` en el overlay de carga y en el snack
 
-- [ ] Valor 2 · Coste XS · **Retorno 4,0**
+- [x] Valor 2 · Coste XS · **Retorno 4,0**
 
 Ninguno de los dos anuncia sus cambios, así que un lector de pantalla no se entera de que la
 búsqueda empezó ni de que apareció un "Deshacer".
@@ -166,7 +166,7 @@ búsqueda empezó ni de que apareció un "Deshacer".
 
 ## 10. "Quitar" en rojo también en reposo
 
-- [ ] Valor 2 · Coste XS · **Retorno 4,0**
+- [x] Valor 2 · Coste XS · **Retorno 4,0**
 
 El botón destructivo solo se pone rojo con el ratón encima. En un móvil no hay ratón, así que
 la pista nunca aparece.
@@ -176,7 +176,7 @@ la pista nunca aparece.
 
 ## 11. Manifest para instalar la app en la pantalla de inicio
 
-- [ ] Valor 3 · Coste S · **Retorno 3,0**
+- [x] Valor 3 · Coste S · **Retorno 3,0**
 
 `servidor.py:40` ya sirve la extensión `.webmanifest`. El hueco está preparado y vacío. Para
 una app que se abre a diario desde el móvil son diez líneas. Además una app instalada conserva
@@ -189,7 +189,7 @@ mejor su almacenamiento, así que refuerza el punto 20.
 
 ## 12. El contador de la búsqueda dice por qué rama va
 
-- [ ] Valor 3 · Coste S · **Retorno 3,0**
+- [x] Valor 3 · Coste S · **Retorno 3,0**
 
 Las ramas OR se piden en serie y el overlay solo enseña el total y el cronómetro. Con doce
 ramas, el usuario ve "0 encontrados" y el reloj subiendo, sin saber si va por la primera o por
@@ -201,7 +201,7 @@ la última.
 
 ## 13. Un botón que genera el enlace de la búsqueda
 
-- [ ] Valor 3 · Coste S · **Retorno 3,0**
+- [x] Valor 3 · Coste S · **Retorno 3,0**
 
 La app recibe ocho parámetros de URL y no genera ninguno. Un botón "copiar enlace" en el gestor
 sirve para compartir con otra persona y, de paso, para llevarte una búsqueda a otro móvil.
@@ -213,7 +213,7 @@ sirve para compartir con otra persona y, de paso, para llevarte una búsqueda a 
 
 ## 14. Un tope en las búsquedas muy amplias
 
-- [ ] Valor 3 · Coste S · **Retorno 3,0**
+- [x] Valor 3 · Coste S · **Retorno 3,0**
 
 Con frescura "cualquiera" no hay corte por fecha ni por número de páginas. Con muchas ramas OR
 eso son minutos. El CLI sí tiene `--limit` (`src/wallapop.py:224`); el navegador no tiene nada.
@@ -224,7 +224,7 @@ eso son minutos. El CLI sí tiene `--limit` (`src/wallapop.py:224`); el navegado
 
 ## 15. Recordar el orden elegido en Favoritos y Papelera
 
-- [ ] Valor 2 · Coste S · **Retorno 2,0**
+- [x] Valor 2 · Coste S · **Retorno 2,0**
 
 `listSort` y `listSortDir` viven en variables sueltas y se pierden al recargar.
 
@@ -233,7 +233,7 @@ eso son minutos. El CLI sí tiene `--limit` (`src/wallapop.py:224`); el navegado
 
 ## 16. Acercar la ayuda de la gramática al buscador
 
-- [ ] Valor 2 · Coste S · **Retorno 2,0**
+- [x] Valor 2 · Coste S · **Retorno 2,0**
 
 El icono está en la fila del botón de IA, no en la del campo de búsqueda. Quien busca una
 palabra suelta nunca descubre que existen `OR`, los paréntesis y las comillas.
@@ -244,7 +244,7 @@ palabra suelta nunca descubre que existen `OR`, los paréntesis y las comillas.
 
 ## 17. `navigator.share` antes del portapapeles
 
-- [ ] Valor 2 · Coste S · **Retorno 2,0**
+- [x] Valor 2 · Coste S · **Retorno 2,0**
 
 Los botones de IA solo escriben al portapapeles. En el móvil eso obliga a cambiar de app a mano
 y buscar dónde pegar.
@@ -254,7 +254,7 @@ y buscar dónde pegar.
 
 ## 18. Desglosar el contador de "excluidos"
 
-- [ ] Valor 2 · Coste S · **Retorno 2,0**
+- [x] Valor 2 · Coste S · **Retorno 2,0**
 
 Un solo número junta palabra, categoría y topes, así que no sabes qué filtro te quitó qué.
 
@@ -264,7 +264,7 @@ Un solo número junta palabra, categoría y topes, así que no sabes qué filtro
 
 ## 19. `decoding="async"` en la imagen de tarjeta
 
-- [ ] Valor 1 · Coste XS · **Retorno 2,0**
+- [x] Valor 1 · Coste XS · **Retorno 2,0**
 
 `loading="lazy"` ya está puesto y cubre casi todo el ahorro. Falta el atributo hermano.
 
@@ -272,7 +272,7 @@ Un solo número junta palabra, categoría y topes, así que no sabes qué filtro
 
 ## 20. Copia de seguridad del estado. Hoy no hay ninguna
 
-- [ ] Valor 5 · Coste M · **Retorno 1,7**
+- [x] Valor 5 · Coste M · **Retorno 1,7**
 
 **Es lo único de la lista que, si no se hace, no se puede recuperar después.** No hay cuentas
 ni backend. Meses de triaje viven solo en el `localStorage` de un navegador. Si el usuario
@@ -288,7 +288,7 @@ solo exportan favoritos como texto.
 
 ## 21. Un aviso de novedades fuera del gestor
 
-- [ ] Valor 3 · Coste M · **Retorno 1,0**
+- [x] Valor 3 · Coste M · **Retorno 1,0**
 
 `unseenCount()` solo se calcula al abrir el gestor de búsquedas. Fuera de ahí no hay ninguna
 señal, así que las búsquedas que el usuario no abre acumulan anuncios en silencio.
@@ -300,7 +300,7 @@ señal, así que las búsquedas que el usuario no abre acumulan anuncios en sile
 
 ## 22. Cabecera más compacta cuando hay resultados
 
-- [ ] Valor 3 · Coste M · **Retorno 1,0**
+- [x] Valor 3 · Coste M · **Retorno 1,0**
 
 Medido sobre la captura real: la cabecera ocupa unos 304 px de los 632, y sube a unos 386 px
 cuando aparecen los contadores. La barra compacta ya existe para Favoritos y Papelera
@@ -312,7 +312,7 @@ cuando aparecen los contadores. La barra compacta ya existe para Favoritos y Pap
 
 ## 23. Modo oscuro
 
-- [ ] Valor 3 · Coste M · **Retorno 1,0**
+- [x] Valor 3 · Coste M · **Retorno 1,0**
 
 Todos los colores ya son variables en `:root` (`src/app.css:1-22`). Falta un bloque
 `@media (prefers-color-scheme: dark)` que las redefina. Ninguna otra regla cambia.
@@ -321,7 +321,7 @@ Todos los colores ya son variables en `:root` (`src/app.css:1-22`). Falta un blo
 
 ## 24. Marcar posibles duplicados
 
-- [ ] Valor 3 · Coste M · **Retorno 1,0**
+- [x] Valor 3 · Coste M · **Retorno 1,0**
 
 Si el mismo vendedor republica el mismo producto con otro id, la app no lo señala. Solo
 deduplica por id exacto dentro de un mismo scrape.
