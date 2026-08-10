@@ -124,3 +124,24 @@ Se leen antes de escribir un check, no después.
 - Un arnés que fabrica lo que le piden convierte una errata en un check verde (it32). Si
   `querySelector("#loQueSea")` devuelve siempre un elemento, un id mal escrito pasa el check.
 - Un gancho que el propio código bajo prueba vuelve a llamar mide dos cosas y reporta una (it34).
+- El arnés puede más de lo que parece. La it43 dejó un mutante abierto diciendo «el arnés no
+  sabe fallar al escribir»; `makeContext` tenía `opts.limit` desde hacía 30 iteraciones (it44).
+  Antes de declarar que falta arnés, léelo.
+- Lo que el arnés no imita se nota tarde. `tbody.innerHTML = ""` no vacía `children` en el DOM
+  falso, así que contar `children.length` mide el arnés (it45, abandonada por reloj).
+
+**Sobre el alcance**
+
+- Un barrido con demasiados supervivientes no cabe en una iteración. Se corta en dos: la
+  primera escribe los nombres y el daño de cada uno, la segunda hereda esa F1 y no la repite
+  (it42 → it43). Lo que se recorta es el alcance, nunca F4 ni F5.
+- Lo que queda abierto se escribe con nombre, daño y motivo. «Por reloj» y «por criterio» no
+  son lo mismo, y solo el primero vuelve.
+- Una lista vacía de filtros significa «no filtro». El código que la lee tiene que decirlo, y
+  el check tiene que visitar la lista vacía además de la llena (it41).
+- Un cubo exclusivo se prueba con el id que está en los dos cubos, y con un tercero que solo
+  está en uno: sin el tercero, el check no distingue «reconcilia» de «vacía el otro cubo» (it42).
+- Un `clear()` antes de rellenar no se ve en la primera carga. Se prueba con la segunda (it42).
+- Un check contra un presupuesto pide dos aserciones: la que mide, y la que comprueba que el
+  presupuesto dejó pasar lo que tenía que dejar pasar (it44).
+- Un mutante sobre una llamada mide un sitio. Para medir la regla, muta su definición (it44).
