@@ -473,7 +473,8 @@ let iId = headers.indexOf("id"),
 const isNum = (v) => v !== "" && !isNaN(v);
 // identidad del anuncio DENTRO de su cajón = id inmutable de Wallapop. La clasificación es
 // por cajón (curCsv): el mismo id en otra búsqueda se clasifica aparte. Fallback titulo|precio
-// solo para drag de CSV sin id.
+// para un CSV sin columna `id`; el arrastre de CSV que lo justificaba ya no existe, pero el
+// scraper puede devolver un anuncio sin id y sin el fallback ese anuncio no se puede clasificar.
 const itemId = (r) => (iId >= 0 && r[iId]) || r[iTitulo] + "|" + r[iPrecio];
 const key = (r) => itemId(r); // id de Wallapop; el cajón lo pone curCsv (buckets[…][curCsv])
 

@@ -286,6 +286,40 @@ async function main() {
     ok((b.store.wp_aisent || "").includes("a1"), "#dossierFav no anotó el lote (wp_aisent)");
   }
 
+  // ── 7b. el dossier escapa lo que viene del anuncio ──
+  //         `dossierHTML` es el único sitio de la app que mete texto del anuncio en `innerHTML`
+  //         con plantillas (el resto usa `textContent`). El título, la descripción, el enlace y
+  //         las fotos los escribe el vendedor. Sin `esc` cada campo abre etiquetas en la página.
+  {
+    const b = await loaded();
+    // sin espacios: la columna `imagenes` se parte por espacios, y un veneno partido no mide nada
+    const VENENO = 'x"><b>';
+    const dossier = (campo, texto) =>
+      ev(b, `(() => { const r = [...data[0]]; const i = headers.indexOf(${JSON.stringify(campo)});
+        r[i] = ${JSON.stringify(texto)}; return dossierHTML([r]); })()`);
+
+    for (const campo of ["titulo", "descripcion", "url", "imagen"]) {
+      const html = dossier(campo, VENENO);
+      ok(!html.includes("<b>"), "el campo «" + campo + "» del anuncio abre etiquetas en el dossier");
+      ok(html.includes("&lt;b&gt;"), "el campo «" + campo + "» no aparece escapado en el dossier");
+    }
+    // el `&` va antes que los demás o se escapan las entidades dos veces. Con un `&amp;` de
+    // entrada, el dossier tiene que enseñar `&amp;` al usuario, o sea `&amp;amp;` en la fuente.
+    ok(dossier("titulo", "&amp;").includes("&amp;amp;"),
+      "el & del título no se escapa: el usuario ve una entidad en vez del texto");
+    // la comilla: sin escapar cierra el atributo `src` y lo que sigue son atributos nuevos
+    ok(!/src="x"/.test(dossier("imagen", VENENO)),
+      "la comilla de la foto cierra el atributo src del dossier");
+
+    // el desplegable de búsquedas: el término lo teclea el usuario, y ahí sí hay plantilla
+    ev(b, 'allQueries = [{ csv: "x.csv", label: "a<b>c", kw: "a<b>c", since: "" }]; renderQlist("")');
+    const fila = b.q("#qlist").children[0];
+    ok(fila.querySelector(".qrow-kw").textContent === "a<b>c",
+      "el término del desplegable no se pinta como texto: " + fila.querySelector(".qrow-kw").textContent);
+    // la fila trunca con «…»; sin el title no hay forma de leer un término largo entero
+    ok(fila.title === "a<b>c", "la fila del desplegable se quedó sin title: " + fila.title);
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
