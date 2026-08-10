@@ -1908,6 +1908,59 @@ async function main() {
     ok(orden() === "1000,200,50", "el sentido del segundo criterio se ignora: " + orden());
   }
 
+  // ── 65. la poda de saveRows respeta el lote enviado a la IA ──
+  //     El lote copiado para la IA se cachea aunque no esté en ningún cubo: el veredicto (?keep=)
+  //     puede llegar en otra sesión y sin CSV cargado. La poda del cache se lo llevaría por
+  //     delante, y el usuario pegaría un veredicto sobre filas que ya no existen.
+  {
+    const b = await loaded();
+    ev(b, 'setLS("wp_aisent", JSON.stringify({ csv: "ford.csv", ids: ["enviado"] }))');
+    ev(b, 'rowCache["enviado"] = { id: "enviado", titulo: "En manos de la IA" };' +
+      'rowCache["suelto"] = { id: "suelto", titulo: "Ni en cubo ni en lote" }; saveRows()');
+    ok(ev(b, 'rowCache["enviado"] !== undefined'),
+      "la poda se llevó el lote que espera el veredicto de la IA");
+    // la otra mitad: sin esto el check pasaría igual con la poda entera desactivada
+    ok(ev(b, 'rowCache["suelto"] === undefined'),
+      "la poda no limpió lo que no está ni en un cubo ni en el lote");
+  }
+
+  // ── 66. cachear una búsqueda no toca el cache de otra búsqueda guardada ──
+  //     La poda del índice quita las búsquedas que ya no están guardadas. Sin la mitad que
+  //     pregunta si sigue guardada, cachear una borra el cache de TODAS las demás, y abrir
+  //     cualquier otra búsqueda vuelve a scrapear desde cero. El cache es justo lo que hace que
+  //     abrir una guardada sea instantáneo.
+  {
+    const guardadas = JSON.stringify([
+      { csv: "ford.csv", rows: 3, mtime: 1 },
+      { csv: "vespa.csv", rows: 2, mtime: 2 },
+    ]);
+    const b = await loaded({ store: { wp_searches: guardadas } });
+    ev(b, 'csvIndex["vespa.csv"] = { ts: 1, ids: ["v1"] }');
+    await ev(b, 'idb.set("csv:vespa.csv", "texto de vespa")');
+
+    await ev(b, 'cacheCsv("ford.csv", "texto de ford", 2)');
+    await flush();
+    ok(ev(b, 'csvIndex["vespa.csv"] !== undefined'),
+      "cachear una búsqueda borró del índice otra búsqueda guardada");
+    ok((await ev(b, 'idb.get("csv:vespa.csv")')) === "texto de vespa",
+      "cachear una búsqueda borró el texto cacheado de otra búsqueda guardada");
+    ok(ev(b, 'csvIndex["ford.csv"] !== undefined'), "la búsqueda cacheada no entró en el índice");
+  }
+
+  // ── 67. dropCsvCache se lleva el texto, no solo el nombre ──
+  //     Sin el borrado del texto quedan cientos de KB en IndexedDB que ya nadie puede nombrar:
+  //     el índice es la única forma de llegar a ellos.
+  {
+    const b = await loaded();
+    ev(b, 'csvIndex["vespa.csv"] = { ts: 1, ids: ["v1"] }');
+    await ev(b, 'idb.set("csv:vespa.csv", "texto de vespa")');
+    ev(b, 'dropCsvCache("vespa.csv")');
+    await flush();
+    ok(ev(b, 'csvIndex["vespa.csv"] === undefined'), "dropCsvCache no quitó el nombre del índice");
+    ok((await ev(b, 'idb.get("csv:vespa.csv")')) === undefined,
+      "dropCsvCache dejó el texto huérfano en IndexedDB: " + (await ev(b, 'idb.get("csv:vespa.csv")')));
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 
