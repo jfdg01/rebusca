@@ -579,7 +579,13 @@ async function main() {
     ok(n("#" + ids[0].slice(0, -1)) >= 1, "un id a medias no encuentra su anuncio");
     // el filtro normaliza los dos lados: buscar en mayúsculas encuentra igual
     ok(n(tit.toUpperCase()) >= 1, "buscar en mayúsculas no encuentra el título: " + tit);
-    ev(b, 'listQ = ""'); // el buscador queda limpio para los bloques de después
+    // el filtro por vendedor es de la papelera. Si se colara en favoritos, la lista saldría
+    // recortada sin que nada en pantalla lo diga.
+    ev(b, 'view = "favorite"; data.forEach((r) => favorite.add(key(r)));' +
+      ' listSeller = col(data[0], "vendedor"); listQ = ""');
+    ok(ev(b, "filteredRows().length") === ev(b, "data.length"),
+      "el filtro por vendedor recorta también los favoritos: " + ev(b, "filteredRows().length"));
+    ev(b, 'listQ = ""; listSeller = ""; view = ""'); // limpio para los bloques de después
   }
 
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
