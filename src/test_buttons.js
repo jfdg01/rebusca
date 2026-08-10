@@ -2256,6 +2256,11 @@ async function main() {
       ((blob.rejected || {})["ford.csv"] || []).includes(k),
       "rechazar no llega al blob de estado: al recargar vuelve el anuncio, " + b.store.wp_estado,
     );
+    // y lo mismo con los ajustes del cajón: los seis salen del mismo molde `saver()`
+    b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "roto" } });
+    const conVeto = JSON.parse(b.store.wp_estado || "{}");
+    ok(((conVeto.excl || {})["ford.csv"] || []).includes("roto"),
+      "vetar una palabra no llega al blob de estado: al recargar vuelve el veto, " + b.store.wp_estado);
   }
 
   console.log("ok (" + n + " comprobaciones)");

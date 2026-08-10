@@ -316,10 +316,13 @@ function bucketRows(set) {
   return out;
 }
 const blockSel = load("wp_blocksel"); // vendedores bloqueados (user_id): sus anuncios van a la papelera solos, presentes y futuros
-const saveBlockSel = () => {
-  setLS("wp_blocksel", JSON.stringify([...blockSel]));
+// Los seis mapas de ajustes se guardan igual: su clave, su JSON, y el blob de estado detrás.
+// Un molde en vez de seis copias de cuatro líneas; los nombres se quedan, que es lo que se llama.
+const saver = (k, dame) => () => {
+  setLS(k, JSON.stringify(dame()));
   pushEstado();
 };
+const saveBlockSel = saver("wp_blocksel", () => [...blockSel]);
 let stamp = readJSON("wp_stamp", {}); // {key: epochMs}: cuándo se clasificó (para "descartado/destacado hace X"); legacy sin stamp no muestra línea
 const stampNow = (k) => {
   stamp[k] = Date.now();
@@ -333,37 +336,22 @@ const unstamp = (k) => {
 };
 let exclMap = readJSON("wp_excl", {}); // {csv: [palabras]}: por query, cartas con la palabra en el título se auto-descartan (fuera del mazo)
 const exclTerms = () => (curCsv && exclMap[curDrawer()]) || []; // palabras vetadas del cajón activo
-const saveExcl = () => {
-  setLS("wp_excl", JSON.stringify(exclMap));
-  pushEstado();
-};
+const saveExcl = saver("wp_excl", () => exclMap);
 // topes numéricos por cajón: lo que pase de precio/antigüedad/distancia sale del mazo solo,
 // igual que una palabra vetada (y con el mismo atajo "mandar a rechazados" en el stat).
 // Se guardan por búsqueda, así se re-aplican en cada re-scrape sin volver a teclearlos.
 const LIMITS = [["precio", "€"], ["dias", "días"], ["km", "km"]];
 let limMap = readJSON("wp_lim", {}); // {cajon: {precio, dias, km}}
 const limits = () => (curCsv && limMap[curDrawer()]) || {};
-const saveLimits = () => {
-  setLS("wp_lim", JSON.stringify(limMap));
-  pushEstado();
-};
+const saveLimits = saver("wp_lim", () => limMap);
 let catExclMap = readJSON("wp_catexcl", {}); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
 const catExclTerms = () => (curCsv && catExclMap[curDrawer()]) || [];
-const saveCatExcl = () => {
-  setLS("wp_catexcl", JSON.stringify(catExclMap));
-  pushEstado();
-};
+const saveCatExcl = saver("wp_catexcl", () => catExclMap);
 let catModeMap = readJSON("wp_catmode", {}); // {csv: "incluir"}: si es "incluir", las categorías marcadas son las ÚNICAS que se conservan (resto a rechazados); por defecto "excluir"
 const catMode = () => (curCsv && catModeMap[curDrawer()]) || "excluir";
-const saveCatMode = () => {
-  setLS("wp_catmode", JSON.stringify(catModeMap));
-  pushEstado();
-};
+const saveCatMode = saver("wp_catmode", () => catModeMap);
 let aliasMap = readJSON("wp_alias", {}); // {csv: "apodo"}: nombre legible por búsqueda; NO toca el CSV ni los keywords reales
-const saveAlias = () => {
-  setLS("wp_alias", JSON.stringify(aliasMap));
-  pushEstado();
-};
+const saveAlias = saver("wp_alias", () => aliasMap);
 // App 100% local: un solo usuario por navegador, sin perfiles. Estado en claves fijas.
 // Migración one-shot del modelo multi-perfil: adopta el estado del perfil activo (wp_perfil)
 // a las claves fijas y retira los índices de perfiles. Las claves viejas wp_*_<nombre>

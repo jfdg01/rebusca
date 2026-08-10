@@ -564,7 +564,7 @@
   /* la carta reutiliza el cuerpo de la lista (.li-*); solo ajustes de la vista swipe: */
   /* el clamp de 2 líneas ya viene de .li-title; aquí solo el flex */
   .swipe-card .li-title { flex: 0 0 auto; }
-  .swipe-card .li-head, .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
+  .swipe-card .li-age, .swipe-card .li-flags { flex: 0 0 auto; }
   /* la media (foto + gradiente + overlays) crece a altura fija: más escaparate que el 16/9 de la lista.
      .li-img sigue siendo absolute/inset:0/cover, así que llena esta caja sin trucos de margen */
   .swipe-card .li-media { flex: 0 0 auto; aspect-ratio: auto; height: 22vh; }
