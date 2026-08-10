@@ -97,7 +97,7 @@ no se vuelve a pedir el detalle de cada anuncio (ver `MEJORAS.md`).
 - **Búsquedas guardadas:** `localStorage["wp_searches"]` = `[{csv, rows, mtime}]`
   (definiciones, no resultados). Sin cache, abrir una guardada re-scrapea con su `kw`/`since`.
 - **Estado (un usuario/navegador, sin perfiles):** `localStorage["wp_estado"]` guarda el blob
-  `{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}`
+  `{rejected, favorite, blockSel, excl, catExcl, catMode, lim, alias, stamp}`
   (`hydrateEstado`/`pushEstado`). También `wp_lastcsv`/`wp_lastseen`. Al cargar, una migración
   one-shot adopta el `wp_estado_<perfil>` del perfil activo del modelo viejo a estas claves fijas.
 - **Precio con envío:** estimado, no exacto. `finalPrice` (`app.js`) suma 0,70 € + 5 % + el porte

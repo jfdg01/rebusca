@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """End-to-end del servidor de estáticos: arranca el handler real y pide por HTTP lo
-mismo que pide el navegador (la portada, los estáticos, una ruta que no existe, un
-escape de directorio, un método raro). Pilla lo que el demo() de servidor.py no ve:
-enrutado, cabeceras, mime, 404 y traversal.
+mismo que pide el navegador. Pilla lo que el demo() de servidor.py no ve, porque hace
+falta un socket: enrutado, cabeceras de seguridad, mime y charset, el ?v= de la portada,
+el 404, el escape de directorio, un método raro, y qué llega al journal y qué no.
+Arranca además un proceso con el locale en C, que es como lo lanza systemd.
 
     python3 src/test_servidor.py
 """
@@ -177,6 +178,19 @@ def main():
                      "/x/../../CLAUDE.md", "/%2e%2e/deploy.sh"):
             st, _, b = req(port, path)
             assert st != 200, (path, st, b[:80])
+        # Los de arriba NO miden el anti-traversal: ninguno acaba en una extensión de PUB, así
+        # que `publico()` los tira antes. Borra `translate_path` y siguen en verde. Este cebo sí
+        # lleva una extensión servible, así que la única defensa que le queda es la de la ruta.
+        cebo = HERE.parent / "cebo-traversal.txt"
+        cebo.write_text("SECRETO FUERA DE src/", encoding="utf-8")
+        try:
+            for path in ("/../cebo-traversal.txt", "/..%2fcebo-traversal.txt",
+                         "//../cebo-traversal.txt", "/x/../../cebo-traversal.txt",
+                         "/%2e%2e/cebo-traversal.txt", "/..%252fcebo-traversal.txt"):
+                st, _, b = req(port, path)
+                assert st != 200 and b'SECRETO' not in b, ("se sirvió fuera de src/", path, st, b[:80])
+        finally:
+            cebo.unlink(missing_ok=True)
 
         # ── 7b. el código fuente NO se sirve: src/ tiene el server, el scraper de
         #        referencia y los tests, y el dominio es público. Solo salen los estáticos
@@ -205,7 +219,7 @@ def main():
         assert req(port, "/")[0] == 200, "el server se quedó tocado tras el POST"
 
         # ── 8b. el journal del VPS: el 404 de los bots no sale, todo lo demás sí ──
-        #        Esto mide el accidente que cuenta servidor.py:124-126. La función se llamó
+        #        Esto mide el accidente que cuenta el comentario de `log_request`. La función se llamó
         #        `log_message` una vez, y BaseHTTPRequestHandler delega log_error EN log_message:
         #        el journal salía vacío pasara lo que pasara. Renombrarla lo repone entero, así
         #        que la prueba no mira el nombre, mira que el error llegue a stderr.
@@ -223,7 +237,7 @@ def main():
         assert "socket" in loguea("error de socket"), "un error sin código no llega al journal"
 
         # ── 8c. una ref rota en la portada deja rastro por stderr ──
-        #        servidor.py:61-64: antes se descartaba en silencio, la portada salía 200 con la
+        #        `stamped_mtimes`: sin el aviso se descarta en silencio, la portada sale 200 con la
         #        ref rota y Cloudflare cacheaba el 404 cuatro horas. El aviso nombra la que falta
         #        y SOLO la que falta: si grita por cada URL externa, deja de leerse.
         buf = io.StringIO()

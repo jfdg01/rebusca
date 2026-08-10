@@ -291,7 +291,7 @@ function makeEl(sel, any) {
 }
 
 // IndexedDB de mentira. Sin esto el arnés no definía `indexedDB`, así que el `idb` de app.js
-// caía siempre al Map de memoria (`src/app.js:115-118`) y ningún check tocaba el wrapper de
+// caía siempre al Map de memoria con el que `idb` sale del paso, y ningún check tocaba el wrapper de
 // verdad: ni las transacciones, ni `almacenRoto`, ni el commit. Y el commit es justo donde la
 // cuota de IndexedDB revienta una escritura que la petición ya había dado por buena.
 // `opts.idbFalla`: "commit" = la petición dice que sí y la transacción aborta después (la cuota
@@ -1066,10 +1066,21 @@ async function main() {
   // 11. ajuste "excluir lejos sin envío": EXCLUYE del mazo, no rechaza. Bug real: enforceLejos()
   //     corría en cada render() y volvía a rechazar lo que acababas de restaurar -> "vaciar
   //     papelera" y "seleccionar todo > restaurar" no hacían nada visible.
-  const lj = await boot({ wp_autoexcllejos: "1", wp_lejoskm: "10" });
-  if (lj.errs.length) fail("boot con autoExclLejos lanzó: " + (lj.errs[0].message || lj.errs[0]));
-  if (typeof lj.sandbox.enforceLejos === "function")
-    fail("enforceLejos sigue vivo: re-rechaza en cada render lo que restauras");
+  //     Se mide la CONDUCTA, no el nombre: a2 está a 25 km y sin envío, con el umbral en 10.
+  //     Un check de `typeof enforceLejos === "function"` pasaría con la función renombrada.
+  {
+    const lj = await boot({ wp_autoexcllejos: "1", wp_lejoskm: "10" }, { csv: CSV, timers: true });
+    if (lj.errs.length) fail("boot con autoExclLejos lanzó: " + (lj.errs[0].message || lj.errs[0]));
+    const ev = (expr) => vm.runInContext(expr, lj.sandbox);
+    lj.sandbox.__CSV = CSV;
+    ev('loadCSV(__CSV, "ford.csv"); render(); render()'); // dos veces: el bug pegaba en el 2º render
+    const enPapelera = ev("JSON.stringify([...rejected])");
+    if (enPapelera !== "[]")
+      fail("el ajuste rechazó los lejos en vez de excluirlos del mazo: " + enPapelera);
+    const vistos = ev('JSON.stringify(filteredRows().map((r) => col(r, "id")))');
+    if (vistos !== '["a1"]')
+      fail("los lejos sin envío no salen del mazo con el ajuste puesto, quedaron " + vistos);
+  }
 
   // 12b. CSV degenerado: vacío, y con una fila más corta que la cabecera. Un scrape abortado
   //      o un cache truncado producen las dos formas. parseCSV("") devuelve [], así que
@@ -1401,7 +1412,7 @@ async function main() {
     if (pasos.join(" ") !== esperado) fail("el progreso no dice por qué rama va: " + pasos.join(" "));
   }
 
-  // 12m. un tope de filas corta la búsqueda muy amplia y la marca como parcial (item 14)
+  // 12m. un tope de filas corta la búsqueda muy amplia y la marca como parcial
   {
     const Rebusca = require("./scrape.js");
     const antes = global.fetch;
@@ -1424,14 +1435,14 @@ async function main() {
   }
 
   // 12n. el buscador enseña la gramática OR en su placeholder: el icono de ayuda está en otra fila
-  //      y quien busca una palabra suelta nunca descubre que existen OR, comillas y paréntesis (item 16)
+  //      y quien busca una palabra suelta nunca descubre que existen OR, comillas y paréntesis
   {
     const tag = (HTML.match(/<input[^>]*id="kw"[^>]*>/) || [])[0] || ""; // el tag ocupa varias líneas; [^>] las cruza
     if (!/placeholder="[^"]*\bOR\b[^"]*"/.test(tag)) fail("el buscador no enseña la gramática OR: " + tag);
     if (!/aria-label="/.test(tag)) fail("el buscador se quedó sin nombre accesible: " + tag);
   }
 
-  // 12o. el modo oscuro no se pudre (item 23). Solo se invierten variables, así que un color
+  // 12o. el modo oscuro no se pudre. Solo se invierten variables, así que un color
   //      escrito a pelo en una regla se queda claro sobre fondo oscuro y nadie lo ve hasta prod.
   {
     const dark = (CSS.match(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n  \}\n/) || [])[0];

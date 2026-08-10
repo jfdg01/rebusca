@@ -32,7 +32,8 @@
 </script>
 <link rel="icon" href="wallapop-logo.webp" type="image/webp" />
 <!-- instalable en la pantalla de inicio: es una app que se abre a diario desde el móvil, y una
-     app instalada además conserva mejor su almacenamiento (todo el estado vive en localStorage).
+     app instalada además conserva mejor su almacenamiento (el estado vive en localStorage y el
+     cache de resultados en IndexedDB; si el browser los desaloja, se pierden las búsquedas).
      iOS no lee el manifest: el icono se lo da apple-touch-icon, y por eso es PNG y no webp. -->
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -398,7 +399,10 @@
     <button id="undo">Deshacer</button>
 </div>
 
-<!-- enlace visible (discreto) a la guía: garantiza que cualquier extractor de IA lo vea -->
+<!-- enlace a la guía para que lo vea cualquier extractor de IA. OJO: en la práctica es
+     INVISIBLE — .ai-foot a lo pinta en var(--paper) sobre var(--paper) (app.css). Texto del
+     color del fondo es cloaking de manual, y un buscador lo puede penalizar. Si molesta,
+     píntalo con --muted en vez de borrarlo: el enlace es el que da la guía a las IA. -->
 <footer class="ai-foot">
     <a href="https://rebusca.dibogomez.com/llms.txt">guía para IA (llms.txt)</a>
 </footer>

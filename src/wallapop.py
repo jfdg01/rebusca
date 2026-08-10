@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Scraper de Wallapop via su API interna. Sin dependencias (solo stdlib).
 
+Ya NO se usa en producción: ahí scrapea el browser con scrape.js. Esto se queda como CLI y
+como referencia local. Los dos ficheros han divergido (ver la lista en scrape.js, junto a
+round1): no ajustes scrape.js para que case con este.
+
 Uso:
     python3 wallapop.py "deshumidificador" --lat 37.7796 --lon -3.7849 -o jaen.csv
-    python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a wallapop.csv
+    python3 wallapop.py "deshumidificador"          # por defecto: Jaén, a deshumidificador.csv
 """
 import argparse, csv, json, random, re, sys, threading, time, unicodedata, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
-from math import radians, sin, cos, asin, sqrt
-from pathlib import Path
+from math import radians, sin, cos, asin, sqrt, isfinite
 
 
 def _norm(s):   # minúsculas sin acentos, para comparar título ~ términos
@@ -22,7 +25,7 @@ def title_matches(title, keywords):   # todas las palabras del término aparecen
 
 
 _TOK = re.compile(r'\(|\)|"[^"]*"|[^\s()]+')
-MAX_RAMAS = 32   # ponytail: tope anti-explosión del producto cartesiano (igual que scrape.js)
+MAX_RAMAS = 32   # tope anti-explosión del producto cartesiano (igual que scrape.js)
 
 
 def branches(keywords):
@@ -99,7 +102,15 @@ class Blocked(Exception):
 
 
 def get(params, retries=5):
-    """GET con reintentos + backoff exponencial. Distingue throttle de bloqueo real."""
+    """GET con reintentos + backoff exponencial. Distingue el 403 (bloqueo) del throttle.
+
+    Dos avisos sobre las salidas de esta función:
+    - Agotar los reintentos por red o por JSON ilegible también sale como Blocked, así que la
+      causa real se pierde. scrape.js sí la adjunta al mensaje; aquí no.
+    - El ValueError del 400 no lo atrapa ningún except de aquí, así que sale de search() sin
+      pasar por su `except Blocked`, atraviesa el ex.map y mata el run entero. Un Blocked solo
+      mata una rama. La asimetría es a propósito: un 400 es de params, y no mejora al reintentar.
+    """
     url = API + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers=HEADERS)
     for attempt in range(retries):
@@ -127,6 +138,9 @@ def get(params, retries=5):
 
 
 def _retry_after(e):
+    # Sin tope, al revés que scrape.js, que lo capa a 60s: aquí un `Retry-After: 3600` duerme la
+    # hora entera. En un CLI eso se ve y se corta con Ctrl-C; en la barra del browser no.
+    # `.isdigit()` descarta el formato fecha del header y cualquier valor decimal.
     v = e.headers.get("Retry-After") if e.headers else None
     return float(v) if v and v.isdigit() else None
 
@@ -136,10 +150,14 @@ def _warn(msg):
 
 
 def search(keywords, lat, lon, order_by=None, time_filter=None, incidencias=None):
-    """Generador: suelta cada PÁGINA de items segun llega, para escribir a disco ya.
+    """Generador: suelta cada PÁGINA de items según llega, para escribir a disco ya.
 
-    order_by='newest' -> mas reciente primero. time_filter='today'|'lastWeek'|'lastMonth'
-    -> el servidor filtra por antiguedad (no hay que paginar todo el catalogo)."""
+    order_by='newest' -> más reciente primero. time_filter='today'|'lastWeek'|'lastMonth'
+    -> la API de Wallapop filtra por antigüedad (no hay que paginar todo el catálogo).
+
+    OJO: el `while True` no tiene condición local de parada, solo el cursor agotado. scrape.js
+    sí la tiene (MAX_PAGINAS_SECAS): un cursor que se repite gira aquí para siempre. En un CLI
+    lo corta el usuario; por eso no se ha portado."""
     params = {"keywords": keywords, "latitude": lat, "longitude": lon, "source": "search_box"}
     if order_by:
         params["order_by"] = order_by       # 'newest' verificado contra v3/search (200, desc por created_at)
@@ -151,8 +169,8 @@ def search(keywords, lat, lon, order_by=None, time_filter=None, incidencias=None
         except Blocked as e:
             _warn(f"parada por bloqueo: {e}")
             # El aviso se perdía entre el ruido y main() seguía como si nada: borraba el sidecar,
-            # ordenaba, imprimía "N resultados" y salía con codigo 0. Un CSV recortado por un
-            # bloqueo parecía un scrape completo. `incidencias` lleva eso hasta el codigo de salida.
+            # ordenaba, imprimía "N resultados" y salía con código 0. Un CSV recortado por un
+            # bloqueo parecía un scrape completo. `incidencias` lleva eso hasta el código de salida.
             if incidencias is not None:
                 incidencias.append(f"rama {keywords!r}: {e}")
             return                    # lo ya escrito a disco esta a salvo
@@ -178,20 +196,23 @@ def _deemoji(s):
     return " ".join(_EMOJI.sub("", s or "").split())   # limpia y colapsa los huecos que dejan
 
 
-# Campo a campo tolerante como scrape.js: la API omite claves y las manda a null.
-# Un KeyError/AttributeError aqui aborta el scrape entero por UN anuncio raro.
+# Campo a campo tolerante: la API omite claves y las manda a null, y un KeyError/AttributeError
+# aquí aborta el scrape entero por UN anuncio raro.
+# NO es la misma tolerancia que scrape.js. Huecos conocidos de este lado: un `price` escalar da
+# AttributeError (allí, celda vacía y aviso), y un `web_slug` null revienta al concatenar la URL.
 def row(it, origin):
     loc = it.get("location") or {}
     lat, lon = loc.get("latitude"), loc.get("longitude")
     # Mismo criterio que `created_at`: `lat and lon` solo mira que sean truthy, y una coordenada
-    # de texto revienta math.radians. Truthy tambien descartaba el 0 (longitud 0 pasa por Castellon).
-    _fin = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    # de texto revienta math.radians. Truthy también descartaba el 0 (longitud 0 pasa por Castellón).
+    # isfinite y no solo isinstance: NaN e inf son float, y colaban un "nan" en la celda de km.
+    _fin = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and isfinite(v)
     dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if _fin(lat) and _fin(lon) else ""
-    ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
+    ca = it.get("created_at")   # epoch ms; edad del anuncio = señal de "lo bueno ya voló"
     # Sin comprobar el tipo, un created_at en segundos descartaba todo por viejo y uno de texto
     # reventaba la resta. Mismo criterio que scrape.js: fuera del rango esperado -> celda vacía.
-    dias = round((time.time() * 1000 - ca) / 86400000, 1) if isinstance(ca, (int, float)) and not isinstance(ca, bool) else ""
-    tax = it.get("taxonomy") or []   # breadcrumb de categorias; la hoja es la mas especifica
+    dias = round((time.time() * 1000 - ca) / 86400000, 1) if _fin(ca) else ""
+    tax = it.get("taxonomy") or []   # breadcrumb de categorías; la hoja es la más específica
     return {
         "id": it.get("id", ""),   # id inmutable de Wallapop: sobrevive a cambios de titulo/precio/desc
         "titulo": _deemoji(it.get("title")),
@@ -203,7 +224,7 @@ def row(it, origin):
         "km": dist,
         "dias": dias,
         "reservado": (it.get("reserved") or {}).get("flag", False),
-        # la API de busqueda ya manda estas tres con la misma forma {flag} que reserved
+        # la API de búsqueda ya manda estas tres con la misma forma {flag} que reserved
         "top": (it.get("is_top_profile") or {}).get("flag", False),        # vendedor profesional
         "garantia": (it.get("has_warranty") or {}).get("flag", False),
         "reacond": (it.get("is_refurbished") or {}).get("flag", False),
@@ -237,7 +258,7 @@ def main():
         a.out = f"{slug}.csv"
 
     max_dias = {"hora": 1 / 24, "dia": 1, "semana": 7, "mes": 30}.get(a.since)
-    # el server filtra por antiguedad; 'hora' no existe alli -> pide 'today' y afinamos en cliente
+    # la API de Wallapop filtra por antigüedad; 'hora' no existe allí -> pide 'today' y afinamos aquí
     time_filter = {"hora": "today", "dia": "today", "semana": "lastWeek", "mes": "lastMonth"}.get(a.since)
     order_by = "newest" if a.since else None   # sin --since dejamos el orden por defecto (luego ordena por km)
     origin = (a.lat, a.lon)
@@ -248,10 +269,9 @@ def main():
     # motivos por los que el CSV puede estar incompleto. list.append es atomico: no hace falta lock.
     incidencias = []
     state = {"n": 0, "sin_id": 0}
-    lock = threading.Lock()   # protege writer, seen, contador y prog (la red va fuera del lock)
+    lock = threading.Lock()   # protege writer, seen y contador (la red va fuera del lock)
     stop = threading.Event()  # límite alcanzado o Ctrl-C -> todas las ramas paran
-    prog = Path(str(a.out) + ".progress")   # sidecar con el contador de encontrados; el server lo lee en vivo
-    # Escritura incremental: cada pagina se vuelca y flushea. Si crashea a mitad,
+    # Escritura incremental: cada página se vuelca y flushea. Si crashea a mitad,
     # el CSV conserva todo lo escrito hasta ese punto.
     with open(a.out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
@@ -274,8 +294,9 @@ def main():
                             continue                  # ya lo trajo otra rama
                         if a.title_only and not title_matches(r["titulo"], kw):
                             continue
-                        # nota: los "lejos sin envío" (km>10 && !envio) ya NO se descartan aquí;
-                        # se guardan en el CSV y el frontend los oculta por defecto con un toggle.
+                        # nota: los "lejos sin envío" ya NO se descartan aquí; se guardan en el CSV.
+                        # El frontend los muestra salvo que actives "excluir lejos sin envío" en
+                        # Ajustes (apagado por defecto); allí el umbral de km también es configurable.
                         if a.max_km is not None and (r["km"] == "" or r["km"] > a.max_km):
                             continue
                         if max_dias is not None:
@@ -290,8 +311,7 @@ def main():
                         if a.limit and state["n"] >= a.limit:
                             stop.set()
                             break
-                    f.flush()             # a disco al cerrar cada pagina
-                    prog.write_text(str(state["n"]))
+                    f.flush()
                 if old or stop.is_set():
                     return                # corta esta rama
 
@@ -300,18 +320,17 @@ def main():
             with ThreadPoolExecutor(max_workers=min(len(brs), 4)) as ex:
                 list(ex.map(scrape_branch, brs))
         except KeyboardInterrupt:
-            stop.set()                # corte limpio: lo ya flusheado queda intacto
             # `stop.set()` aquí llega tarde: el __exit__ del ThreadPoolExecutor ya esperó a todos
-            # los workers. Lo que sí arregla es el codigo de salida: antes un Ctrl-C se tragaba
+            # los workers. Lo que sí arregla es el código de salida: antes un Ctrl-C se tragaba
             # y el script imprimía "N resultados" y salía con 0, como un scrape completo.
+            stop.set()
             incidencias.append("interrumpido con Ctrl-C")
-    prog.unlink(missing_ok=True)      # busqueda acabada: fuera el sidecar
     print(f"{state['n']} resultados -> {a.out}")
     if state["sin_id"]:
         print(f"AVISO: {state['sin_id']} anuncios sin id, descartados", file=sys.stderr)
-    if a.max_km is None:             # ordenar por cercania solo si no filtramos ya
+    if a.max_km is None:             # ordenar por cercanía solo si no filtramos ya
         _sort_by_km(a.out)
-    # Un CSV recortado no puede salir con codigo 0: quien encadene este comando tiene que verlo.
+    # Un CSV recortado no puede salir con código 0: quien encadene este comando tiene que verlo.
     if incidencias:
         print(f"AVISO: el CSV está INCOMPLETO ({len(incidencias)} incidencias):", file=sys.stderr)
         for x in incidencias:
@@ -331,7 +350,8 @@ def _sort_by_km(path):
 
 
 def demo():
-    # ponytail: check runnable sin red — haversine e id inmutable como clave de estado
+    # ponytail: un solo check runnable sin red. Cubre lo que se rompe en silencio:
+    # haversine, row() con campos ausentes o de forma inesperada, y branches() (OR, grupos, topes).
     assert round(haversine_km(37.7796, -3.7849, 38.9785, -3.9097)) == 134, "haversine rota"
     it = {"id": "abc123", "title": "x", "price": {"amount": 5}, "location": {}, "user_id": "sel1",
           "images": [{"urls": {"small": "http://x/i.jpg", "big": "http://x/big1.jpg"}}, {"urls": {"medium": "http://x/m2.jpg"}}]}
@@ -375,6 +395,8 @@ def demo():
     _coord = lambda la, lo: row({"id": "d", "title": "x", "location": {"latitude": la, "longitude": lo}}, (37.78, -3.78))["km"]
     assert _coord("37,78", "-3,78") == "", "coordenada de texto: celda vacía"
     assert isinstance(_coord(39.98, 0), float), "longitud 0: es una coordenada, no una ausencia"
+    # NaN e inf son float y pasaban el filtro de tipo: la celda salía con el texto "nan"
+    assert _coord(float("nan"), 0) == "" and _coord(39.98, float("inf")) == "", "NaN/inf: celda vacía"
     assert _deemoji("Aleron 🔥 AMG 🚗💨") == "Aleron AMG", "deemoji: quita emojis y colapsa huecos"
     assert _deemoji("café ñ 5€ ✅") == "café ñ 5€", "deemoji: conserva acentos/€, quita check"
     assert _deemoji("🇪🇸 España") == "España", "deemoji: quita banderas"

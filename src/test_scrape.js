@@ -228,7 +228,7 @@ async function main() {
     ok(filas(csv).length === 1, "al parar se perdió lo ya recogido");
     // …y ese recorte tiene que quedar marcado. `app.js` no cachea lo `parcial`, y el cache no
     // caduca: sin la marca, lo que el usuario paró a medias se guarda como definitivo para siempre.
-    // Los doce sitios de `test_buttons.js` que miran `.parcial` escriben `lastScrape` a mano; este
+    // Los sitios de `test_buttons.js` que miran `.parcial` escriben `lastScrape` a mano; este
     // es el único que lo saca del `scrape.js` de verdad.
     ok(api.lastScrape.abortado, "parar no quedó registrado en el diagnóstico");
     ok(api.lastScrape.parcial, "una búsqueda parada no se marca parcial: se cachearía como completa");
@@ -237,7 +237,8 @@ async function main() {
   // ── 11b. parar DURANTE una espera: el sleep tiene que cortarse, no cumplirse ──
   //      El check 11 aborta antes de un sleep; este aborta con el sleep ya en marcha, que es
   //      lo que pasa de verdad: el usuario pulsa parar mientras corre el jitter entre páginas
-  //      (medio segundo) o un backoff por 429 (hasta 17s, o lo que mande un Retry-After).
+  //      (medio segundo) o un backoff por 429 (los 15 s del backoff propio, más jitter, o lo
+  //      que mande un Retry-After).
   {
     const ac = new AbortController();
     const { api } = load(async () => resp(200, page([item("a")], "CUR")), "congelado");
@@ -413,7 +414,8 @@ async function main() {
   }
 
   // ── 16c. …y con un techo, porque el número lo elige el servidor ──
-  //     El backoff propio está acotado por construcción: `2 ** a` con cuatro intentos da 16 s.
+  //     El backoff propio está acotado por construcción: duermen los intentos a=0..3, con
+  //     `2 ** a` segundos cada uno, así que la espera acumulada son 15 s más el jitter.
   //     El `Retry-After` no lo acotaba nada, y sustituye a ese backoff. Medido con el scrape de
   //     entonces: un `Retry-After: 3600` colgaba UNA rama 300 minutos con la barra girando.
   {

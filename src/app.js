@@ -1,8 +1,8 @@
 // ── red de seguridad global: ningún fallo muere en silencio ──
 // El fichero está lleno de promesas fire-and-forget (idb.set, el boot, los handlers async). Sin
 // esto, cada una moría en un unhandledrejection que nadie escuchaba: cero rastro en consola y
-// cero aviso al usuario. Es la primera console.error del repo, y el motivo por el que los
-// .catch mudos del wrapper de IndexedDB se pueden quitar sin romper a los llamadores.
+// cero aviso al usuario. Es la red que permite que el wrapper de IndexedDB no lleve un .catch
+// mudo en cada llamada: lo que se escape acaba igualmente en consola y en un snack.
 // ponytail: dos listeners globales en vez de un try/catch por cada await del fichero.
 if (typeof addEventListener === "function") {
   const ruido = (etiqueta, err) => {
@@ -44,10 +44,10 @@ function parseCSV(text) {
   return rows;
 }
 // ── estado persistente: localStorage (índices pequeños) + IndexedDB (lo gordo) ──
-// Escritura a prueba de cuota llena. Antes, un setItem que petaba tiraba la excepción en mitad de
-// fling()/reject(): la carta se quedaba congelada donde la soltó el dedo, sin clasificar ni avanzar
-// ("los botones no funcionan"). Ahora nunca lanza: avisa una vez y sigue.
-// ponytail: una sola red para los ~30 setItem del fichero, en vez de try/catch en cada sitio.
+// Escritura a prueba de cuota llena. setLS no lanza NUNCA: avisa una vez y sigue. Un setItem que
+// peta suelta la excepción en mitad de fling()/reject(), y la carta se queda congelada donde la
+// soltó el dedo, sin clasificar ni avanzar ("los botones no funcionan").
+// ponytail: una sola red para las ~20 escrituras del fichero, en vez de try/catch en cada sitio.
 const csvCacheKey = "wp_csv"; // cache de CSVs viejo (localStorage): solo se lee para migrarlo a IDB
 // marca que deja una restauración: el cache de anuncios que hay en IndexedDB es del ocupante
 // anterior. Vive en localStorage a propósito — el almacén que hay que vaciar puede ser justo el
@@ -123,7 +123,8 @@ const readJSON = (k, fb) => {
 // ── IndexedDB: almacén clave/valor para lo que no cabe en localStorage ──
 // localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
 // (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
-// y congelaba el triaje. En localStorage solo quedan listas de ids, unos KB.
+// y congelaba el triaje. En localStorage solo quedan índices: listas de ids, exclusiones, alias
+// y marcas de tiempo. Crecen con lo clasificado, no con lo scrapeado.
 // ponytail: 20 líneas de wrapper en vez de una librería.
 // El arranque NO pudo leer: rowCache/csvIndex están vacíos por el fallo, no porque no haya datos.
 // Escribir encima con ese vacío es la pérdida silenciosa. Se cierra el grifo hasta recargar.
@@ -222,6 +223,8 @@ const load = (k) => new Set(readJSON(k, []));
 const BUCKET_NAMES = ["rejected", "favorite"]; // los "ficheros" de cada cajón (sin ver = el resto)
 // cache de filas por id (objeto {columna:valor}). Permite ver favoritos aunque su
 // CSV no esté cargado; guarda _csv (cajón de origen) para migrar el modelo global viejo.
+// Se lee de localStorage (clave del modelo viejo) pero se escribe a IndexedDB: el arranque lo
+// recarga de allí. Esta lectura es solo el puente para quien todavía traiga wp_rows en disco.
 let rowCache = readJSON("wp_rows", {});
 // ── cubos POR CAJÓN (búsqueda): cada csv tiene sus propios ficheros, sin fugas entre cajones.
 // buckets[nombre] = {csv: Set<id>}. `rejected/favorite` apuntan al cajón activo (curCsv)
@@ -409,7 +412,7 @@ function pushEstado() {
     }),
   );
 }
-// carga el estado del perfil actual desde localStorage (fuente de verdad en estático)
+// carga el estado desde localStorage (un usuario por navegador: no hay más fuente de verdad)
 function hydrateEstado() {
   // readJSON y no un JSON.parse suelto: wp_estado lo contiene TODO y era la única clave del
   // fichero que se corrompía en silencio. Ahora avisa, copia a roto:wp_estado y saca snack.
@@ -572,7 +575,7 @@ console.assert(
   "humanAge() roto",
 );
 // edad REAL del anuncio ahora = la congelada en el CSV (dias, medida al scrapear)
-// + lo transcurrido desde el scrape. curCsvScrape = Last-Modified del CSV; sin él, solo la congelada.
+// + lo transcurrido desde el scrape. Sin curCsvScrape, solo la congelada.
 function adAge(dias) {
   const elapsed = curCsvScrape ? Math.max(0, (Date.now() - curCsvScrape) / 86400000) : 0;
   return humanAge(+dias + elapsed);
@@ -1010,7 +1013,7 @@ function finishRender(rows, listView) {
   $(".brand").hidden = listView;
   document
     .querySelectorAll("header .panel")
-    .forEach((p) => (p.hidden = listView)); // varios paneles ahora (perfil, buscar, query activa)
+    .forEach((p) => (p.hidden = listView)); // los dos: el de buscar y el de "Búsqueda activa"
   // primer arranque: sin búsquedas guardadas ni CSV cargado, "Búsqueda activa" es un selector
   // vacío que solo estorba encima de la bienvenida. Vuelve en cuanto hay algo que elegir.
   $(".picker").hidden = listView || !(loadedCsv || allQueries.length);
@@ -1133,9 +1136,9 @@ function renderCats() {
   };
 }
 
-// añade/quita una palabra de la exclusión de la query activa (compartido main + swipe)
+// añade una palabra a la exclusión del cajón activo (compartido main + swipe). Devuelve
+// false y no toca nada si la palabra se queda vacía al normalizar, si no hay cajón, o si ya está.
 function addExcl(raw) {
-  // true si cambió; norma la palabra, evita duplicados
   const w = norm(raw);
   if (!w || !curCsv || exclTerms().includes(w)) return false;
   (exclMap[curDrawer()] ||= []).push(w);
@@ -1412,7 +1415,8 @@ function sellerCandidates() {
     .map((s) => ({ s, rejected: rej[s], fresh: fresh[s] }))
     .sort((a, b) => b.rejected - a.rejected);
 }
-// bloquear vendedor: manda sus frescos a la papelera; deshacer = desbloquear + restaurar esos
+// bloquear vendedor: TODO lo suyo que no estuviera ya rechazado se va a la papelera, favoritos
+// incluidos. Deshacer desbloquea, saca esos de la papelera y devuelve a favoritos los que lo eran.
 function blockSeller(s) {
   const newly = data
     .filter((r) => col(r, "vendedor") === s && !rejected.has(key(r)))
@@ -1513,8 +1517,9 @@ function reject(k, titulo) {
     render();
   });
 }
+// saca de la papelera. Solo toca `rejected` y la marca de tiempo: si además era favorito, sigue
+// siéndolo (un favorito llega aquí por un bloqueo de vendedor, y deshacerlo lo devuelve entero).
 function restore(k) {
-  // restaurar = volver a "sin ver"
   rejected.delete(k);
   unstamp(k);
   const unblocked = unblockFor([k]); // si su vendedor estaba bloqueado, desbloquéalo o vuelve solo a la papelera
@@ -1599,7 +1604,7 @@ const pick = $("#pick"),
   pickSince = $("#pickSince");
 let allQueries = []; // [{csv, label, kw, since}] — fuente del combobox
 let curCsv = null; // csv de la query seleccionada (el input solo muestra el kw)
-let curCsvScrape = 0; // epoch ms del scrape (Last-Modified del CSV): base para la edad real de los anuncios
+let curCsvScrape = 0; // epoch ms del scrape (el `ts` que guardó el cache): base para la edad real
 const lastCsvKey = () => "wp_lastcsv"; // último dataset cargado
 async function loadQuery(csv) {
   const c = await getCsvCache(csv);
@@ -1652,7 +1657,7 @@ function chooseQuery(csv) {
 // pinta la lista filtrada por el texto tecleado (substring, sin acentos/mayúsculas)
 function renderQlist(term) {
   const t = norm(term);
-  const seen = readJSON(lastSeenKey(), {}); // última interacción por perfil
+  const seen = readJSON(lastSeenKey(), {}); // {csv: epochMs} última vez que se abrió cada búsqueda
   const hits = allQueries
     .filter((q) => norm(q.label).includes(t))
     .sort(
@@ -1745,7 +1750,8 @@ console.assert(
 );
 
 // ── búsquedas guardadas: definiciones (kw+since) en localStorage ──
-// No se guardan result sets: abrir una búsqueda = re-scrapear. {csv, rows, mtime(s)} por entrada.
+// Aquí NO viven los resultados: la entrada es {csv, rows, mtime(s)}. El texto CSV va aparte, a
+// IndexedDB. Abrir una guardada sirve ese cache si existe; re-scrapea solo si no hay o das "Repetir".
 const searchesKey = () => "wp_searches";
 // filtra las entradas sin csv: una sola envenenada rompía el arranque entero. Las sanas de
 // esa misma lista se quedan, y el original entero se aparta para poder rescatarlo.
@@ -1897,13 +1903,14 @@ function refreshCsvs() {
 }
 refreshCsvs();
 
-// dispara el scraper y carga el resultado (el servidor cachea: no re-scrapea si es fresco)
-// mismo slug que el server (servidor.py slug/csv_name) para sondear el progreso antes de saber el nombre
+// nombre de cajón de una búsqueda: es la CLAVE de todo el estado (cubos, exclusiones, alias,
+// cache en IndexedDB), no un fichero. Nadie lo escribe en disco: el scrape corre en el browser.
+// Mismo slug que wallapop.py para que un CSV bajado a mano case con su cajón.
 const csvNameOf = (kw, since) =>
   kw.toLowerCase().split(/\s+/).filter(Boolean).join("-") +
   (since ? "--" + since : "") +
   ".csv";
-// ubicación del scrape: ciudad manual (Fase 6, aún sin UI) o Jaén por defecto
+// ubicación del scrape: la que guardó el botón de ubicación en wp_loc, o Jaén por defecto
 const JAEN_LOC = { lat: 37.7796, lon: -3.7849 };
 // El spread metía lat/lon no numéricos tal cual en la petición a la API: JSON válido con la
 // forma equivocada no lo filtraba ningún catch. readJSON cubre el JSON roto; la comprobación
@@ -2084,7 +2091,7 @@ function marquee(kw) {
 }
 ["#kw", "#pick"].forEach((sel) => { const el = $(sel); if (el) marquee(el); }); // barra de arriba + "Búsqueda activa"
 
-// ── gestor de búsquedas: vista CRUD sobre los CSV del servidor ──
+// ── gestor de búsquedas: vista CRUD sobre las definiciones de wp_searches ──
 const searchesView = $("#searchesView"),
   searchesList = $("#searchesList");
 let allSearches = [],
@@ -2106,7 +2113,6 @@ function closeManager() {
 }
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s); // "última semana" → "Última semana"
 function renderSearches() {
-  // relee de localStorage y repinta con el filtro actual
   allSearches = loadSearches();
   paintSearches();
 }
@@ -2325,8 +2331,11 @@ locReset.onclick = () => {
 // ── copia de seguridad del estado ──
 // No hay cuentas ni backend: meses de triaje viven solo en el almacén de este navegador, y Safari
 // en iOS lo limpia tras unos días sin visitas. Se copian TODAS las claves wp_*, no una lista
-// escrita a mano, para que una clave nueva entre sola en la copia. Los CSVs cacheados quedan
-// fuera: pesan y se regeneran solos, porque abrir una búsqueda guardada la vuelve a scrapear.
+// escrita a mano, para que una clave nueva entre sola en la copia. Los CSVs no entran porque no
+// están aquí: viven en IndexedDB, y una copia son solo claves de localStorage.
+// OJO: por eso una restauración deja el cache de IndexedDB del ocupante ANTERIOR bajo los nombres
+// de cajón que acaban de entrar. Eso es lo que marca cacheAjenaKey, y por eso esa marca se salta
+// la copia: tiene que quedarse en el navegador de destino. No la quites de esta lista.
 const BACKUP_SKIP = ["wp_rows", "wp_csv", cacheAjenaKey]; // caches del modelo viejo + marca local
 const backupKeys = () => {
   const out = [];
@@ -2932,7 +2941,9 @@ function copyAsync(makeText) {
     return navigator.share({ text: t }).then(() => true, () => toClipboard(t).then(() => false));
   return toClipboard(t).then(() => false);
 }
-// copia al portapapeles admitiendo trabajo asíncrono (calcular precios) sin perder el gesto en Safari/iOS
+// copia al portapapeles admitiendo un trabajo asíncrono (calcular precios) como `t`. Solo la rama
+// de ClipboardItem conserva el gesto en Safari/iOS: se le pasa la promesa y el navegador espera.
+// El fallback resuelve primero y llama a writeText después, así que ahí el gesto ya se perdió.
 function toClipboard(t) {
   if (typeof t !== "string" && window.ClipboardItem && navigator.clipboard.write) {
     const blob = Promise.resolve(t).then((s) => new Blob([s], { type: "text/plain" }));
@@ -2944,10 +2955,9 @@ function toClipboard(t) {
 }
 // copia un lote de filas como prompt para la IA y lo registra (wp_aisent): su veredicto
 // vuelve como enlace ?keep=<ids> que conserva esos como favoritos y rechaza el resto del lote.
-// ponytail: el precio con envío es el estimado a 5 kg, como en toda la app.
 function copyForAI(btn, all, vacio) {
   if (!all.length) return snack(vacio, null);
-  const rows = all.slice(0, UNSEEN_CAP); // tope: más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
+  const rows = all.slice(0, UNSEEN_CAP);
   const prev = btn.textContent;
   const originCsv = curDrawer(); // el cajón de AHORA: la copia es asíncrona y curCsv puede cambiar
   btn.disabled = true;

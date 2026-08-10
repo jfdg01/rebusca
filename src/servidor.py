@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Servidor de Rebusca. Solo stdlib. Sirve estáticos (index.html + app.css/app.js/
-scrape.js + imágenes). Todo lo demás vive en el browser: el scraper, el estado, los
-perfiles y las búsquedas (localStorage). El server ya no escribe nada.
+scrape.js + imágenes). Todo lo demás vive en el browser: el scraper, el estado
+(localStorage) y el cache de resultados (IndexedDB). El server no escribe nada.
 
     python3 src/servidor.py            # http://0.0.0.0:8000
+    PORT=8123 python3 src/servidor.py  # el puerto sale de $PORT
+    python3 src/servidor.py 8123       # ...o del argumento, que gana al env
     python3 src/servidor.py demo       # self-check sin red
 """
 import io, os, re, sys
@@ -13,12 +15,16 @@ from urllib.parse import unquote, urlparse
 
 HERE = Path(__file__).resolve().parent   # src/
 PORT = int(os.environ.get("PORT", 8000))
-# refs locales en el HTML: href/src="fichero" relativo (sin esquema http:, sin ? ni #, sin barra inicial)
+# refs del HTML: href/src="..." que no empiece por / : ? #, y sin ? ni # dentro.
+# OJO: eso descarta la ruta absoluta, no el esquema. `href="mailto:x@y.z"` casa igual, porque
+# el `:` solo está vetado en el primer carácter. Quien use esto filtra los esquemas aparte.
 REF = re.compile(r'(?:href|src)="([^":/?#][^"?#]*)"')
 
-# Cabeceras de seguridad (Lighthouse Best Practices). script-src 'self' bloquea inline
+# Cabeceras de seguridad (Lighthouse Best Practices). script-src 'self' bloquea el script inline
 # (mitiga el DOM-XSS de meter datos scrapeados de Wallapop por innerHTML: un onerror= inyectado
-# no ejecuta). img-src https: = fotos de cualquier CDN de Wallapop; connect-src = solo su API.
+# no ejecuta). El estilo inline SÍ pasa ('unsafe-inline'): app.js escribe style="" a mano.
+# img-src abre data: y cualquier https: (las fotos salen de varios CDN de Wallapop); connect-src
+# deja el propio origen y api.wallapop.com, que es lo único a lo que llama scrape.js.
 # ponytail: sin Trusted Types (app.js usa innerHTML por todos lados; migrarlo es otra tarea).
 SEC_HEADERS = {
     "Content-Security-Policy": (
@@ -48,7 +54,8 @@ def publico(ruta):
 
 
 def stamp_versions(html, mtimes):
-    # Añade ?v=<mtime> a href/src de los estáticos versionados. El HTML no se cachea
+    # Añade ?v=<mtime> a cada "<fichero>" ENTRECOMILLADO del HTML: sustituye la cadena con sus
+    # comillas, no el atributo, así que el nombre suelto en prosa se queda quieto. El HTML no se cachea
     # (no-cache), pero Cloudflare sí cachea el JS/CSS/imágenes 4h ignorando el origen; al
     # cambiar la URL en cada deploy, el móvil ve la versión nueva al recargar sin tocar Cloudflare.
     for f, v in mtimes.items():
@@ -62,8 +69,8 @@ def stamp_versions(html, mtimes):
 def stamped_mtimes(html):
     # Descubre solo los estáticos locales referenciados en el HTML que existen en disco.
     # Automático: añadir/quitar un <script>/<link>/<img> se cachebustea sin tocar este fichero.
-    # Un fichero referenciado que NO existe se descartaba en silencio: la portada salía 200 con
-    # una ref rota y sin ?v=, así que Cloudflare cacheaba el 404 cuatro horas. Ahora deja rastro.
+    # Un fichero referenciado que no existe deja un AVISO en stderr: la portada sigue saliendo 200
+    # con la ref rota y sin ?v=, y Cloudflare cachea ese 404 cuatro horas. Sin el aviso, en silencio.
     encontrados, faltan = {}, []
     for f in REF.findall(html):
         if (HERE / f).is_file():
@@ -82,7 +89,9 @@ class H(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         # no-cache = el navegador revalida siempre (If-Modified-Since -> 304 si no cambió).
-        # Sin esto, Cloudflare mandaba max-age=14400 y el móvil veía la versión vieja horas.
+        # Sin esto, Cloudflare manda max-age=14400 y el móvil ve la versión vieja horas.
+        # El 304 solo llega a los ficheros de disco: la portada la genera send_head y sale sin
+        # Last-Modified ni ETag, así que su HTML viaja entero en cada visita (son ~40 KB).
         self.send_header("Cache-Control", "no-cache")
         for k, v in SEC_HEADERS.items():
             self.send_header(k, v)
@@ -123,21 +132,21 @@ class H(SimpleHTTPRequestHandler):
             return None
         # Un 404 de un estático que la página SÍ pide no es ruido de bot: es un deploy a medias
         # (rsync cortado, fichero renombrado). `log_error` se traga TODOS los 404 por igual, así
-        # que sin esta línea el journal calla mientras la app sale rota en el móvil. Se avisa
+        # que sin esta línea el journal callaría mientras la app sale rota en el móvil. Se avisa
         # aquí, con la ruta, y el 404 lo sigue dando `super()`.
         if not os.path.isfile(self.translate_path(self.path)):
             self.log_error("falta un estático servible: %s", ruta)
         return super().send_head()   # app.js/app.css/scrape.js/imágenes (anti-traversal propio)
 
-    # Solo el access-log. Antes esto era `log_message`, y BaseHTTPRequestHandler delega
-    # log_error EN log_message: silenciaba TODOS los errores del server, así que el journal
-    # del VPS salía vacío pasara lo que pasara. log_error se deja como está (a stderr).
+    # Silencia SOLO el access-log. No vale silenciar `log_message`: BaseHTTPRequestHandler delega
+    # log_error EN log_message, así que eso se lleva por delante todos los errores del server y
+    # el journal del VPS se queda vacío pase lo que pase. log_error va a stderr, intacto.
     def log_request(self, *a):   # menos ruido
         pass
 
     def log_error(self, fmt, *a):
         # Un dominio público recibe bots probando rutas todo el día: el 404 es ruido esperado.
-        # Todo lo demás (500, 501, errores de socket) SÍ va al journal. Eso es lo nuevo.
+        # Todo lo demás (500, 501, errores de socket) SÍ va al journal.
         msg = fmt % a if a else fmt
         if msg.startswith("code 404"):
             return

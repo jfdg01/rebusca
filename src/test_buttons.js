@@ -96,7 +96,7 @@ async function main() {
   // Pilla el renombrado de un id (el botón queda mudo y nadie se entera hasta producción).
   {
     const ids = [...HTML.matchAll(/<button\b[^>]*?\bid="([^"]+)"/gs)].map((m) => m[1]);
-    ok(ids.length >= 20, "el HTML debería tener ~21 botones con id, encontré " + ids.length);
+    ok(ids.length >= 18, "el HTML debería tener ~19 botones con id, encontré " + ids.length);
     const b = await boot({});
     if (b.errs.length) fail("boot lanzó: " + (b.errs[0].message || b.errs[0]));
     // #undo se cablea dentro de snack() (solo existe cuando hay algo que deshacer)
@@ -502,7 +502,7 @@ async function main() {
       "un cajón que solo tiene favoritos pierde el favorito al reconciliar");
   }
 
-  // ── 7f. las tres puertas por las que el estado cargado se queda a medias ──
+  // ── 7f. las cuatro puertas por las que el estado cargado se queda a medias ──
   {
     const b = await loaded();
 
@@ -616,7 +616,7 @@ async function main() {
     ok(!bucket(b, "favorite").includes(primera), "una carta no puede estar en los dos cubos");
   }
 
-  // ── 9c. el escenario del mazo no acumula tarjetas ──
+  // ── 9b. el escenario del mazo no acumula tarjetas ──
   // `nextCard()` quita las tarjetas viejas antes de montar la siguiente. Era código inalcanzable:
   // el arnés devolvía [] a `swipeStage.querySelectorAll(...)`, así que borrar esa limpieza dejaba
   // las siete suites en verde. En el móvil, una sesión larga apila una tarjeta con su foto por
@@ -635,7 +635,7 @@ async function main() {
     ok(cartas() === 1, "con el mazo agotado el escenario tiene " + cartas() + " nodos, no solo el «✓ Has rebuscado todo»");
   }
 
-  // ── 9b. el hueco de 200ms entre carta y carta, y el mazo agotado ──
+  // ── 9c. el hueco de 200ms entre carta y carta, y el mazo agotado ──
   // La carta vuela 200ms. Durante ese vuelo `card` es null y ✓/✕ no hacen nada. Antes seguían
   // encendidos: el segundo toque de un doble-toque se perdía en silencio (síntoma nº1 reportado).
   {
@@ -663,8 +663,8 @@ async function main() {
       "✓/✕ siguen encendidos con el mazo agotado");
   }
 
-  // ── 9c. un "Deshacer" pendiente no puede aplicarse a otro cajón ──
-  // Los 6 sitios que ofrecen deshacer cierran sobre `rejected`/`favorite` POR NOMBRE, y
+  // ── 9d. un "Deshacer" pendiente no puede aplicarse a otro cajón ──
+  // Los 5 sitios que ofrecen deshacer cierran sobre `rejected`/`favorite` POR NOMBRE, y
   // pointBuckets() las reapunta al cambiar de búsqueda. Sin invalidar el snack, el botón
   // seguía vivo 5s y operaba sobre el cajón equivocado.
   {
@@ -676,7 +676,7 @@ async function main() {
     ok(bucket(b, "rejected").includes("a1"), "el rechazo de ford se perdió al cambiar de cajón");
   }
 
-  // ── 9d. el lote copiado para la IA conserva SU búsqueda de origen ──
+  // ── 9e. el lote copiado para la IA conserva SU búsqueda de origen ──
   // #copyDeck es asíncrono (espera al portapapeles). setAisent() leía curDrawer() al resolver,
   // así que cambiar de búsqueda mientras tanto etiquetaba el lote con la búsqueda equivocada y
   // su ?keep= aterrizaba en el cajón que no era.
@@ -869,7 +869,7 @@ async function main() {
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
   }
 
-  // ── 20c. rechazar en bloque: respeta los favoritos, sella la fecha y dice qué hizo ──
+  // ── 20b. rechazar en bloque: respeta los favoritos, sella la fecha y dice qué hizo ──
   // Los dos atajos de la barra comparten molde (`bulkReject`). El filtro se probaba; el resto del
   // molde no. Lo caro es el favorito: un anuncio guardado que además esté lejos no puede irse a la
   // papelera de rebote, porque el usuario ya lo había clasificado a mano.
@@ -902,7 +902,7 @@ async function main() {
       "con tres excluidos el aviso no está en plural: " + b.q("#snackmsg").textContent);
   }
 
-  // ── 20b. una fila ya rechazada no se cuenta también como vetada ──
+  // ── 20c. una fila ya rechazada no se cuenta también como vetada ──
   // "sin ver" se calcula restando: una fila contada dos veces lo baja de lo real, y con
   // bastantes filas rechazadas y vetadas a la vez sale un "sin ver" negativo.
   {
@@ -1675,7 +1675,7 @@ async function main() {
     ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántos filtros hay: " + b.q("#exclCount").textContent);
   }
 
-  // ── 41. la tarjeta avisa de la republicación (item 24) ──
+  // ── 41. la tarjeta avisa de la republicación ──
   //     El scraper deduplica por id, así que el mismo coche con otro id vuelve a la cola de
   //     "sin ver" y el usuario lo tría dos veces. Aquí Ana tiene el Focus repetido (a1 y a6)
   //     y el Ka suelto (a3): el aviso sale en los dos primeros y NO en el tercero.
@@ -1927,7 +1927,7 @@ async function main() {
   }
 
   // ── 46. una escritura que aborta avisa UNA vez, no pisa los «Deshacer» y se reintenta ──
-  //     El triaje escribe fire-and-forget (`saveRows` en `src/app.js:251`). Un rechazo suelto por
+  //     El triaje escribe fire-and-forget (`saveRows()`). Un rechazo suelto por
   //     carta llegaba al `unhandledrejection` global, que pintaba "Fallo interno" encima del
   //     «Deshacer». Pero cerrar el grifo era pasarse: los CSVs (cientos de KB) y el triaje (unos
   //     KB) lo comparten, así que una cuota llena al commitear un texto grande dejaba la sesión
@@ -1963,7 +1963,7 @@ async function main() {
   }
 
   // ── 46b. el aviso de una escritura fallida sale UNA vez, también con varias en vuelo ──
-  //     `loadCSV` dispara `saveRows` y `cacheCsv` a la vez (`src/app.js:1600`), así que la guarda
+  //     `loadCSV` dispara `saveRows` y `cacheCsv` a la vez, así que la guarda
   //     tiene que aguantar el camino concurrente, no solo el secuencial.
   {
     const b = await boot({}, { csv: CSV, timers: true, idbFalla: "commit" });
@@ -1978,8 +1978,8 @@ async function main() {
 
   // ── 46c. con la LECTURA rota, el triaje no machaca las filas buenas ──
   //     Es la razón de ser del grifo: si el arranque no pudo leer, `rowCache` está vacío por el
-  //     fallo y no porque no haya fichas. `saveRows` repuebla solo con lo que hay en `data`
-  //     (`src/app.js:283-288`), así que al abrir otra búsqueda escribiría ese vacío encima.
+  //     fallo y no porque no haya fichas. `saveRows` repuebla solo con lo que hay en `data`,
+  //     así que al abrir otra búsqueda escribiría ese vacío encima.
   {
     const b = await boot({}, { csv: CSV, timers: true });
     b.q("#kw").value = "ford";
@@ -1998,8 +1998,8 @@ async function main() {
   }
 
   // ── 46d. borrar una búsqueda con el almacén sin commitear no deja un rechazo suelto ──
-  //     `removeSearch` → `dropCsvCache` (`src/app.js:1797-1801`) es el único camino que emite un
-  //     `idb.del`. Sin `.catch`, ese rechazo llega al `unhandledrejection` de `src/app.js:7-15` y
+  //     `removeSearch` → `dropCsvCache` es el único camino que emite un
+  //     `idb.del`. Sin `.catch`, ese rechazo llega a la red global de `unhandledrejection` y
   //     pinta "Fallo interno" encima del aviso honesto. Ningún check hacía fallar nunca un `del`.
   {
     const opts = { csv: CSV, timers: true };
@@ -2157,7 +2157,7 @@ async function main() {
   //     `SINCE_LABEL[x]` sin `Object.hasOwn` acepta "constructor" o "toString" como frescura.
   //     La etiqueta salía como `ps4 (function Object() { [native code] })`, y ese `since` se va
   //     al scraper, que compone `SINCE_TF["constructor"]` en la petición a la API.
-  //     `src/app.js:2411` ya se guarda de esto, con un comentario que nombra el peligro.
+  //     `queryParts()` en app.js ya se guarda de esto, con un comentario que nombra el peligro.
   {
     const b = await loaded();
     const parts = ev(b, 'queryParts("ps4--constructor.csv")');
@@ -2404,7 +2404,7 @@ async function main() {
   //     `idb.get` SÍ relanza — a diferencia de `set` y `del`, que se tragan el rechazo a propósito
   //     para el triaje —, así que el handler de `storage` necesita su propio `.catch`. Sin él, cada
   //     evento de la otra pestaña con el almacén parado llega al `unhandledrejection` de
-  //     `src/app.js:7-15`, pinta "Fallo interno: …" y se lleva por delante el botón «Deshacer».
+  //     la red global de `unhandledrejection`, pinta "Fallo interno: …" y se lleva por delante el botón «Deshacer».
   //     Node no enruta sus rechazos al `window` de mentira: hay que pasárselos a mano.
   {
     const sueltos = [];

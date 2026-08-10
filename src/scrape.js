@@ -1,10 +1,14 @@
-// scrape.js — scraper de Wallapop EN EL BROWSER. Produce el MISMO CSV que wallapop.py,
-// así loadCSV() en app.js lo consume sin cambios. Sin dependencias.
+// scrape.js — scraper de Wallapop EN EL BROWSER. Es el de producción. Produce un CSV con el
+// mismo ESQUEMA DE COLUMNAS que wallapop.py, así loadCSV() en app.js lo consume sin cambios;
+// el formato numérico sí difiere (aquí "5", en Python "5.0"). Sin dependencias.
 // Corre en browser (window.Rebusca) y en node (module.exports) para el self-check: `node scrape.js demo`.
 (function (root) {
   const API = "https://api.wallapop.com/api/v3/search";
-  // X-DeviceOS dispara preflight CORS; verificado que Wallapop lo permite (Access-Control-Allow-Headers: x-deviceos).
-  // User-Agent/Accept-Language son forbidden headers en el browser (los ignora y pone los suyos); en node sí valen.
+  // X-DeviceOS dispara preflight CORS; el preflight de Wallapop REFLEJA la cabecera que se le
+  // pide (contesta Access-Control-Allow-Headers: x-deviceos), así que es un eco, no una lista
+  // blanca: el día que dejen de reflejar, esto deja de pasar el preflight sin aviso.
+  // User-Agent sí es forbidden header en el browser (lo reemplaza por el suyo); en node vale.
+  // Accept-Language NO lo es: llega tal cual, y es lo que trae la taxonomía en español.
   const HEADERS = { "X-DeviceOS": "0", "Accept": "application/json",
                     "Accept-Language": "es-ES", "User-Agent": "Mozilla/5.0" };
   const FIELDS = ["id", "titulo", "precio", "categoria", "ciudad", "cp", "km", "dias",
@@ -37,13 +41,19 @@
     new Promise((r) => {
       if (signal && signal.aborted) return r();
       if (!signal || !signal.addEventListener) return void setTimeout(r, ms);
-      let t; // `let`, y el listener antes del timer: el arnés llama al callback dentro del propio setTimeout
+      // `let`, y el listener antes del timer: el arnés de test_scrape.js llama al callback dentro
+      // del propio setTimeout, así que con `const t` esto sería un ReferenceError por TDZ.
+      let t;
       const fin = () => (clearTimeout(t), signal.removeEventListener("abort", fin), r());
       signal.addEventListener("abort", fin, { once: true });
       t = setTimeout(fin, ms);
     });
-  // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Es la
-  // única desviación conocida frente a wallapop.py, y solo cambia una décima de km en la tarjeta.
+  // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Solo
+  // cambia una décima de km en la tarjeta.
+  // OJO: wallapop.py ya NO va a la par con este fichero, y hace tiempo. Divergencias conocidas:
+  // aquí hay MAX_ROWS, cupo por rama y MAX_PAGINAS_SECAS, y allí no; allí las ramas OR van en
+  // paralelo (ThreadPoolExecutor) y aquí en serie; aquí el Retry-After se capa a 60s y allí no;
+  // allí existe --max-km y aquí no. No toques uno esperando que el otro lo siga.
   const round1 = (x) => Math.round(x * 10) / 10;
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const titleMatches = (title, kw) => {
@@ -74,7 +84,8 @@
   // expande una búsqueda booleana OR a ramas (mismo parser que wallapop.py branches)
   const TOK = /\(|\)|"[^"]*"|[^\s()]+/g;
   const MAX_RAMAS = 32; // más ramas = más peticiones de las que Wallapop deja hacer seguidas
-  // Único sitio del proyecto donde se lanza en vez de avisar: el error YA tiene receptor (el
+  // Único sitio donde una entrada mal escrita del usuario tumba la búsqueda antes de pedir nada
+  // (los demás throw de este fichero son fallos de red o de la API). El error YA tiene receptor (el
   // onclick de Buscar y loadQuery hacen snack("No se pudo buscar: " + e.message)). Lanzar
   // cancela una búsqueda que iba a salir mal igual; no deja la app en blanco.
   function branches(keywords) {
@@ -154,7 +165,9 @@
       // `it.price ? it.price.amount : ""` daba celda vacía cuando `price` cambiaba de forma, y
       // eso es indistinguible de "este anuncio no tiene precio". El precio es el producto entero.
       precio: precioDe(it),
-      categoria: tax.length ? tax[tax.length - 1].name : "",
+      // `(tax[-1] or {})` en wallapop.py: una taxonomía [null] hacía TypeError aquí dentro
+      // del for de items, no lo atrapaba nadie y se llevaba la búsqueda entera por delante.
+      categoria: (tax[tax.length - 1] || {}).name || "",
       descripcion: deemoji(it.description || ""),
       ciudad: loc.city || "",
       cp: loc.postal_code || "",
@@ -218,8 +231,9 @@
       // existe, pero sí a la primera petición de la rama siguiente, y es una instrucción del
       // servidor: tirarla es perder funcionalidad. Lo que sobra es la espera exponencial a ciegas.
       // Con techo: el número lo elige el servidor y entraba entero en el `sleep`. Medido, con una
-      // rama y cinco intentos: un `Retry-After: 3600` colgaba la barra 300 minutos. 60 s son casi
-      // cuatro veces la espera más larga que el backoff propio se permite (`2 ** 4` = 16 s), así
+      // rama y cinco intentos: un `Retry-After: 3600` colgaba la barra 300 minutos. Los cuatro
+      // intentos que duermen son a=0..3, o sea 1+2+4+8 = 15 s como mucho: 60 s son casi cuatro
+      // veces la espera acumulada más larga que el backoff propio se permite, así
       // que la instrucción se respeta donde es razonable. Por encima, la rama cae en cinco minutos
       // con «agotados los reintentos», el usuario ve el aviso de parcial y busca cuando quiera.
       const ra = parseFloat(res.headers.get("Retry-After"));
@@ -229,7 +243,7 @@
     throw new Error("agotados los reintentos (" + (ultimo ? ultimo.message : "sin causa") + ")", { cause: ultimo });
   }
 
-  // scrape({keywords, since, titleOnly, lat, lon, onProgress, signal}) -> texto CSV (mismo formato que wallapop.py)
+  // scrape({keywords, since, titleOnly, lat, lon, maxRows, onProgress, signal}) -> texto CSV
   // onProgress(filas, rama, ramas): las ramas OR se piden EN SERIE, así que sin el número de rama
   // el usuario solo ve el reloj subir y no sabe si va por la primera de doce o por la última.
   async function scrape(opts) {
@@ -248,12 +262,14 @@
     const diag = { ramas: 0, ramasRotas: 0, ramasTope: 0, sinId: 0, abortado: false, tope: 0,
                    paginas: 0, ramasSecas: 0, bloqueado: false, parcial: false };
     const finish = () => {
-      // ordena por cercanía al terminar (el server siempre lo hace: nunca pasa --max-km)
+      // ordena por cercanía al terminar: aquí no hay filtro por distancia, así que el orden es lo
+      // único que acerca lo bueno arriba. (El CLI wallapop.py sí tiene --max-km, y por eso allí
+      // solo ordena cuando no se usa.)
       rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
       // `bloqueado` no está en la lista a propósito: solo se pone justo detrás de `ramasRotas++`,
       // así que sumarlo aquí es un término que ningún mutante mata. Con el término quitado los 48
       // checks siguen verdes; eso es lo que se midió, y por eso no vuelve.
-      // `ramasSecas` NO entra: los otros cinco motivos son transitorios —un 403, una rama caída, el
+      // `ramasSecas` NO entra: los demás motivos son transitorios —un 403, una rama caída, el
       // botón parar—, así que re-scrapear puede traer más y no cachear tiene sentido. Un corte por
       // no avanzar es determinista: la rama volverá a dar las mismas páginas secas. Marcarlo
       // parcial le quitaba el cache y costaba un scrape entero por apertura sin ganar un anuncio
@@ -402,6 +418,9 @@
     a(row({ id: "p", title: "x", price: 5, location: {} }, [0, 0]).precio === "", "precio escalar -> vacío");
     a(row({ id: "d", title: "x", location: {}, created_at: "ayer" }, [0, 0]).dias === "", "created_at no numérico -> vacío");
     a(typeof row({ id: "d", title: "x", location: {}, created_at: Date.now() - 86400000 }, [0, 0]).dias === "number", "created_at ms -> número");
+    // una hoja nula en el breadcrumb tumbaba row(), y row() corre dentro del for de items
+    a(row({ id: "t", title: "x", location: {}, taxonomy: [null] }, [0, 0]).categoria === "", "taxonomy [null] -> vacío");
+    a(row({ id: "t", title: "x", location: {}, taxonomy: [{ name: "Coches" }, {}] }, [0, 0]).categoria === "", "hoja sin name -> vacío");
     a(deemoji("Aleron 🔥 AMG 🚗💨") === "Aleron AMG", "deemoji colapsa");
     a(deemoji("café ñ 5€ ✅") === "café ñ 5€", "deemoji conserva acentos/€");
     a(deemoji("🇪🇸 España") === "España", "deemoji banderas");
