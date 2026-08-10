@@ -96,8 +96,21 @@ function aparta(k, motivo) {
   // console.error no se ve en un móvil. El usuario tiene que enterarse de que pierde datos.
   setTimeout(() => snack(`Datos dañados en ${k}: se ignoran` + (ok ? ` (copia en roto:${k})` : " y NO se han podido respaldar"), null), 0);
 }
-// escritura espejo: nunca sobrescribe una clave dañada que no se pudo respaldar
-const espejo = (k, v) => { if (!sinRespaldo.has(k)) setLS(k, v); };
+// escritura espejo: nunca sobrescribe una clave dañada que no se pudo respaldar.
+// La usan TODOS los escritores de estado, no solo las claves espejo: `pushEstado` y
+// `saveBuckets` iban por `setLS` y destruían el original en el primer swipe.
+// Frenar la escritura salva el original, pero deja al usuario clasificando contra nada. Sin el
+// aviso, el arreglo cambia una pérdida de datos por el fallo mudo que `setLS` vino a quitar.
+const bloqueadas = new Set(); // una vez por clave y sesión, como `apartadas`
+const espejo = (k, v) => {
+  if (!sinRespaldo.has(k)) return setLS(k, v);
+  if (!bloqueadas.has(k)) {
+    bloqueadas.add(k);
+    console.warn(`Rebusca: no se escribe ${k}: está dañada y no se pudo respaldar.`);
+    setTimeout(() => snack(`No se guarda ${k}: hay datos dañados sin copia. Libera espacio y recarga`, null), 0);
+  }
+  return false;
+};
 const readJSON = (k, fb) => {
   let v;
   try { v = JSON.parse(localStorage.getItem(k) ?? "null"); }
@@ -260,7 +273,7 @@ function pointBuckets(csv) { // reapunta las vars al cajón `csv` (créalo vací
 // veces, así que aquí no se puede escribir uno solo. De paso, `saveRows()` (que recorre `data` y
 // `rowCache` enteros) y `pushEstado()` corren una vez por gesto y no dos.
 const saveBuckets = () => {
-  for (const n of BUCKET_NAMES) setLS("wp_" + n, JSON.stringify(fromMap(buckets[n])));
+  for (const n of BUCKET_NAMES) espejo("wp_" + n, JSON.stringify(fromMap(buckets[n])));
   saveRows();
   pushEstado();
 };
@@ -378,7 +391,10 @@ const saveAlias = saver("wp_alias", () => aliasMap);
 localStorage.removeItem("wp_pesos");
 const estadoKey = () => "wp_estado"; // estado durable (un usuario por navegador)
 function pushEstado() {
-  setLS(
+  // `espejo` y no `setLS`: si el blob estaba dañado y su copia a roto: no cupo, `sinRespaldo`
+  // lo marca y este `setLS` era justo quien lo machacaba. `hydrateEstado` respetaba la marca
+  // en las siete claves espejo pequeñas mientras el blob que protegían se perdía al primer gesto.
+  espejo(
     estadoKey(),
     JSON.stringify({
       rejected: fromMap(buckets.rejected),
@@ -806,7 +822,7 @@ function applyListSort(name) {
     listSort = name;
     listSortDir = name ? 1 : -1;
   } // columnas asc (barato/cerca/reciente); entrada: recién añadido arriba
-  localStorage.setItem("wp_listsort", listSort + "|" + listSortDir);
+  setLS("wp_listsort", listSort + "|" + listSortDir);
   render();
 }
 function paintListSort() {

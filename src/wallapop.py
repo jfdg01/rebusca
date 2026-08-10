@@ -183,7 +183,10 @@ def _deemoji(s):
 def row(it, origin):
     loc = it.get("location") or {}
     lat, lon = loc.get("latitude"), loc.get("longitude")
-    dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if lat and lon else ""
+    # Mismo criterio que `created_at`: `lat and lon` solo mira que sean truthy, y una coordenada
+    # de texto revienta math.radians. Truthy tambien descartaba el 0 (longitud 0 pasa por Castellon).
+    _fin = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    dist = round(haversine_km(origin[0], origin[1], lat, lon), 1) if _fin(lat) and _fin(lon) else ""
     ca = it.get("created_at")   # epoch ms; edad del anuncio = senal de "lo bueno ya voló"
     # Sin comprobar el tipo, un created_at en segundos descartaba todo por viejo y uno de texto
     # reventaba la resta. Mismo criterio que scrape.js: fuera del rango esperado -> celda vacía.
@@ -368,6 +371,10 @@ def demo():
     assert row({"id": "d", "title": "x", "location": {}, "created_at": "ayer"}, (0, 0))["dias"] == ""
     assert isinstance(row({"id": "d", "title": "x", "location": {},
                            "created_at": time.time() * 1000 - 86400000}, (0, 0))["dias"], float)
+    # mismo criterio para las coordenadas: texto -> celda vacía; el 0 es una coordenada de verdad
+    _coord = lambda la, lo: row({"id": "d", "title": "x", "location": {"latitude": la, "longitude": lo}}, (37.78, -3.78))["km"]
+    assert _coord("37,78", "-3,78") == "", "coordenada de texto: celda vacía"
+    assert isinstance(_coord(39.98, 0), float), "longitud 0: es una coordenada, no una ausencia"
     assert _deemoji("Aleron 🔥 AMG 🚗💨") == "Aleron AMG", "deemoji: quita emojis y colapsa huecos"
     assert _deemoji("café ñ 5€ ✅") == "café ñ 5€", "deemoji: conserva acentos/€, quita check"
     assert _deemoji("🇪🇸 España") == "España", "deemoji: quita banderas"

@@ -128,7 +128,16 @@
   function row(it, origin) {
     const loc = it.location || {};
     const lat = loc.latitude, lon = loc.longitude;
-    const dist = lat && lon ? round1(haversineKm(origin[0], origin[1], lat, lon)) : "";
+    // Mismo caso que `created_at`, tres líneas más abajo: `lat && lon` solo mira que sean
+    // truthy. Una coordenada de texto daba NaN, y "NaN" no es "" -> la ficha pintaba
+    // "a NaN km" y el tope de distancia dejaba de filtrar esa fila sin decirlo. De paso,
+    // truthy descartaba el 0: un anuncio en longitud 0 (pasa por Castellón) perdía la distancia.
+    const finito = (v) => typeof v === "number" && Number.isFinite(v);
+    let dist = "";
+    if (lat != null && lon != null) {
+      if (finito(lat) && finito(lon)) dist = round1(haversineKm(origin[0], origin[1], lat, lon));
+      else avisaForma("location.latitude/longitude", loc);
+    }
     const ca = it.created_at;               // epoch ms
     // Sin comprobar el tipo: un created_at en segundos descartaba TODOS los anuncios por viejos,
     // y uno no numérico daba NaN, que no es "" ni mayor que maxDays -> el filtro de frescura
@@ -180,6 +189,11 @@
     [FIELDS.join(","), ...rows.map((r) => FIELDS.map((f) => qcsv(r[f])).join(","))].join("\r\n") + "\r\n";
 
   async function getJSON(url, signal) {
+    // La causa del último intento. Sin ella, "agotados los reintentos" tapaba por igual un 429,
+    // un preflight CORS rechazado (Wallapop revoca X-DeviceOS: la app muere para todos) y un
+    // SyntaxError de una página de DataDome servida con 200. Los tres se ven idénticos en la
+    // consola y en el snack, y solo el primero se arregla esperando.
+    let ultimo = null;
     for (let a = 0; a < 5; a++) {                 // backoff ante 429/5xx; 403 = bloqueo -> corta
       // el último intento no duerme: esperar 16 s y rendirse igual es media espera regalada
       const esperar = (ms) => (a < 4 ? sleep(ms, signal) : Promise.resolve());
@@ -196,9 +210,10 @@
           return d;
         }
       }
-      catch (e) { if (e.name === "AbortError" || e.fatal) throw e; await esperar(2 ** a * 1000 + Math.random() * 1000); continue; }
+      catch (e) { if (e.name === "AbortError" || e.fatal) throw e; ultimo = e; await esperar(2 ** a * 1000 + Math.random() * 1000); continue; }
       if (res.status === 403) throw new Error("403: bloqueo (DataDome). Baja el ritmo o cambia de red.");
       if (![429, 500, 502, 503, 504].includes(res.status)) throw new Error("HTTP " + res.status);
+      ultimo = new Error("HTTP " + res.status);
       // El `Retry-After` sí se respeta en el último intento. No precede a un reintento que no
       // existe, pero sí a la primera petición de la rama siguiente, y es una instrucción del
       // servidor: tirarla es perder funcionalidad. Lo que sobra es la espera exponencial a ciegas.
@@ -211,7 +226,7 @@
       if (ra) await sleep(Math.min(ra, 60) * 1000 + Math.random() * 1000, signal);
       else await esperar(2 ** a * 1000 + Math.random() * 1000);
     }
-    throw new Error("agotados los reintentos");
+    throw new Error("agotados los reintentos (" + (ultimo ? ultimo.message : "sin causa") + ")", { cause: ultimo });
   }
 
   // scrape({keywords, since, titleOnly, lat, lon, onProgress, signal}) -> texto CSV (mismo formato que wallapop.py)
@@ -252,6 +267,7 @@
     };
     const ramas = branches(keywords);
     diag.ramas = ramas.length;
+    let ultimoFallo = null; // el error de la última rama caída; solo sube si caen todas
     // Cupo acumulado por rama. El tope se medía solo contra el total, así que la primera rama
     // se lo comía entero y las siguientes no llegaban a pedir ni una página: "iphone OR xiaomi"
     // devolvía 1500 iPhones y cero Xiaomis. El cupo se mide sobre `rows`, no por rama, así que
@@ -286,13 +302,24 @@
           // conserva —`finish()` devuelve las filas—, y `bloqueado` le dice al llamador qué pasó.
           if (String(e.message).startsWith("403")) { diag.bloqueado = true; return finish(); }
           // `break`, igual que el 403: muere ESTA rama, las siguientes se piden igual. Lo ya
-          // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). Sin filas
-          // todavía sí sube el error: si no, la caída se vería como "no hay nada".
-          if (rows.length) break;
-          throw e;
+          // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). El error se
+          // guarda y se decide al FINAL: `rows.length` valía 0 siempre en la primera rama, así
+          // que "iphone OR xiaomi OR poco" con la red floja al empezar tiraba la búsqueda entera
+          // sin llegar a pedir las otras dos. Solo sube el error si cayeron TODAS.
+          ultimoFallo = e;
+          break;
         }
+        // El sobre es tan invariante como los campos hoja: `wallapop.py` lo indexa directo y peta
+        // si cambia. Aquí el `|| []` lo convertía en cero anuncios con `diag.parcial` en false,
+        // o sea una caída total de la API presentada como "no hay resultados" —y cacheada para
+        // siempre, porque el cache no caduca—. Rama rota: se avisa y esto no se cachea.
         const items = (((d || {}).data || {}).section || {}).payload;
-        for (const it of (items && items.items) || []) {
+        if (!items || !Array.isArray(items.items)) {
+          avisaForma("data.section.payload.items", d);
+          diag.ramasRotas++;
+          break;
+        }
+        for (const it of items.items) {
           const r = row(it, origin);
           // Sin id no hay dedup ni clasificación. Antes caían todos como "duplicados" del
           // primer id vacío, sin contarse: la lista salía corta y nadie sabía por qué.
@@ -319,6 +346,10 @@
         await sleep(500 + Math.random() * 500, signal);                // jitter anti-patrón
       }
     }
+    // Todas las ramas caídas y ni una fila: eso no es "no hay anuncios", es que no se pudo
+    // buscar, y el llamador tiene que verlo como error. Con una sola rama en pie se devuelve
+    // lo que haya, marcado parcial.
+    if (ultimoFallo && diag.ramasRotas === diag.ramas && !rows.length) throw ultimoFallo;
     return finish();
   }
 
@@ -337,7 +368,12 @@
       has_warranty: { flag: false }, is_refurbished: null }, [0, 0]);
     a(banderas.top === true && banderas.garantia === false && banderas.reacond === false, "banderas {flag}");
     a(row({ id: "f", title: "x", location: {} }, [0, 0]).top === false, "bandera ausente -> false");
-    a(titleMatches("iPhone 12 azul", "iphone azul"), "titleMatches acentos");
+    // el caso que se llamaba "acentos" comparaba "iPhone 12 azul" con "iphone azul": ni un acento
+    // en ninguno de los dos, así que el NFD de norm() no lo defendía nadie
+    a(titleMatches("Sillón de diseño", "sillon diseno"), "titleMatches acentos");
+    a(titleMatches("iPhone 12 azul", "iphone azul"), "titleMatches mayúsculas");
+    // TODAS las palabras, no una: con `some` en vez de `every`, "iphone azul" casaría esta funda
+    a(!titleMatches("Funda iPhone gris", "iphone azul"), "titleMatches exige todas las palabras");
     a(!titleMatches("Funda para móvil", "iphone"), "titleMatches no casa");
     const eq = (x, y, m) => a(JSON.stringify(branches(x)) === JSON.stringify(y), m);
     eq("corsair fuente OR seasonic", ["corsair fuente", "seasonic"], "OR palabra");

@@ -121,6 +121,12 @@ class H(SimpleHTTPRequestHandler):
         if not publico(ruta):
             self.send_error(404, "File not found")
             return None
+        # Un 404 de un estático que la página SÍ pide no es ruido de bot: es un deploy a medias
+        # (rsync cortado, fichero renombrado). `log_error` se traga TODOS los 404 por igual, así
+        # que sin esta línea el journal calla mientras la app sale rota en el móvil. Se avisa
+        # aquí, con la ruta, y el 404 lo sigue dando `super()`.
+        if not os.path.isfile(self.translate_path(self.path)):
+            self.log_error("falta un estático servible: %s", ruta)
         return super().send_head()   # app.js/app.css/scrape.js/imágenes (anti-traversal propio)
 
     # Solo el access-log. Antes esto era `log_message`, y BaseHTTPRequestHandler delega

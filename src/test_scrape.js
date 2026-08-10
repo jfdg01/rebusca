@@ -158,6 +158,61 @@ async function main() {
     ok(err, "una búsqueda que falla entera debe avisar, no devolver un CSV vacío");
   }
 
+  // ── 9c. la PRIMERA rama es la que se cae ──
+  //     El corte era `if (rows.length) break; throw e;`, y en la primera rama `rows.length`
+  //     vale 0 siempre. O sea: la red floja al empezar tiraba la búsqueda entera sin llegar
+  //     a pedir las otras ramas. El test 9 no lo veía porque pone la rama mala en medio.
+  {
+    const { api, calls } = load(async (url) => (url.includes("mala") ? resp(500, {}) : resp(200, page([item("a")]))));
+    const csv = await api.scrape({ keywords: "mala OR buena" });
+    ok(calls.some((u) => u.includes("buena")), "la primera rama caída se llevó por delante a la segunda");
+    ok(filas(csv).length === 1, "se perdieron las filas de la rama sana: " + filas(csv).length);
+    ok(api.lastScrape.parcial, "una rama caída tiene que marcar el resultado parcial");
+  }
+
+  // ── 9d. el error que sube dice de qué murió ──
+  //     "agotados los reintentos" a secas tapaba por igual un 429, un preflight CORS rechazado
+  //     (la app muerta para todos) y un SyntaxError de una página de DataDome servida con 200.
+  {
+    const { api } = load(async () => resp(503, {}));
+    let err = null;
+    await api.scrape({ keywords: "ford" }).catch((e) => (err = e));
+    ok(err && /503/.test(err.message), "el error final no dice la causa: " + (err && err.message));
+    ok(err && err.cause, "el error final no lleva la causa original en `cause`");
+  }
+
+  // ── 9e. el sobre de la respuesta cambia de forma ──
+  //     `data.section.payload` se leía con `|| []`, así que un renombrado en la API daba cero
+  //     anuncios con `parcial` en false: una caída total pintada como "no hay resultados", y
+  //     cacheada para siempre porque el cache no caduca. `wallapop.py` indexa el sobre directo
+  //     y peta; aquí tiene que marcar la rama rota.
+  {
+    const { api } = load(async () => resp(200, { data: { seccion: { payload: { items: [item("a")] } } } }));
+    const csv = await api.scrape({ keywords: "ford" });
+    ok(filas(csv).length === 0, "un sobre desconocido no puede devolver filas");
+    ok(api.lastScrape.ramasRotas === 1, "el sobre roto no contó como rama rota");
+    ok(api.lastScrape.parcial, "el sobre roto tiene que marcar parcial: si no, se cachea el vacío");
+  }
+
+  // ── 9e-bis. el sobre llega, pero la lista de dentro se llama de otra forma ──
+  //     Los dos lados del guard hacen falta: el payload ausente lo caza `!items`, y el payload
+  //     presente con la lista renombrada solo lo caza el `Array.isArray`.
+  {
+    const { api } = load(async () => resp(200, { data: { section: { payload: { results: [item("a")] } } } }));
+    const csv = await api.scrape({ keywords: "ford" });
+    ok(filas(csv).length === 0, "una lista renombrada no puede devolver filas");
+    ok(api.lastScrape.ramasRotas === 1, "la lista renombrada no contó como rama rota");
+  }
+
+  // ── 9f. …y a media paginación es peor: trunca con filas ya recogidas ──
+  {
+    let p = 0;
+    const { api } = load(async () => (++p === 1 ? resp(200, page([item("a")], "CUR")) : resp(200, { data: {} })));
+    const csv = await api.scrape({ keywords: "ford" });
+    ok(filas(csv).length === 1, "se perdió lo recogido antes de que cambiara la forma");
+    ok(api.lastScrape.parcial, "un truncado por forma desconocida se estaba cacheando como definitivo");
+  }
+
   // ── 10. 403 (DataDome): conserva lo recogido (que corte el scrape entero, en el test 15) ──
   {
     const { api } = load(async (url) => (url.includes("mala") ? resp(403, {}) : resp(200, page([item("a")]))));
@@ -366,6 +421,42 @@ async function main() {
     await api.scrape({ keywords: "ford" }).catch(() => {});
     ok(Math.max(...esperas) <= 61000, "una espera pasó del minuto: " + Math.max(...esperas) + " ms");
     ok(esperas.length === 5, "el número de intentos cambió: " + esperas.length);
+  }
+
+  // ── 17. la frontera de la antigüedad: `dias > maxDays`, no `>=` ──
+  //     No es solo que se cuele o se caiga un anuncio: ahí también se pone `old = true`, así que
+  //     equivocar el signo TRUNCA el resto de la rama. Con `>=`, "última semana" tira el anuncio
+  //     de siete días justos y todo lo que venga detrás.
+  {
+    const { api } = load(async () => resp(200, page([item("nuevo", { dias: 1 }), item("borde", { dias: 7 }), item("viejo", { dias: 8 })])));
+    const csv = await api.scrape({ keywords: "ford", since: "semana" });
+    ok(filas(csv).length === 2, "la frontera de los 7 días se movió: " + filas(csv).length + " filas");
+  }
+
+  // ── 17b. …y un anuncio sin fecha legible se salta, no trunca ──
+  //     Sin el `continue`, `"" > 7` es false y el anuncio entra como si fuera reciente.
+  {
+    const { api } = load(async () => resp(200, page([item("nuevo", { dias: 1 }), { ...item("sinfecha"), created_at: "ayer" }])));
+    const csv = await api.scrape({ keywords: "ford", since: "semana" });
+    ok(filas(csv).length === 1, "un anuncio sin fecha se coló en una búsqueda con ventana: " + filas(csv).length);
+  }
+
+  // ── 18. una coordenada que no es un número deja la celda vacía, no "NaN" ──
+  //     "NaN" no es "", así que la celda pasa entera a app.js: `overMax` la lee como no numérica
+  //     y el tope de distancia deja pasar la fila, y la ficha de la lista pinta "a NaN km".
+  {
+    const raro = { ...item("raro"), location: { latitude: "37,78", longitude: "-3,78", city: "Jaen" } };
+    const { api } = load(async () => resp(200, page([raro])));
+    const csv = await api.scrape({ keywords: "ford" });
+    ok(!csv.includes("NaN"), "una coordenada de texto se cuela como NaN: " + filas(csv)[0]);
+  }
+
+  // ── 18b. …y el 0 es una coordenada legítima, no una coordenada ausente ──
+  //     `lat && lon` tiraba la distancia de todo anuncio en longitud 0, que pasa por Castellón.
+  {
+    const { api } = load(async () => resp(200, page([item("greenwich", { lon: 0 })])));
+    const csv = await api.scrape({ keywords: "ford" });
+    ok(filas(csv)[0].split(",")[6] !== "", "la longitud 0 perdió la distancia: " + filas(csv)[0]);
   }
 
   console.log("ok (" + n + " comprobaciones)");

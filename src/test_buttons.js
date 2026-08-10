@@ -1515,6 +1515,28 @@ async function main() {
     ok(calls.length === 2, "volver a Jaén no relanzó la búsqueda");
   }
 
+  // ── 34b. …y sin CSV cargado los dos botones de ubicación no relanzan nada ──
+  //        `relanzaPorLoc` llama a `queryParts(curCsv)`, y en la pantalla de bienvenida `curCsv`
+  //        está vacío: sin el guard es un TypeError dentro del callback de geolocation, que
+  //        nadie recoge, así que la ubicación queda guardada y la app se queda a medias.
+  {
+    const b = await boot({}, { timers: true }); // sin csv: pantalla de bienvenida
+    const calls = [];
+    b.sandbox.Rebusca.scrape = async (o) => (calls.push(o), CSV);
+    b.sandbox.navigator.geolocation = {
+      getCurrentPosition: (_ok) => _ok({ coords: { latitude: 40.4168, longitude: -3.7038 } }),
+    };
+    b.q("#locBtn").click();
+    await flush();
+    ok(b.errs.length === 0, "sin CSV, guardar la ubicación lanzó: " + (b.errs[0] || {}).message);
+    ok(JSON.parse(b.store.wp_loc || "{}").lat === 40.4168, "sin CSV no se guardó la ubicación");
+    ok(calls.length === 0, "sin CSV se relanzó una búsqueda que no existe");
+    b.q("#locReset").click();
+    await flush();
+    ok(b.errs.length === 0, "sin CSV, volver a Jaén lanzó: " + (b.errs[0] || {}).message);
+    ok(calls.length === 0, "sin CSV, volver a Jaén relanzó una búsqueda que no existe");
+  }
+
   // ── 35. el contador de la búsqueda dice por qué rama OR va (las ramas se piden en serie) ──
   {
     const b = await boot({}, { csv: CSV });

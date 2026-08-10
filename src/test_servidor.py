@@ -112,10 +112,14 @@ def main():
         # la mitigación del DOM-XSS: app.js mete títulos scrapeados por innerHTML, y esto es
         # lo que impide que un onerror= inyectado llegue a ejecutarse
         assert csp["script-src"] == {"'self'"}, csp
+        # `==` y no `in`: con `in` se medía solo que no se QUITE la fuente necesaria, no que no se
+        # ENSANCHE la lista. Metiendo un `*` en connect-src los siete seguían verdes, y connect-src
+        # es justo el canal por donde se exfiltra lo que el script-src de arriba no deja ejecutar.
+        # Los otros seis directivos ya se clavan así; estos dos se habían quedado a medias.
         # sin esta línea el navegador corta cada scrape y no hay app
-        assert "https://api.wallapop.com" in csp["connect-src"], csp
+        assert csp["connect-src"] == {"'self'", "https://api.wallapop.com"}, csp
         # sin esta, las fotos de los CDN de Wallapop salen en blanco
-        assert "https:" in csp["img-src"], csp
+        assert csp["img-src"] == {"'self'", "data:", "https:"}, csp
         assert csp["frame-ancestors"] == {"'none'"}, csp
         assert csp["object-src"] == {"'none'"}, csp
         assert csp["base-uri"] == {"'self'"}, csp
@@ -124,6 +128,10 @@ def main():
         # "arregle" pensando que sobra.
         assert csp["style-src"] == {"'self'", "'unsafe-inline'"}, csp
         assert hh["X-Content-Type-Options"] == "nosniff", hh.get("X-Content-Type-Options")
+        # las dos que el bloque 2b se había dejado fuera: borrarlas, o degradar la primera a
+        # `unsafe-url`, pasaba invisible por el mismo motivo por el que el bloque 2 es tautológico
+        assert hh["Referrer-Policy"] == "strict-origin-when-cross-origin", hh.get("Referrer-Policy")
+        assert hh["Cross-Origin-Opener-Policy"] == "same-origin", hh.get("Cross-Origin-Opener-Policy")
         edad = int(hh["Strict-Transport-Security"].split("max-age=")[1].split(";")[0])
         assert edad >= 31536000, edad
 
@@ -148,6 +156,21 @@ def main():
 
         # ── 6. ruta que no existe: 404, no 500 ──
         assert req(port, "/no-existe.js")[0] == 404
+
+        # ── 6b. …y si la que falta es un estático servible, el journal se entera ──
+        #        El filtro de `log_error` se traga todos los 404 por igual, porque un dominio
+        #        público recibe bots todo el día. Pero un .js que la lista blanca acepta y no
+        #        está en disco es un deploy a medias, y ese sí hay que verlo. El server corre
+        #        en un hilo de este proceso, así que su stderr es este stderr.
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            assert req(port, "/no-existe.js")[0] == 404
+        assert "no-existe.js" in buf.getvalue(), "un estático que falta no llega al journal"
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            assert req(port, "/wp-login.php")[0] == 404   # bot: no es servible, sigue siendo ruido
+            assert req(port, "/app.css")[0] == 200        # y un estático que SÍ está no se comenta
+        assert buf.getvalue() == "", "el ruido de los bots vuelve a ensuciar el journal"
 
         # ── 7. escape de directorio: nada de fuera de src/ sale por la red ──
         for path in ("/../CLAUDE.md", "/..%2fCLAUDE.md", "//../CLAUDE.md",

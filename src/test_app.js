@@ -760,6 +760,27 @@ async function main() {
   if ("wp_perfil" in store || "wp_perfiles" in store)
     fail("migración: no retiró wp_perfil/wp_perfiles");
 
+  // 3b. …y si la copia NO cabe, el puntero se queda. La migración duplica el estado, así que es
+  //     justo el gesto que llena la cuota. Con wp_perfil ya borrado no se reintenta nunca más: la
+  //     app sale vacía con los datos intactos en localStorage e inalcanzables para siempre.
+  //     El `ok = setLS(b, v) && ok` que lo impide no lo medía nadie; con `||` los siete seguían
+  //     verdes. Aquí wp_estado_Javi no cabe duplicado y los tres pequeños sí: fallo parcial.
+  {
+    const parcial = {
+      wp_perfil: "Javi",
+      wp_perfiles: JSON.stringify([{ name: "Javi", color: "#22aa77" }]),
+      wp_estado_Javi: JSON.stringify({ trash: ["x".repeat(900)], fav: [], star: [] }),
+      wp_lastcsv_Javi: "ps4.csv",
+    };
+    const b = await boot(parcial, { limit: 1500 });
+    if (b.store.wp_estado !== undefined)
+      fail("el escenario no reprodujo el fallo: la copia gorda si cupo");
+    if (b.store.wp_perfil !== "Javi")
+      fail("se borró wp_perfil con la migración a medias: el estado queda inalcanzable para siempre");
+    if (b.store.wp_lastcsv !== "ps4.csv")
+      fail("la copia pequeña tenía que caber: el escenario no es un fallo PARCIAL");
+  }
+
   // 4. migración cubos GLOBALES (Array) -> POR CAJÓN {csv:[ids]}: cada id va al cajón de su
   //    origen (wp_rows._csv). Sin esto, favoritos/interesantes viejos caerían todos en un cajón.
   const gs = {
@@ -825,6 +846,24 @@ async function main() {
   }
   if (tiro) fail("reject() lanzo con la cuota llena (el bug de la carta congelada): " + (tiro.message || tiro));
 
+  // 5-bis. La barra de orden es el UNICO setItem que se escapo de setLS, y entro anoche. Con la
+  //     cuota llena la excepcion mata el handler ANTES del render(): el usuario toca "precio" y la
+  //     lista ni se ordena ni repinta el boton, sin el aviso de almacen lleno y con el "Fallo
+  //     interno" generico. Es la misma carta congelada del bloque 5, en otro boton.
+  //     Presupuesto propio: el del bloque 5 esta calibrado para que reject() quepa justo, y con
+  //     ese margen la clave de orden (8 bytes) entraba sin rozar el tope.
+  {
+    const tope = { wp_estado: JSON.stringify({ rejected: {}, favorite: {} }), wp_lastcsv: "ford.csv" };
+    const b2 = await boot(tope, { limit: 6000 });
+    tope.relleno = "x".repeat(5990); // no cabe ni una clave mas, por corta que sea
+    if (typeof b2.sandbox.applyListSort !== "function") fail("applyListSort no quedo en el sandbox");
+    try {
+      b2.sandbox.applyListSort("precio");
+    } catch (e) {
+      fail("applyListSort lanzo con la cuota llena: la lista no se ordena ni repinta: " + (e.message || e));
+    }
+  }
+
   // 5b. CUOTA LLENA + DATO DAÑADO: el caso en que `aparta` no puede respaldar. La copia a
   //     "roto:<clave>" es la UNICA copia, y hydrateEstado reescribe esa misma clave saneada unas
   //     lineas despues. Si `setLS` dijera que guardo sin guardar, el usuario se queda sin copia
@@ -845,6 +884,38 @@ async function main() {
       fail("el original dañado se machaco sin haberlo podido respaldar; quedo " + b.store.wp_excl);
     if (!b.errs.some((e) => String(e).includes("roto:wp_excl")))
       fail("el respaldo fallido no dejo aviso por consola: " + JSON.stringify(b.errs.map(String)));
+  }
+
+  // 5c. …y el blob GORDO tiene que estar igual de protegido. 5b mide `wp_excl`, que es una de las
+  //     claves espejo pequeñas, y esas iban por `espejo()`. `wp_estado` no: `pushEstado()` y
+  //     `saveBuckets()` escribían por `setLS()` directo, o sea que la marca de `sinRespaldo` los
+  //     frenaba a todos MENOS a los dos que de verdad importan. Un solo swipe con el blob dañado
+  //     y sin copia destruia el unico original que quedaba.
+  {
+    const danado = "[" + "1,".repeat(900) + "1]"; // JSON valido, forma equivocada (va un objeto)
+    const est = { wp_estado: danado, wp_lastcsv: "ford.csv" };
+    const b = await boot(est, { limit: 2400 });
+    if (b.store["roto:wp_estado"] !== undefined)
+      fail("el escenario no reprodujo el fallo de respaldo: la copia si cupo");
+    b.sandbox.reject("k1", "Cosa"); // un gesto cualquiera: dispara saveBuckets -> pushEstado
+    if (b.store.wp_estado !== danado)
+      fail("un swipe machaco el estado dañado que no se pudo respaldar; quedo " + b.store.wp_estado);
+  }
+
+  // 5d. …y lo mismo por el otro escritor. `saveBuckets()` escribe los cajones uno por uno, y
+  //     tambien iba por `setLS()`: con `wp_rejected` dañado y sin copia, el primer swipe se
+  //     llevaba por delante el unico original. Dos escritores, dos redes.
+  //     Un array NO sirve de dato dañado aqui: los cubos se leen con fb=null a proposito, porque
+  //     una lista es el formato global viejo y `toMap` lo migra. El escalar si lo es.
+  {
+    const danado = JSON.stringify("x".repeat(1800));
+    const est = { wp_rejected: danado, wp_lastcsv: "ford.csv" };
+    const b = await boot(est, { limit: 2400 });
+    if (b.store["roto:wp_rejected"] !== undefined)
+      fail("el escenario no reprodujo el fallo de respaldo: la copia si cupo");
+    b.sandbox.reject("k1", "Cosa");
+    if (b.store.wp_rejected !== danado)
+      fail("saveBuckets machaco el cajon dañado que no se pudo respaldar; quedo " + b.store.wp_rejected);
   }
 
   // 6. CAJON POR KEYWORD: "ps4--dia" y "ps4--semana" son la misma caza. Antes el `since` iba en la
