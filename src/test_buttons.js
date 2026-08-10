@@ -2908,6 +2908,149 @@ async function main() {
     );
   }
 
+  // CSV con fotos: lo comparten los dos bloques de la galería (el de abrirla y el del pinch)
+  const CSV_FOTOS =
+    [
+      FIELDS.join(","),
+      row({ id: "f1", titulo: "Ford Focus", precio: "1000", categoria: "Coches", ciudad: "Jaen",
+        km: "3", dias: "1", reservado: "False", envio: "False", url: "https://w/f1", vendedor: "Ana",
+        imagen: "https://w/f1-mini.jpg", imagenes: "https://w/f1-a.jpg https://w/f1-b.jpg https://w/f1-c.jpg" }),
+      row({ id: "f2", titulo: "Ford Ka", precio: "50", categoria: "Coches", ciudad: "Jaen",
+        km: "4", dias: "2", reservado: "False", envio: "False", url: "https://w/f2", vendedor: "Bea",
+        imagen: "https://w/f2-mini.jpg" }), // sin `imagenes`: solo la portada
+    ].join("\r\n") + "\r\n";
+  // ── 78. la foto de la tarjeta abre la galería con TODAS las del anuncio ──
+  //     El carrusel lo lleva el scroll del navegador (CSS scroll-snap), así que aquí solo se
+  //     mide lo que sí es nuestro: qué fotos se pintan, el contador, y las tres salidas
+  //     (la X, el atrás del móvil, Escape) sin llevarse por delante el mazo de debajo.
+  {
+    const b = await loaded({ csv: CSV_FOTOS });
+    const track = b.q("#galTrack");
+    b.q("#swipeFab").click();
+    const media = byClass(b.q("#swipeStage"), "li-media")[0];
+    ok(media && media.tabIndex === 0, "la foto de la tarjeta no es enfocable: no hay galería con teclado");
+    media.click();
+    ok(b.q("#galView").hidden === false, "tocar la foto no abrió la galería");
+    ok(track.children.length === 3, "la galería no pintó las 3 fotos: " + track.children.length);
+    ok(String(track.children[0].src) === "https://w/f1-a.jpg",
+      "la galería usa la miniatura y no `imagenes`, que viene en mejor resolución");
+    ok(String(b.q("#galCount").textContent) === "1 / 3",
+      "el contador no arranca en la primera: " + b.q("#galCount").textContent);
+    ok(b.q("#galX").focused === true, "abrir la galería no llevó el foco dentro");
+    ok(b.q("#swipeView").inert === true, "con la galería abierta el mazo se queda navegable por debajo");
+    // atrás: se lleva SOLO la capa de arriba, y no duplica la entrada sintética de historial
+    ok(b.hist.length === 1, "abrir la galería sobre el mazo duplicó la entrada de historial: " + b.hist.length);
+    b.sandbox.history.back();
+    ok(b.q("#galView").hidden === true, "el botón atrás no cerró la galería");
+    ok(b.q("#swipeView").hidden === false, "el atrás se llevó también el mazo");
+    ok(b.q("#swipeView").inert === false, "cerrar la galería dejó el mazo inert: no se puede swipear");
+    ok(track.children.length === 0, "cerrar la galería no soltó las fotos");
+    ok(b.hist.length === 1, "el mazo que sigue abierto se quedó sin entrada de historial");
+    // la X y Escape, las otras dos salidas
+    media.click();
+    b.q("#galX").click();
+    ok(b.q("#galView").hidden === true, "#galX no cerró la galería");
+    media.click();
+    b.fireDoc("keydown", { key: "Escape", target: b.q("body") });
+    ok(b.q("#galView").hidden === true, "Escape no cerró la galería");
+    ok(b.q("#swipeView").hidden === false, "Escape se llevó el mazo además de la galería");
+    // un arrastre que no cuajó y vuelve al centro NO es un toque en la foto
+    ev(b, "swDragged = true");
+    media.click();
+    ok(b.q("#galView").hidden === true, "el click de después de un arrastre abrió la galería");
+    ev(b, "swDragged = false");
+    // sin `imagenes`, la galería cae a la portada: una foto y sin contador
+    ev(b, "di = 1; nextCard()");
+    byClass(b.q("#swipeStage"), "li-media")[0].click();
+    ok(track.children.length === 1 && String(track.children[0].src) === "https://w/f2-mini.jpg",
+      "sin `imagenes` la galería no cae a la portada");
+    ok(String(b.q("#galCount").textContent) === "", "con una sola foto sobra el contador");
+    b.q("#galX").click();
+  }
+
+  // ── 79. pinch: dos dedos acercan la foto, uno la arrastra, y el carrusel se queda quieto ──
+  //     La cuenta del zoom no la puede mirar un screenshot: el punto entre los dedos tiene que
+  //     quedarse donde está (si no, la foto se escapa al acercarse a una esquina) y el arrastre
+  //     tiene tope. Y mientras hay zoom, el scroll del carrusel se bloquea o se cambia de foto sin querer.
+  {
+    const b = await loaded({ csv: CSV_FOTOS });
+    const track = b.q("#galTrack");
+    track.clientWidth = 320; // el arnés no hace layout: el pinch necesita el tamaño del hueco
+    track.clientHeight = 600;
+    b.q("#swipeFab").click();
+    byClass(b.q("#swipeStage"), "li-media")[0].click();
+    const dedo = (tipo, id, x, y) =>
+      track.dispatch(tipo, { pointerId: id, pointerType: "touch", clientX: x, clientY: y });
+    const trans = () => String(track.children[0].style.transform || "");
+    // dos dedos a 100 px, separados hasta 200: el doble de zoom
+    dedo("pointerdown", 1, 100, 300);
+    dedo("pointerdown", 2, 200, 300);
+    ok(track.style.overflowX === "hidden", "con dos dedos encima el carrusel sigue scrolleando");
+    dedo("pointermove", 2, 300, 300);
+    ok(ev(b, "galZ") === 2, "el pinch no dobló el zoom: " + ev(b, "galZ"));
+    // el punto de en medio (x=200, o sea 40 px a la derecha del centro) se queda donde estaba
+    ok(trans() === "translate(-40px, 0px) scale(2)", "el pinch no ancla el punto entre los dedos: " + trans());
+    dedo("pointerup", 1, 100, 300);
+    dedo("pointerup", 2, 300, 300);
+    ok(track.style.overflowX === "hidden", "el zoom se quedó puesto pero el carrusel volvió a scrollear");
+    // un dedo arrastra la foto, con tope en lo que sobresale ((2-1)*320/2 = 160)
+    dedo("pointerdown", 3, 100, 300);
+    dedo("pointermove", 3, 400, 300);
+    ok(trans() === "translate(160px, 0px) scale(2)", "el arrastre con zoom se sale del tope: " + trans());
+    dedo("pointerup", 3, 400, 300);
+    // el ratón no hace pinch: el carrusel es suyo
+    track.dispatch("pointerdown", { pointerId: 9, pointerType: "mouse", clientX: 10, clientY: 10 });
+    ok(ev(b, "galPts.size") === 0, "el ratón entró en el gesto de pinch");
+    // cerrar deja el zoom a cero para la próxima foto
+    b.q("#galX").click();
+    ok(ev(b, "galZ") === 1 && !track.style.overflowX,
+      "cerrar la galería no deshizo el zoom: la siguiente abre acercada");
+  }
+
+  // ── 80. doble toque: acerca en el punto tocado, y otro doble toque devuelve al tamaño ──
+  //     Es un gesto a base de relojes y distancias: sin check, un umbral mal puesto lo rompe
+  //     sin que se note en pantalla (o peor, hace zoom cada vez que pasas de foto).
+  {
+    const b = await loaded({ csv: CSV_FOTOS });
+    const track = b.q("#galTrack");
+    track.clientWidth = 320;
+    track.clientHeight = 600;
+    b.q("#swipeFab").click();
+    byClass(b.q("#swipeStage"), "li-media")[0].click();
+    const dedo = (tipo, t, x, y) =>
+      track.dispatch(tipo, { pointerId: 1, pointerType: "touch", clientX: x, clientY: y, timeStamp: t });
+    const toque = (t, x, y) => {
+      dedo("pointerdown", t, x, y);
+      dedo("pointerup", t + 40, x, y);
+    };
+    const trans = () => String(track.children[0].style.transform || "");
+    toque(1000, 200, 300);
+    ok(ev(b, "galZ") === 1, "un toque suelto ya hizo zoom");
+    toque(1150, 200, 300);
+    ok(ev(b, "galZ") === 2.5, "el doble toque no acercó: " + ev(b, "galZ"));
+    // el punto tocado (200, o sea 40 px a la derecha del centro) se queda donde estaba
+    ok(trans() === "translate(-60px, 0px) scale(2.5)", "el doble toque no ancla el punto tocado: " + trans());
+    // el par ya gastado no encadena: el tercer toque empieza pareja nueva, y el cuarto desacerca
+    toque(1400, 200, 300);
+    ok(ev(b, "galZ") === 2.5, "el tercer toque encadenó otro zoom");
+    toque(1500, 200, 300);
+    ok(ev(b, "galZ") === 1 && trans() === "", "el segundo doble toque no devolvió el tamaño: " + trans());
+    // dos toques lentos son dos toques, no un doble
+    toque(3000, 200, 300);
+    toque(3500, 200, 300);
+    ok(ev(b, "galZ") === 1, "dos toques a medio segundo colaron como doble toque");
+    // ...y dos toques en sitios distintos, tampoco
+    toque(5000, 60, 100);
+    toque(5100, 260, 500);
+    ok(ev(b, "galZ") === 1, "dos toques en esquinas distintas colaron como doble toque");
+    // un swipe rápido de foto no es un toque: el dedo se mueve
+    dedo("pointerdown", 7000, 200, 300);
+    dedo("pointerup", 7040, 60, 300);
+    dedo("pointerdown", 7100, 200, 300);
+    dedo("pointerup", 7140, 60, 300);
+    ok(ev(b, "galZ") === 1, "dos swipes seguidos hacen zoom sin querer");
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

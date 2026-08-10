@@ -697,6 +697,32 @@
   .swipe-actions button:disabled:hover { background: var(--surface); border-color: var(--line-strong); box-shadow: none; }
   .swipe-actions button.primary:disabled:hover { background: var(--pine); border-color: var(--pine); }
 
+  /* ── galería de fotos: por encima de TODO (z 50 > el 45 del mazo y del gestor) ──
+     el carrusel es un scroller con scroll-snap: el swipe lo hace el navegador, no nosotros.
+     `touch-action: pan-x` para que el arrastre no se lo lleve el dragify del mazo de debajo. */
+  /* fondo negro a pelo (rgba, no var): la foto se mira sobre negro en los dos temas */
+  .gal { position: fixed; inset: 0; z-index: 50; background: rgba(11,15,13,1); }
+  .gal[hidden] { display: none; }
+  .gal-track { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory; overscroll-behavior: contain; touch-action: pan-x;
+    scrollbar-width: none; outline: none; }
+  .gal-track::-webkit-scrollbar { display: none; }
+  /* el pinch la escala con un `transform` puesto desde app.js; sin layout de por medio, la
+     foto zoomeada se recorta contra el hueco (que es la pantalla entera) y no desplaza nada */
+  .gal-track img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: contain;
+    scroll-snap-align: center; scroll-snap-stop: always; -webkit-user-drag: none; }
+  .gal-x { position: absolute; top: 1rem; right: 1rem; width: 2.6rem; height: 2.6rem; padding: 0;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: rgba(11,15,13,.6); border: 1px solid rgba(243,245,241,.25); color: #f3f5f1;
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+  .gal-x:hover { background: rgba(11,15,13,.8); }
+  .gal-count { position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%);
+    padding: .34rem .7rem; border-radius: 999px; pointer-events: none;
+    background: rgba(11,15,13,.6); color: #f3f5f1; font: 700 12px var(--mono); letter-spacing: .08em; }
+  .gal-count:empty { display: none; }
+  /* la foto de la tarjeta es un botón: se puede tocar para ver el resto */
+  .li-media.tap { cursor: zoom-in; }
+
   /* botón-icono cuadrado junto al combobox de la cabecera (alto = input) */
   .icon-btn { flex: 0 0 auto; width: 2.15rem; height: 2.15rem; padding: 0;
     display: flex; align-items: center; justify-content: center; color: var(--ink-soft); }

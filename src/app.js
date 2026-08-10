@@ -699,6 +699,23 @@ function fillCard(el, r) {
     im.onerror = () => im.remove(); // si falla, queda el fondo neutro del media
     media.append(im);
   }
+  // tocar la foto abre la galería con TODAS las del anuncio (`imagenes` viene en mejor
+  // resolución que la miniatura `imagen`; si no hay lista, al menos la portada)
+  const fotos = (col(r, "imagenes") || "").split(" ").filter(Boolean);
+  const shots = fotos.length ? fotos : img ? [img] : [];
+  if (shots.length) {
+    media.className = "li-media tap";
+    media.setAttribute("role", "button");
+    media.tabIndex = 0;
+    media.title = "ver las fotos";
+    media.setAttribute("aria-label", `ver las ${shots.length} fotos`);
+    media.onclick = () => !swDragged && openGal(shots);
+    media.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      openGal(shots);
+    };
+  }
   // etiqueta de precio: el chollo. Chip teal sobre la foto (con envío = precio final estimado)
   const price = document.createElement("span");
   price.className = "li-price";
@@ -754,7 +771,7 @@ function fillCard(el, r) {
   if (where) flags.append(document.createTextNode(`, ${where}`));
   // señales que ya estaban en el CSV y no pintaba nadie: cuántas fotos trae el anuncio (una foto
   // borrosa o siete claras es una señal barata) y las tres banderas del vendedor/artículo
-  const nFotos = (col(r, "imagenes") || "").split(" ").filter(Boolean).length;
+  const nFotos = fotos.length;
   const extra = [];
   if (nFotos) extra.push(`${nFotos} ${nFotos === 1 ? "foto" : "fotos"}`);
   if (col(r, "garantia") === "True") extra.push("garantía");
@@ -2665,6 +2682,177 @@ function exitOverlay() {
   overlayBg().forEach((el) => el && (el.inert = false));
 }
 
+// ── galería de fotos: tocar la portada de una tarjeta abre TODAS las del anuncio ──
+// El carrusel es un scroller con scroll-snap (app.css): el swipe lo hace el navegador.
+// ponytail: cero JS de arrastre, cero librería; solo pintar los <img> y contar en qué va.
+const galView = $("#galView"),
+  galTrack = $("#galTrack"),
+  galCount = $("#galCount");
+let galUnder = null, // capa de debajo a la que devolver el `inert` (mazo/gestor), si la hay
+  galReturn = null; // elemento al que devolver el foco al cerrar
+function openGal(urls, i = 0) {
+  // ya abierta: en el mazo el mismo toque llega dos veces (pointerup + click), y re-pintar
+  // aquí recargaría las fotos y perdería la posición del carrusel
+  if (!urls.length || !galView.hidden) return;
+  galTrack.replaceChildren();
+  for (const u of urls) {
+    const im = document.createElement("img");
+    im.src = u;
+    im.alt = "";
+    im.decoding = "async";
+    galTrack.append(im);
+  }
+  galView.hidden = false;
+  galReturn = document.activeElement;
+  galUnder = !swipeView.hidden ? swipeView : !searchesView.hidden ? searchesView : null;
+  if (galUnder) galUnder.inert = true; // el fondo ya lo sacó del tab quien abrió esa capa
+  else enterOverlay();
+  document.body.style.overflow = "hidden";
+  galTrack.scrollLeft = i * galTrack.clientWidth;
+  galSlide();
+  $("#galX").focus();
+  reconcileBack();
+}
+function closeGal() {
+  galView.hidden = true;
+  galTrack.replaceChildren(); // suelta las fotos a tamaño completo
+  galCount.textContent = "";
+  if (galUnder) galUnder.inert = false;
+  else {
+    exitOverlay();
+    document.body.style.overflow = ""; // con el mazo detrás lo restaura `closeSwipe`
+  }
+  galUnder = null;
+  galZoomReset();
+  galReturn?.focus?.();
+  galReturn = null;
+}
+// contador "3 / 7": la posición la manda el scroll, que es quien lleva el carrusel
+function galSlide() {
+  const n = galTrack.children.length;
+  galCount.textContent =
+    n > 1 ? `${Math.round(galTrack.scrollLeft / (galTrack.clientWidth || 1)) + 1} / ${n}` : "";
+}
+galTrack.onscroll = galSlide;
+$("#galX").onclick = closeGal;
+
+// ── pinch: dos dedos acercan la foto de en medio; con zoom, un dedo la arrastra ──
+// El carrusel sigue siendo scroll nativo: mientras se hace pinch (o queda zoom) se bloquea con
+// `overflow-x: hidden`. Cambiarlo a media caricia SÍ frena el scroll que el navegador ya había
+// empezado, que es lo único que se puede hacer cuando el gesto está en marcha.
+const galPts = new Map(); // dedos vivos sobre el carrusel, por pointerId
+let galZ = 1, // zoom de la foto actual
+  galX = 0, // ...y su desplazamiento, en px de pantalla
+  galY = 0,
+  galD0 = 0, // separación de los dedos al empezar el pinch
+  galPX = 0, // último punto del dedo que arrastra
+  galPY = 0,
+  galTapT = 0, // instante y sitio del toque anterior, para cazar el doble toque
+  galTapX = 0,
+  galTapY = 0,
+  galDX = 0, // dónde y cuándo bajó el dedo: un toque es bajar y subir en el mismo sitio
+  galDY = 0,
+  galDT = 0;
+const galImg = () => galTrack.children[Math.round(galTrack.scrollLeft / (galTrack.clientWidth || 1))];
+const galSpread = () => {
+  const [a, b] = [...galPts.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+};
+function galApply() {
+  // tope del arrastre: la mitad de lo que sobresale. Se mide sobre el hueco entero y no sobre la
+  // foto (que con `contain` deja bandas), así que en una foto apaisada sobra algo de margen.
+  // ponytail: medir la caja real pide `getBoundingClientRect` por frame para ganar poco.
+  const lim = (v, max) => Math.min(max, Math.max(-max, v)); // con zoom 1 el tope es 0: se recentra sola
+  galX = lim(galX, ((galZ - 1) * galTrack.clientWidth) / 2);
+  galY = lim(galY, ((galZ - 1) * galTrack.clientHeight) / 2);
+  const im = galImg();
+  if (im) im.style.transform = galZ === 1 ? "" : `translate(${galX}px, ${galY}px) scale(${galZ})`;
+  galTrack.style.overflowX = galZ === 1 && galPts.size < 2 ? "" : "hidden";
+}
+function galZoomReset() {
+  galPts.clear();
+  galZ = 1;
+  galX = galY = 0;
+  galApply();
+}
+// escala a `z2` dejando quieto el punto que hay entre los dedos (si no, la foto se escapa del
+// dedo en cuanto te acercas a una esquina). Coordenadas relativas al centro del hueco, que es
+// el origen del `transform`; el carrusel ocupa la pantalla entera, así que clientX ya vale.
+function galPinch(z2, mx, my) {
+  const sx = mx - galTrack.clientWidth / 2,
+    sy = my - galTrack.clientHeight / 2;
+  const zn = Math.min(6, Math.max(1, z2));
+  galX = sx - (zn / galZ) * (sx - galX);
+  galY = sy - (zn / galZ) * (sy - galY);
+  galZ = zn;
+  galApply();
+}
+galTrack.onpointerdown = (e) => {
+  if (e.pointerType === "mouse") return; // el pinch es de dedos; con ratón manda el scroll de siempre
+  galPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  galPX = galDX = e.clientX;
+  galPY = galDY = e.clientY;
+  galDT = e.timeStamp;
+  if (galPts.size === 2) galD0 = galSpread();
+  galApply(); // dos dedos abajo: corta ya el scroll del carrusel
+};
+galTrack.onpointermove = (e) => {
+  if (!galPts.has(e.pointerId)) return;
+  galPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const dedos = [...galPts.values()];
+  if (dedos.length >= 2) {
+    e.preventDefault();
+    galPinch((galZ * galSpread()) / (galD0 || 1), (dedos[0].x + dedos[1].x) / 2, (dedos[0].y + dedos[1].y) / 2);
+    galD0 = galSpread(); // relativo al frame anterior: así el zoom no salta si un dedo se levanta y vuelve
+  } else if (galZ > 1) {
+    e.preventDefault(); // con zoom no hay carrusel que pasar: el dedo arrastra la foto
+    galX += e.clientX - galPX;
+    galY += e.clientY - galPY;
+    galPX = e.clientX;
+    galPY = e.clientY;
+    galApply();
+  }
+};
+galTrack.onpointerup = galTrack.onpointercancel = (e) => {
+  if (!galPts.delete(e.pointerId)) return;
+  const queda = [...galPts.values()][0];
+  if (queda) {
+    galPX = queda.x; // se levanta un dedo: el que sigue arrastra desde donde está, sin salto
+    galPY = queda.y;
+  }
+  galApply(); // sin zoom y sin dedos, devuelve el carrusel al navegador
+  if (e.type === "pointerup" && !galPts.size) galDobleTap(e);
+};
+// doble toque: acerca a ×2.5 en el punto tocado, y otro doble toque devuelve al tamaño normal.
+// Es lo que hace todo el mundo (Fotos, Instagram) y no pisa al pinch: un pinch mueve el dedo.
+function galDobleTap(e) {
+  const cerca = (ax, ay, bx, by, r) => Math.hypot(ax - bx, ay - by) < r;
+  // un toque es rápido y quieto; si el dedo se fue de paseo, era swipe o arrastre de la foto
+  if (e.timeStamp - galDT > 400 || !cerca(e.clientX, e.clientY, galDX, galDY, 10)) return;
+  const doble = e.timeStamp - galTapT < 300 && cerca(e.clientX, e.clientY, galTapX, galTapY, 40);
+  galTapT = doble ? 0 : e.timeStamp; // consumido: tres toques seguidos no encadenan dos zooms
+  galTapX = e.clientX;
+  galTapY = e.clientY;
+  if (!doble) return;
+  const im = galImg();
+  if (im) {
+    im.style.transition = "transform .18s ease"; // solo aquí: en el pinch el dedo iría por delante
+    setTimeout(() => (im.style.transition = ""), 200);
+  }
+  if (galZ > 1) galZoomReset();
+  else galPinch(2.5, e.clientX, e.clientY);
+}
+// teclado de la galería. Lo llama el `keydown` del mazo, que es UN listener para las dos capas:
+// dos listeners sueltos se ejecutan los dos (`stopPropagation` no frena a los hermanos del
+// mismo nodo), así que un Escape cerraba la galería Y el mazo de debajo de una sola tecla.
+function galKey(e) {
+  if (e.key === "Escape") return closeGal();
+  const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+  if (!d) return; // sin dedo no hay swipe: las flechas pasan de foto
+  e.preventDefault();
+  galTrack.scrollBy({ left: d * galTrack.clientWidth, behavior: "smooth" });
+}
+
 function openSwipe() {
   deck = filteredRows();
   di = 0;
@@ -2739,6 +2927,9 @@ function decide(dx, v) {
   if (dx < -60 || v < -0.5) return -1;
   return 0;
 }
+// ¿el gesto en curso fue arrastre? Lo lee la foto de la tarjeta para no abrir la galería
+// cuando el dedo venía de un swipe que no cuajó y volvió al centro.
+let swDragged = false;
 // se arma UNA vez sobre toda la vista: arrastra desde cualquier hueco, mueve la tarjeta actual
 function dragify(root) {
   let sx = 0,
@@ -2747,11 +2938,14 @@ function dragify(root) {
     dy = 0,
     on = false,
     axis = 0,
-    t0 = 0;
+    t0 = 0,
+    downEl = null; // dónde empezó el dedo: con captura de puntero el `up` ya no lo dice
   root.onpointerdown = (e) => {
     if (!card || e.target.closest("a,button,input,.seller-banner")) return; // sin tarjeta o sobre botón/input/banner: nada
     on = true;
     dx = dy = axis = 0;
+    swDragged = false;
+    downEl = e.target;
     sx = e.clientX;
     sy = e.clientY;
     t0 = e.timeStamp;
@@ -2767,6 +2961,7 @@ function dragify(root) {
       axis = Math.abs(dy) > Math.abs(dx) * 1.4 ? "y" : "x"; // ponytail: el swipe manda; solo bloquea a scroll un arrastre claramente vertical
 
       if (axis === "x") card.classList.add("grab");
+      swDragged = true; // hubo arrastre: el click que venga detrás no es un toque
     }
     if (axis !== "x") return; // vertical: deja scrollear la descripción
     e.preventDefault();
@@ -2778,6 +2973,10 @@ function dragify(root) {
   root.onpointerup = root.onpointercancel = (e) => {
     if (!on) return;
     on = false;
+    // toque limpio sobre la foto: abre la galería. Se resuelve aquí y no en el `onclick` de la
+    // media porque con captura de puntero el navegador manda el click a la vista, no a la imagen.
+    if (!swDragged && e.type === "pointerup") downEl?.closest?.(".li-media")?.onclick?.();
+    setTimeout(() => (swDragged = false)); // el click llega antes que este timeout: la guarda aguanta
     if (axis === "x" && card) {
       card.classList.remove("grab");
       // `pointercancel` NO es soltar: el sistema se llevó el dedo (entra una llamada, el
@@ -3217,6 +3416,7 @@ document
   .querySelectorAll("#swipeSort button")
   .forEach((b) => (b.onclick = () => applySwipeSort(b.dataset.sort)));
 document.addEventListener("keydown", (e) => {
+  if (!galView.hidden) return galKey(e); // la galería es la capa de arriba: las teclas son suyas
   if (swipeView.hidden) return;
   if (e.key === "Escape") closeSwipe();
   else if (e.key === "ArrowLeft") card && fling(-1);
@@ -3228,10 +3428,14 @@ document.addEventListener("keydown", (e) => {
 // ponytail: no es una pila; con superficies anidadas hace falta una pulsación de atrás por capa (basta para los flujos de un nivel).
 let rbArmed = false;
 function anyOpen() {
-  return view !== "" || !searchesView.hidden || !swipeView.hidden;
+  return view !== "" || !searchesView.hidden || !swipeView.hidden || !galView.hidden;
 }
 function closeTop() {
   // cierra la superficie superior; true si cerró algo
+  if (!galView.hidden) {
+    closeGal();
+    return true;
+  }
   if (!searchesView.hidden) {
     closeManager();
     return true;
@@ -3279,4 +3483,7 @@ document.addEventListener("keydown", (e) => {
     e.target.click();
   }
 });
+
+
+
 
