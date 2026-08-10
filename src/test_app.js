@@ -56,6 +56,13 @@ const carta = (b, i) =>
 const IDS = new Set(
   [...HTML.matchAll(/\bid="([\w-]+)"/g), ...APP.matchAll(/\bid="([\w-]+)"/g)].map(([, id]) => id),
 );
+// El mismo agujero que el de IDS, por la puerta de las etiquetas: `querySelector("header")` no
+// lleva `#`, así que la lista de arriba no lo mira. `enterOverlay` apunta a `header` y `main` para
+// sacar el fondo del tab; si el HTML deja de tenerlas, el arnés se las inventa y la a11y de los
+// overlays sale verde con el fondo navegable en el navegador.
+// `html`/`head`/`body` van sembradas: HTML5 deja escribirlas implícitas, y index.html no las lleva.
+const TAGS = new Set(["html", "head", "body",
+  ...[...HTML.matchAll(/<([a-zA-Z][\w-]*)[\s/>]/g)].map(([, t]) => t.toLowerCase())]);
 const HTML_INIT = (() => {
   const html = HTML;
   const init = {};
@@ -250,8 +257,16 @@ function makeEl(sel, any) {
       return out;
     },
     getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
-    focus() {},
-    blur() {},
+    // deja rastro: `focus()` es lo único que el arnés sabe del foco, y la a11y de los overlays
+    // (el fondo `inert` + el foco dentro) se cae entera si nadie lo mira. Con el noop de antes
+    // el test tampoco podía espiarlo: el `get` del Proxy mira `api` antes que el estado, así que
+    // un `el.focus = miEspía` desde fuera se escribía y no se leía nunca.
+    focus() {
+      st.focused = true;
+    },
+    blur() {
+      st.focused = false;
+    },
     scrollIntoView() {},
     animate: () => ({ finished: Promise.resolve() }),
   };
@@ -377,6 +392,9 @@ function makeContext(store, opts = {}) {
     const id = /^#([\w-]+)$/.exec(sel);
     if (id && !IDS.has(id[1]))
       throw new Error(`el arnés se inventó ${sel}: ese id no está ni en index.html ni en app.js`);
+    const tag = /^[a-zA-Z][\w-]*$/.test(sel) && sel.toLowerCase();
+    if (tag && !TAGS.has(tag))
+      throw new Error(`el arnés se inventó <${tag}>: esa etiqueta no está en index.html`);
     if (!els.has(sel)) els.set(sel, makeEl(sel, any));
     return els.get(sel);
   };

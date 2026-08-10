@@ -795,6 +795,66 @@ async function main() {
     ok(b.q("#searchesView").hidden === true, "un atrás de más reabrió algo");
   }
 
+  // ── 28b. el atrás en el resto de superficies, el anidado, y el fondo `inert` ──
+  //         El bloque 28 mide el gestor. El mazo y la lista son las otras dos capas, y son las
+  //         que el usuario tiene abiertas casi siempre. `anyOpen`/`closeTop` las nombran una por
+  //         una: sin un check por capa, borrar la rama del mazo pasa los siete checks.
+  {
+    // `=== true`, no `Boolean(...)`: una propiedad que nadie asignó vale la función comodín del
+    // arnés, que es truthy. Con `Boolean` el check daba verde aunque `enterOverlay` no tocase nada.
+    const fondo = (b) => [b.q("header").inert, b.q("main").inert].map((v) => v === true).join();
+
+    // el mazo
+    const b1 = await loaded();
+    b1.q("#swipeFab").click();
+    // el foco tiene que entrar en el overlay: si se queda en el fondo `inert`, el teclado y el
+    // lector de pantalla se quedan sin sitio donde estar
+    ok(b1.q("#swipeX").focused === true, "abrir el mazo no llevó el foco al overlay");
+    ok(b1.q("#swipeView").hidden === false, "#swipeFab no abrió el mazo");
+    ok(b1.hist.length === 1, "abrir el mazo no armó la entrada sintética de historial");
+    // a11y: con el overlay puesto, el fondo sale del tab y del árbol del lector de pantalla
+    ok(fondo(b1) === "true,true", "el mazo abierto deja el fondo navegable: " + fondo(b1));
+    b1.sandbox.history.back();
+    ok(b1.q("#swipeView").hidden === true, "el botón atrás no cerró el mazo");
+    ok(fondo(b1) === "false,false", "al cerrar el mazo el fondo se queda inert: " + fondo(b1));
+    ok(b1.hist.length === 0, "cerrar el mazo con atrás dejó la entrada colgando");
+
+    // la lista
+    const b2 = await loaded();
+    ev(b2, 'favorite.add("a1"); saveBuckets(); render()');
+    b2.q("#toggleFavorite").click();
+    ok(b2.hist.length === 1, "abrir la lista no armó la entrada sintética de historial");
+    b2.sandbox.history.back();
+    ok(ev(b2, "view") === "", "el botón atrás no cerró la lista");
+    ok(b2.hist.length === 0, "cerrar la lista con atrás dejó la entrada colgando");
+
+    // dos capas: el atrás cierra la de arriba, y deja armada la de abajo
+    const b3 = await loaded();
+    ev(b3, 'favorite.add("a1"); saveBuckets(); render()');
+    b3.q("#toggleFavorite").click();
+    b3.q("#manageSearches").click();
+    ok(b3.hist.length === 1, "la segunda capa duplicó la entrada de historial: " + b3.hist.length);
+    b3.sandbox.history.back();
+    ok(b3.q("#searchesView").hidden === true, "el atrás no cerró la capa de arriba");
+    ok(ev(b3, "view") === "favorite", "el atrás se llevó las dos capas de una vez");
+    ok(b3.hist.length === 1, "la capa que queda abierta se quedó sin entrada de historial");
+    b3.sandbox.history.back();
+    ok(ev(b3, "view") === "", "el segundo atrás no cerró la capa de abajo");
+
+    // el atrás que cierra la última capa no puede pedir OTRO atrás: eso saca de la página
+    const b4 = await loaded();
+    b4.q("#swipeFab").click();
+    const atras = b4.sandbox.history.back;
+    let vueltas = 0;
+    b4.sandbox.history.back = () => {
+      vueltas++;
+      return atras();
+    };
+    b4.sandbox.history.back();
+    b4.sandbox.history.back = atras;
+    ok(vueltas === 1, "cerrar la última capa con atrás pidió " + vueltas + " atrás: se sale de la página");
+  }
+
   // ── 29. clic fuera del menú del engranaje: lo cierra; dentro, no ──
   {
     const b = await loaded();
