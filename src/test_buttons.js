@@ -1827,6 +1827,87 @@ async function main() {
     ok(sello() === undefined, "deshacer dejó un sello en un anuncio que vuelve a 'sin ver': " + sello());
   }
 
+  // ── 60. la papelera enseña lo que ya no está en la búsqueda ──
+  //     `data` son las filas del scrape de ahora. Un anuncio guardado hace un mes y ya vendido no
+  //     sale ahí: sale de `rowCache`. Sin esa rama, el cubo lo cuenta y la pantalla no lo enseña,
+  //     y el usuario no tiene forma de sacarlo de la papelera porque no puede verlo.
+  {
+    const b = await loaded();
+    ev(b, 'rowCache["z9"] = { id: "z9", titulo: "Ford viejo", precio: "300", vendedor: "Zoe" }');
+    ev(b, 'rejected.add("a1"); rejected.add("z9"); save("wp_rejected", rejected); view = "rejected"; render()');
+    const ids = ev(b, "filteredRows().map((r) => key(r))");
+    ok(ids.includes("z9"),
+      "la papelera esconde el anuncio que solo vive en cache (vendido/caducado): " + ids);
+    ok(ev(b, 'col(filteredRows().find((r) => key(r) === "z9"), "titulo")') === "Ford viejo",
+      "la fila del cache se reconstruyó con las columnas cambiadas");
+  }
+
+  // ── 61. ordenar por precio ordena por NÚMERO ──
+  //     Como texto "1000" va antes que "200". Ordenar por precio es para lo que se ordena una
+  //     lista de chollos, así que el orden equivocado se lleva por delante el uso principal.
+  //     De paso: la flecha invierte, y la celda vacía tiene un sitio fijo (primera al ascender).
+  {
+    const b = await loaded();
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); rejected.add("a3"); save("wp_rejected", rejected); view = "rejected"');
+    const orden = () => ev(b, 'filteredRows().map((r) => col(r, "precio")).join()');
+
+    ev(b, 'listSort = "precio"; listSortDir = 1; render()');
+    ok(orden() === "50,200,1000", "por precio ascendente no salió en orden numérico: " + orden());
+    ev(b, "listSortDir = -1; render()");
+    ok(orden() === "1000,200,50", "la flecha no invierte el orden: " + orden());
+
+    // celda vacía: vale -Infinity, o sea la primera al ascender
+    ev(b, 'data.find((r) => key(r) === "a2")[headers.indexOf("precio")] = ""; listSortDir = 1; render()');
+    ok(orden() === ",50,1000", "el precio vacío no va el primero al ascender: " + orden());
+
+    // decimales: es lo que devuelve la API (`amount` es un float). Comparados como texto con
+    // `numeric: true`, "1.5" y "1.25" se parten por el punto y se compara 5 contra 25, así que
+    // 1,50 € sale por debajo de 1,25 €. Solo la rama numérica de cmpCell acierta aquí.
+    ev(b, 'const iP = headers.indexOf("precio");' +
+      'data.find((r) => key(r) === "a1")[iP] = "1.5";' +
+      'data.find((r) => key(r) === "a2")[iP] = "1.25";' +
+      'data.find((r) => key(r) === "a3")[iP] = "50"; render()');
+    ok(orden() === "1.25,1.5,50", "los precios con decimales no se ordenan como números: " + orden());
+  }
+
+  // ── 62. sin columna, la lista sale en el orden de entrada al cubo ──
+  //     Es el orden por defecto, el que ve quien no ha tocado la barra. `Set` preserva inserción.
+  {
+    const b = await loaded();
+    ev(b, 'rejected.add("a3"); rejected.add("a1"); rejected.add("a2"); save("wp_rejected", rejected); view = "rejected"; listSort = ""');
+    const orden = () => ev(b, "filteredRows().map((r) => key(r)).join()");
+    ev(b, "listSortDir = 1; render()");
+    ok(orden() === "a3,a1,a2", "sin columna no salió en orden de llegada al cubo: " + orden());
+    ev(b, "listSortDir = -1; render()");
+    ok(orden() === "a2,a1,a3", "la flecha no invierte el orden de llegada: " + orden());
+  }
+
+  // ── 63. un wp_listsort con una columna que ya no existe no tumba el render ──
+  //     Esa clave sobrevive a los despliegues. Si el CSV cambia un nombre de columna, `indexOf`
+  //     da -1 y sin la guarda se llama a localeCompare sobre undefined: excepción dentro del
+  //     render, lista en blanco, y el usuario no puede borrar la clave que no le deja abrir nada.
+  {
+    const b = await loaded();
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); save("wp_rejected", rejected); view = "rejected"; listSort = "columna_de_otra_version"');
+    let tiro = null;
+    try { ev(b, "render()"); } catch (e) { tiro = e; }
+    ok(!tiro, "un orden guardado por una columna que ya no existe tumba el render: " + (tiro && (tiro.message || tiro)));
+    ok(ev(b, "filteredRows().length") === 2, "la lista se quedó vacía con la columna desconocida");
+  }
+
+  // ── 64. el mazo desempata con el segundo criterio ──
+  //     `sortKeys` es una lista: "por categoría, y a igualdad por precio". Sin el desempate el
+  //     segundo criterio no se aplica nunca y la barra de orden multinivel es decorativa.
+  {
+    const b = await loaded();
+    const iCat = ev(b, 'headers.indexOf("categoria")'), iPre = ev(b, 'headers.indexOf("precio")');
+    ev(b, `sortKeys = [{ col: ${iCat}, dir: 1 }, { col: ${iPre}, dir: 1 }]; view = "deck"; render()`);
+    const orden = () => ev(b, 'filteredRows().map((r) => col(r, "precio")).join()');
+    ok(orden() === "50,200,1000", "el mazo no desempató por el segundo criterio: " + orden());
+    ev(b, `sortKeys = [{ col: ${iCat}, dir: 1 }, { col: ${iPre}, dir: -1 }]; render()`);
+    ok(orden() === "1000,200,50", "el sentido del segundo criterio se ignora: " + orden());
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 
