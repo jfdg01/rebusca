@@ -1933,7 +1933,7 @@ const getLoc = () => {
   return { lat: v.lat, lon: v.lon };
 };
 // pinta el overlay: n = contador de encontrados (o null al arrancar, sin dato aun)
-function setLoading(on, n, rama, ramas) {
+function setLoading(on, n, hechas, ramas) {
   const box = $("#loading");
   $("#stat").hidden = on; // los stats son de la query vieja: ocúltalos mientras se busca
   $(".panel.picker").hidden = on; // búsqueda activa + exclusiones son de la query vieja: fuera mientras se busca
@@ -1946,9 +1946,9 @@ function setLoading(on, n, rama, ramas) {
   $("#copyDeck").hidden = true;
   $("#copyFav").hidden = true;
   box.hidden = false;
-  // las ramas OR se piden en serie: con doce, el total y el reloj no dicen si va por la primera
-  // o por la última. Con una sola rama el sufijo sobra y no sale.
-  const deRama = ramas > 1 ? ` · rama ${rama}/${ramas}` : "";
+  // Las ramas OR van de cuatro en cuatro, así que no hay "la que va": lo que se cuenta son las
+  // terminadas. Con una sola rama el sufijo sobra y no sale.
+  const deRama = ramas > 1 ? ` · ${hechas}/${ramas} ramas` : "";
   $("#loadingCount").textContent = (n ? `${n} encontrados` : "Buscando…") + deRama;
 }
 let _timer;
@@ -1992,8 +1992,8 @@ async function runScrape(kw, since, titleOnly) {
       titleOnly,
       lat,
       lon,
-      onProgress: (n, rama, ramas) => {
-        if (live) setLoading(true, n, rama, ramas);
+      onProgress: (n, hechas, ramas) => {
+        if (live) setLoading(true, n, hechas, ramas);
       },
       signal: ctrl.signal,
     });

@@ -1389,8 +1389,9 @@ async function main() {
       if (!fs.existsSync(path.join(__dirname, ic.src.replace(/^\//, "")))) fail("icono del manifest que no existe: " + ic.src);
   }
 
-  // 12l. progreso por rama: las ramas OR se piden EN SERIE. Con doce ramas el usuario veía el
-  //      reloj subir sin saber si iba por la primera o por la última.
+  // 12l. progreso por rama: con doce ramas el usuario veía el reloj subir sin saber cuántas le
+  //      quedaban. Van de cuatro en cuatro, así que el número es el de ramas TERMINADAS: los tres
+  //      avisos de entrada seguidos con el contador a 0 son las tres ramas arrancando a la vez.
   {
     const Rebusca = require("./scrape.js");
     const item = (id) => ({ id, title: "x", location: {} });
@@ -1408,8 +1409,8 @@ async function main() {
       global.fetch = antes;
     }
     // entrada de rama + una llamada por fila nueva
-    const esperado = ["0/1/3", "1/1/3", "1/2/3", "1/3/3", "2/3/3"].join(" ");
-    if (pasos.join(" ") !== esperado) fail("el progreso no dice por qué rama va: " + pasos.join(" "));
+    const esperado = ["0/0/3", "0/0/3", "0/0/3", "1/0/3", "2/0/3"].join(" ");
+    if (pasos.join(" ") !== esperado) fail("el progreso no cuenta las ramas: " + pasos.join(" "));
   }
 
   // 12m. un tope de filas corta la búsqueda muy amplia y la marca como parcial

@@ -289,15 +289,36 @@ async function main() {
     ok(api.lastScrape.parcial, "un resultado recortado por el tope no se marca como parcial");
   }
 
-  // ── 13b. lo que una rama no gasta pasa a las siguientes ──
-  //      Un cupo rígido de maxRows/ramas dejaría el resultado corto cuando una rama viene vacía.
+  // ── 13b. el cupo es fijo: lo que una rama vacía no gasta se pierde ──
+  //      Con las ramas en serie el cupo era acumulativo y aquí salían las 9 filas. En paralelo
+  //      las tres piden a la vez, así que no hay "las de después" a quienes pasarles el sobrante:
+  //      la rama vacía se lleva su tercio a la tumba y el CSV se queda en 6. Es el precio del
+  //      paralelismo, y solo se paga en búsquedas que ya revientan el tope.
   {
     const { api } = load(async (url) => {
       const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
       return resp(200, page(kw === "bbb" ? [] : Array.from({ length: 10 }, (_, i) => item(kw + i))));
     });
     const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc", maxRows: 9 });
-    ok(filas(csv).length === 9, "el cupo de la rama vacía se perdió: " + filas(csv).length + " de 9");
+    ok(filas(csv).length === 6, "el cupo por rama no es 9/3: " + filas(csv).length + " de 6");
+  }
+
+  // ── 13d. las ramas OR se piden EN PARALELO, no una detrás de otra ──
+  //      Cuatro ramas en serie son cuatro esperas encadenadas. Aquí la API no contesta hasta que
+  //      las cuatro han pedido: en serie esto sería un interbloqueo, así que el propio test se
+  //      colgaría si alguien volviera al `for`. El tope de 4 a la vez es el de wallapop.py.
+  {
+    let pendientes = 0, sueltaTodas;
+    const todasDentro = new Promise((r) => (sueltaTodas = r));
+    const { api, calls } = load(async () => {
+      const mia = ++pendientes;          // antes del await: si no, las cuatro traen el mismo id
+      if (mia === 4) sueltaTodas();
+      await todasDentro;
+      return resp(200, page([item("x" + mia)]));
+    });
+    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc OR ddd" });
+    ok(calls.length === 4, "no salieron las cuatro ramas: " + calls.length);
+    ok(filas(csv).length === 4, "se perdieron filas al juntar las ramas: " + filas(csv).length);
   }
 
   // ── 13c. el cupo de UNA rama basta para marcar parcial, sin tocar el tope total ──
@@ -369,8 +390,11 @@ async function main() {
   //     `ramasRotas` sigue en cero, no hay error en consola, y `parcial` sigue en `false`. Un
   //     resultado al que le falta una rama, cacheado como definitivo y sin un solo indicio.
   {
-    const { api, calls } = load(async (_u, _init, i) =>
-      i < 30 ? resp(200, page([], "CUR")) : resp(200, page([item("bbb-hit")], null)));
+    // Por keyword y no por número de llamada: con las ramas en paralelo las peticiones de una y
+    // otra se intercalan, así que "las 30 primeras llamadas" ya no es "las 30 páginas de aaa".
+    const seca = (u) => decodeURIComponent(u).includes("aaa") || u.includes("CUR");
+    const { api, calls } = load(async (u) =>
+      seca(u) ? resp(200, page([], "CUR")) : resp(200, page([item("bbb-hit")], null)));
     const csv = await api.scrape({ keywords: "aaa OR bbb" });
     ok(filas(csv).length === 1, "la rama de detrás se perdió con la rama seca: " + filas(csv).length);
     ok(calls.some((u) => decodeURIComponent(u).includes("keywords=bbb")), "la rama 'bbb' no se pidió");
@@ -378,10 +402,13 @@ async function main() {
   }
 
   // ── 15. el 403 corta el scrape ENTERO: insistir con el bloqueo puesto lo alarga ──
+  //     Con las ramas en paralelo ya no vale contar peticiones: las cuatro primeras salen a la vez
+  //     y el 403 llega con tres ya en vuelo. Lo que se exige es que no arranque NINGUNA rama nueva.
   {
     const { api, calls } = load(async (url) => (url.includes("aaa") ? resp(403, {}) : resp(200, page([item("a")]))));
-    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc" });
-    ok(calls.length === 1, "tras el 403 se siguió pidiendo: " + calls.length + " peticiones");
+    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc OR ddd OR eee OR fff" });
+    const pedidas = (kw) => calls.some((u) => decodeURIComponent(u).includes("keywords=" + kw));
+    ok(!pedidas("eee") && !pedidas("fff"), "tras el 403 se siguió pidiendo: " + calls.length + " peticiones");
     ok(api.lastScrape.bloqueado, "el bloqueo no sale por el diagnóstico y el usuario no sabe qué le pasa");
     ok(api.lastScrape.parcial, "un scrape cortado por bloqueo no puede cachearse como definitivo");
     ok(csv.startsWith(api.FIELDS.join(",")), "el 403 no debe lanzar: devuelve lo que llevara");

@@ -51,9 +51,9 @@
   // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Solo
   // cambia una décima de km en la tarjeta.
   // OJO: wallapop.py ya NO va a la par con este fichero, y hace tiempo. Divergencias conocidas:
-  // aquí hay MAX_ROWS, cupo por rama y MAX_PAGINAS_SECAS, y allí no; allí las ramas OR van en
-  // paralelo (ThreadPoolExecutor) y aquí en serie; aquí el Retry-After se capa a 60s y allí no;
-  // allí existe --max-km y aquí no. No toques uno esperando que el otro lo siga.
+  // aquí hay MAX_ROWS, cupo por rama y MAX_PAGINAS_SECAS, y allí no; aquí el Retry-After se capa
+  // a 60s y allí no; allí existe --max-km y aquí no. Las ramas OR sí van en paralelo en los dos,
+  // de cuatro en cuatro. No toques uno esperando que el otro lo siga.
   const round1 = (x) => Math.round(x * 10) / 10;
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const titleMatches = (title, kw) => {
@@ -84,6 +84,10 @@
   // expande una búsqueda booleana OR a ramas (mismo parser que wallapop.py branches)
   const TOK = /\(|\)|"[^"]*"|[^\s()]+/g;
   const MAX_RAMAS = 32; // más ramas = más peticiones de las que Wallapop deja hacer seguidas
+  // Ramas OR pidiendo a la vez. Mismo número que el ThreadPoolExecutor de wallapop.py: cuatro
+  // conexiones es lo que aguanta DataDome sin devolver un 403, y con las 32 abiertas de golpe
+  // el bloqueo es de la IP entera, no de una rama.
+  const POOL_RAMAS = 4;
   // Único sitio donde una entrada mal escrita del usuario tumba la búsqueda antes de pedir nada
   // (los demás throw de este fichero son fallos de red o de la API). El error YA tiene receptor (el
   // onclick de Buscar y loadQuery hacen snack("No se pudo buscar: " + e.message)). Lanzar
@@ -244,8 +248,9 @@
   }
 
   // scrape({keywords, since, titleOnly, lat, lon, maxRows, onProgress, signal}) -> texto CSV
-  // onProgress(filas, rama, ramas): las ramas OR se piden EN SERIE, así que sin el número de rama
-  // el usuario solo ve el reloj subir y no sabe si va por la primera de doce o por la última.
+  // onProgress(filas, hechas, ramas): `hechas` son las ramas YA TERMINADAS, no la que va — con
+  // cuatro en vuelo a la vez no hay "la que va". Sin ese número el usuario solo ve el reloj subir
+  // y no sabe si le quedan once ramas o ninguna.
   async function scrape(opts) {
     const { keywords, since = null, titleOnly = false,
             lat = JAEN[0], lon = JAEN[1], maxRows = MAX_ROWS, onProgress, signal } = opts;
@@ -265,7 +270,11 @@
       // ordena por cercanía al terminar: aquí no hay filtro por distancia, así que el orden es lo
       // único que acerca lo bueno arriba. (El CLI wallapop.py sí tiene --max-km, y por eso allí
       // solo ordena cuando no se usa.)
-      rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
+      // El desempate por id no es cosmético: con las ramas en paralelo el orden en que llegan las
+      // páginas depende de la red, así que sin él dos scrapes de la misma búsqueda daban CSVs
+      // distintos (mismo contenido, otro orden) y el diff no servía para nada.
+      rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0) ||
+                          (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       // `bloqueado` no está en la lista a propósito: solo se pone justo detrás de `ramasRotas++`,
       // así que sumarlo aquí es un término que ningún mutante mata. Con el término quitado los 48
       // checks siguen verdes; eso es lo que se midió, y por eso no vuelve.
@@ -284,31 +293,39 @@
     const ramas = branches(keywords);
     diag.ramas = ramas.length;
     let ultimoFallo = null; // el error de la última rama caída; solo sube si caen todas
-    // Cupo acumulado por rama. El tope se medía solo contra el total, así que la primera rama
-    // se lo comía entero y las siguientes no llegaban a pedir ni una página: "iphone OR xiaomi"
-    // devolvía 1500 iPhones y cero Xiaomis. El cupo se mide sobre `rows`, no por rama, así que
-    // lo que una rama no gasta queda para las de después.
-    const cupo = (i) => Math.ceil((maxRows * (i + 1)) / ramas.length);
-    for (const [iRama, kw] of ramas.entries()) {
-      const aviso = () => onProgress && onProgress(rows.length, iRama + 1, ramas.length);
-      aviso(); // al entrar en la rama: una rama sin resultados también mueve el contador
+    // Lo que antes hacía un `return finish()` desde dentro del bucle. Con las ramas en paralelo
+    // no hay un punto único desde el que cortar: la rama que ve el tope, el 403 o el abort iza
+    // esta bandera, y las demás la miran antes de pedir la página siguiente y antes de empezar
+    // una rama nueva. Lo que ya esté en vuelo se termina de aprovechar.
+    let parar = false;
+    let hechas = 0;         // ramas terminadas: es lo que puede contar un contador en paralelo
+    const aviso = () => onProgress && onProgress(rows.length, hechas, ramas.length);
+    // Cupo por rama. El tope se medía solo contra el total, así que la primera rama se lo comía
+    // entero y las siguientes no llegaban a pedir ni una página: "iphone OR xiaomi" devolvía
+    // 1500 iPhones y cero Xiaomis. En serie el cupo era acumulativo (lo que una rama no gastaba
+    // quedaba para las de después); en paralelo no hay "las de después", así que es fijo y una
+    // rama vacía deja su parte sin usar. Solo se nota en búsquedas que revientan el tope.
+    const cupo = Math.ceil(maxRows / ramas.length);
+
+    async function rama(kw) {
       let params = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
       if (orderBy) params.order_by = orderBy;
       if (tf) params.time_filter = tf;
-      let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo, se pasa a la siguiente
+      let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo, la deja para otra
       let secas = 0;                    // páginas seguidas de ESTA rama que no trajeron ni una fila
-      while (!old && !lleno) {
-        if (signal && signal.aborted) { diag.abortado = true; return finish(); }
+      let mias = 0;                     // filas que ha puesto ESTA rama (el cupo va contra esto)
+      while (!old && !lleno && !parar) {
+        if (signal && signal.aborted) { diag.abortado = true; parar = true; return; }
         // Corta la RAMA, no el scrape: una rama sinónima que solo repite lo que ya trajo otra da
-        // cero filas nuevas de principio a fin, y las ramas que quedan detrás sí tienen algo que
-        // decir. Los tres escenarios sin fin mueren igual: en todos, ninguna página avanza nunca.
-        if (secas >= MAX_PAGINAS_SECAS) { diag.ramasSecas++; break; }
+        // cero filas nuevas de principio a fin, y las otras ramas sí tienen algo que decir.
+        // Los tres escenarios sin fin mueren igual: en todos, ninguna página avanza nunca.
+        if (secas >= MAX_PAGINAS_SECAS) { diag.ramasSecas++; return; }
         diag.paginas++;
-        const antes = rows.length;
+        const antes = mias;
         let d;
         try { d = await getJSON(API + "?" + new URLSearchParams(params), signal); }
         catch (e) {
-          if (e.name === "AbortError") { diag.abortado = true; return finish(); }
+          if (e.name === "AbortError") { diag.abortado = true; parar = true; return; }
           // El `break` era mudo: ni consola, ni contador, ni marca. Con todas las ramas caídas,
           // scrape() resolvía con un CSV de solo cabecera y eso se leía como "no hay nada".
           console.error(`Rebusca: la rama "${kw}" se corta`, e);
@@ -316,15 +333,18 @@
           // El bloqueo de DataDome no es de una rama: es de esta IP. Seguir pidiendo con el "no"
           // ya puesto solo alarga el castigo, así que corta el scrape entero. Lo ya recogido se
           // conserva —`finish()` devuelve las filas—, y `bloqueado` le dice al llamador qué pasó.
-          if (String(e.message).startsWith("403")) { diag.bloqueado = true; return finish(); }
-          // `break`, igual que el 403: muere ESTA rama, las siguientes se piden igual. Lo ya
-          // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). El error se
-          // guarda y se decide al FINAL: `rows.length` valía 0 siempre en la primera rama, así
-          // que "iphone OR xiaomi OR poco" con la red floja al empezar tiraba la búsqueda entera
-          // sin llegar a pedir las otras dos. Solo sube el error si cayeron TODAS.
+          if (String(e.message).startsWith("403")) { diag.bloqueado = true; parar = true; return; }
+          // Igual que el 403: muere ESTA rama, las demás siguen. Lo ya recogido no se tira
+          // (wallapop.py deja en disco lo que llevara escrito). El error se guarda y se decide
+          // al FINAL: `rows.length` valía 0 siempre en la primera rama, así que "iphone OR
+          // xiaomi OR poco" con la red floja al empezar tiraba la búsqueda entera sin llegar a
+          // pedir las otras dos. Solo sube el error si cayeron TODAS.
           ultimoFallo = e;
-          break;
+          return;
         }
+        // Aquí NO se mira `parar`: una página ya descargada se aprovecha aunque otra rama haya
+        // tocado techo mientras tanto. Descartarla tiraba lo recogido por la rama buena cuando la
+        // mala se comía un 403, que es justo lo que la versión en serie sí conservaba.
         // El sobre es tan invariante como los campos hoja: `wallapop.py` lo indexa directo y peta
         // si cambia. Aquí el `|| []` lo convertía en cero anuncios con `diag.parcial` en false,
         // o sea una caída total de la API presentada como "no hay resultados" —y cacheada para
@@ -333,7 +353,7 @@
         if (!items || !Array.isArray(items.items)) {
           avisaForma("data.section.payload.items", d);
           diag.ramasRotas++;
-          break;
+          return;
         }
         for (const it of items.items) {
           const r = row(it, origin);
@@ -348,20 +368,38 @@
           }
           seen.add(r.id);
           rows.push(r);
+          mias++;
           aviso();
           // Tope duro: sin `since` no hay corte por fecha ni por páginas, y doce ramas OR son
           // minutos de peticiones. Sale por el mismo canal que una rama caída (diag.parcial),
-          // así que el llamador ya sabe no cachear esto como definitivo.
-          if (rows.length >= maxRows) { diag.tope = maxRows; return finish(); }
-          if (rows.length >= cupo(iRama)) { diag.ramasTope++; lleno = true; break; }
+          // así que el llamador ya sabe no cachear esto como definitivo. Con las ramas en
+          // paralelo el CSV puede pasarse por una fila por cada rama que tuviera página en vuelo
+          // (tres como mucho): tirar esas filas cuesta más de lo que vale cuadrar el número.
+          if (rows.length >= maxRows) { diag.tope = maxRows; parar = true; return; }
+          if (mias >= cupo) { diag.ramasTope++; lleno = true; break; }
         }
-        secas = rows.length > antes ? 0 : secas + 1;   // una sola fila nueva perdona la racha entera
+        secas = mias > antes ? 0 : secas + 1;   // una sola fila nueva perdona la racha entera
         const np = ((d || {}).meta || {}).next_page;
-        if (!np || old || lleno) break;
+        if (!np || old || lleno) return;
         params = { next_page: np };                            // el cursor ya lleva keywords/lat/lon
         await sleep(500 + Math.random() * 500, signal);                // jitter anti-patrón
       }
     }
+
+    // Cuatro ramas a la vez, el mismo tope que wallapop.py: doce ramas en serie son doce esperas
+    // encadenadas (medio segundo de jitter por página, más los backoff), y abrir las 32 de golpe
+    // es pedirle a DataDome un 403. Cada obrero coge la siguiente rama libre; el reparto sale
+    // solo, sin trocear la lista por adelantado.
+    let siguiente = 0;
+    const obrero = async () => {
+      while (siguiente < ramas.length && !parar) {
+        const kw = ramas[siguiente++];
+        aviso();  // al entrar en la rama: una rama sin resultados también mueve el contador
+        await rama(kw);
+        hechas++;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(POOL_RAMAS, ramas.length) }, obrero));
     // Todas las ramas caídas y ni una fila: eso no es "no hay anuncios", es que no se pudo
     // buscar, y el llamador tiene que verlo como error. Con una sola rama en pie se devuelve
     // lo que haya, marcado parcial.
