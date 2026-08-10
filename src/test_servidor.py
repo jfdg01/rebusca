@@ -73,6 +73,36 @@ def main():
             for k, v in servidor.SEC_HEADERS.items():
                 assert hh.get(k) == v, (path, k, hh.get(k))
 
+        # ── 2b. qué DICEN las cabeceras, no solo que estén ──
+        #        El bloque 2 saca el valor esperado de servidor.SEC_HEADERS, o sea del mismo
+        #        diccionario que prueba: es cierto por construcción. Con él solo, se podía
+        #        cambiar script-src a `*`, quitar la API de connect-src o borrar la CSP entera
+        #        con los siete checks en verde. Estos valores van a mano a propósito: es la
+        #        única forma de que la prueba pueda discrepar de la producción.
+        _, hh, _ = req(port, "/")
+        csp = {}
+        for d in hh["Content-Security-Policy"].split(";"):
+            if d.split():
+                csp[d.split()[0]] = set(d.split()[1:])
+        assert csp["default-src"] == {"'self'"}, csp
+        # la mitigación del DOM-XSS: app.js mete títulos scrapeados por innerHTML, y esto es
+        # lo que impide que un onerror= inyectado llegue a ejecutarse
+        assert csp["script-src"] == {"'self'"}, csp
+        # sin esta línea el navegador corta cada scrape y no hay app
+        assert "https://api.wallapop.com" in csp["connect-src"], csp
+        # sin esta, las fotos de los CDN de Wallapop salen en blanco
+        assert "https:" in csp["img-src"], csp
+        assert csp["frame-ancestors"] == {"'none'"}, csp
+        assert csp["object-src"] == {"'none'"}, csp
+        assert csp["base-uri"] == {"'self'"}, csp
+        # style-src SÍ lleva 'unsafe-inline', y no es un descuido: app.js escribe el atributo
+        # style de los elementos, y sin esto el navegador los tira. Clavado para que nadie lo
+        # "arregle" pensando que sobra.
+        assert csp["style-src"] == {"'self'", "'unsafe-inline'"}, csp
+        assert hh["X-Content-Type-Options"] == "nosniff", hh.get("X-Content-Type-Options")
+        edad = int(hh["Strict-Transport-Security"].split("max-age=")[1].split(";")[0])
+        assert edad >= 31536000, edad
+
         # ── 3. mime + charset de cada estático que sirve la app ──
         for path, ct in (("/app.js", "javascript"), ("/scrape.js", "javascript"),
                          ("/app.css", "text/css"), ("/llms.txt", "text/plain"),

@@ -140,7 +140,9 @@ sin que nadie lo viera, porque el fichero no estaba en la lista de comandos de `
 
 ## Pendiente
 
-- [ ] **Las cabeceras de seguridad se comparan consigo mismas.** `src/test_servidor.py`
+- [x] **Cerrado en la iteración 33** (`test_servidor.py`, bloque 2b: las directivas que
+  aguantan peso van clavadas a mano, y los doce mutantes de las cabeceras mueren).
+  **Las cabeceras de seguridad se comparan consigo mismas.** `src/test_servidor.py`
   comprueba que la respuesta trae cada cabecera de `servidor.SEC_HEADERS`, y el valor
   esperado lo saca de ese mismo diccionario. Cambiar `script-src 'self'` por `script-src *`
   pasa los siete checks sin despeinarse, y con él se cae la mitigación del DOM-XSS que
