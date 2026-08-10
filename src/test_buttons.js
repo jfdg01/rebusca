@@ -1106,13 +1106,36 @@ async function main() {
   {
     const b = await loaded();
     ev(b, 'favorite.add("a1"); saveBuckets(); rejected.add("a3"); saveBuckets()');
+    // Sembrado ANTES de exportar: sin esto el check de abajo afirma que no está lo que nunca
+    // estuvo (`wp_rows` y `wp_csv` son del modelo viejo y el arnés no las escribe), y borrar
+    // `BACKUP_SKIP` entero sale verde. Los nombres se leen del módulo, no se escriben a mano:
+    // una lista copiada aquí envejece en silencio en cuanto cambie la de producción.
+    const saltadas = ev(b, "BACKUP_SKIP");
+    ok(saltadas.length >= 3, "BACKUP_SKIP se quedó sin nombres que sembrar: " + saltadas.join());
+    for (const k of saltadas) b.store[k] = "cache-gordo";
+    b.store.otra_app_token = "secreto"; // el dominio es de la app, pero la copia sale del navegador
+    // el `<a>` de la descarga no lo guarda nadie: se envuelve `createElement` para pillarlo
+    const crear = b.sandbox.document.createElement;
+    let bajado = null;
+    b.sandbox.document.createElement = (t) => {
+      const e = crear(t);
+      if (t === "a") bajado = e;
+      return e;
+    };
     b.q("#exportState").click();
+    b.sandbox.document.createElement = crear;
     const copia = b.spy.blobs[0].partes.join("");
     ok(/"app":"rebusca"/.test(copia), "la copia no se identifica: " + copia.slice(0, 60));
     const datos = JSON.parse(copia).datos;
     ok(datos.wp_favorite && datos.wp_rejected && datos.wp_searches,
       "la copia no lleva el triaje ni las búsquedas: " + Object.keys(datos).join());
-    ok(!("wp_rows" in datos) && !("wp_csv" in datos), "la copia se lleva los caches de resultados");
+    for (const k of saltadas)
+      ok(!(k in datos), "la copia se lleva el cache " + k + ": " + Object.keys(datos).join());
+    ok(!("otra_app_token" in datos),
+      "la copia se lleva claves que no son de Rebusca: " + Object.keys(datos).join());
+    // dos copias del mismo navegador con el mismo nombre: la segunda pisa a la primera al bajarla
+    ok(/^rebusca-\d{4}-\d{2}-\d{2}\.json$/.test(bajado && bajado.download),
+      "el fichero que se baja no lleva la fecha: " + (bajado && bajado.download));
 
     // el botón visible solo abre el selector de fichero, que va oculto
     let abierto = 0;
@@ -1312,6 +1335,44 @@ async function main() {
     await flush();
     ok(!("wp_favorite" in b7.store),
       "la restauración dejó una clave que la copia no traía: " + Object.keys(b7.store).join());
+
+    // El ORDEN, que la vuelta atrás tapa: con el borrado primero la cuota revienta igual, el
+    // `catch` repone y los `ok` de arriba siguen verdes. Y sin embargo manda, porque hay un
+    // fallo que no pasa por ningún `catch`: el navegador mata la pestaña a media escritura
+    // (Safari en iOS lo hace). Con el borrado ya hecho, el usuario abre y no tiene nada. Así que
+    // se mira el almacén EN EL INSTANTE del fallo, no después.
+    const b8 = await boot({}, { csv: CSV, timers: true });
+    b8.q("#kw").value = "ford";
+    await b8.q("#scrape").click();
+    await flush();
+    ev(b8, 'favorite.add("a1"); saveBuckets(); pushEstado()');
+    const crudo = b8.sandbox.localStorage.setItem;
+    let enElFallo = null;
+    b8.sandbox.localStorage.setItem = (k, v) => {
+      // una sola vez: la vuelta atrás vuelve a escribir esta misma clave, y un gancho que
+      // salta dos veces machaca la foto con el almacén de DESPUÉS del borrado de la vuelta
+      // atrás. Entonces este bloque falla siempre, y por un motivo que no es el suyo.
+      if (k !== "wp_zzz_futura" || enElFallo !== null) return crudo(k, v);
+      enElFallo = Object.keys(b8.store).sort().join();
+      const e = new Error("Setting the value of '" + k + "' exceeded the quota.");
+      e.name = "QuotaExceededError";
+      throw e;
+    };
+    // `wp_zzz_futura`: una clave de una versión posterior. La copia se la lleva y la repone igual,
+    // porque `backupKeys` no tiene lista de nombres. Aquí además nunca llega a escribirse.
+    const copia8 = JSON.stringify({
+      app: "rebusca", v: 1,
+      datos: { wp_favorite: '{"x.csv":["z9"]}', wp_zzz_futura: "de mañana" },
+    });
+    b8.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia8 }] } });
+    await flush();
+    b8.sandbox.localStorage.setItem = crudo;
+    ok(/wp_estado/.test(enElFallo || ""),
+      "en mitad de la restauración el triaje viejo ya estaba borrado: " + enElFallo);
+    // y la vuelta atrás no puede inventarse la clave que no llegó a existir: `setItem(k, null)`
+    // escribe el texto "null", y `hydrateEstado` lo lee como si fuera un valor guardado
+    ok(!("wp_zzz_futura" in b8.store),
+      "la vuelta atrás dejó inventada una clave: " + JSON.stringify(b8.store.wp_zzz_futura));
 
     // una copia manipulada no escribe claves ajenas a la app
     const b2 = await boot({}, { csv: CSV });
