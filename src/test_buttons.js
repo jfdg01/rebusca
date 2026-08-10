@@ -189,6 +189,52 @@ async function main() {
       "#copyDeck no dejó anotado el lote enviado (wp_aisent), sin él el ?keep= no sabe qué rechazar");
   }
 
+  // ── 5b. el lote anotado es el que se copió, y lleva el cajón de cuando se pulsó ──
+  // `?keep=` conserva los ids del enlace y RECHAZA el resto del lote anotado. Anotar de más
+  // manda a la papelera anuncios que la IA no llegó a ver.
+  {
+    const muchos =
+      [FIELDS.join(",")]
+        .concat(
+          Array.from({ length: 70 }, (_, i) =>
+            row({ id: "m" + i, titulo: "Ford " + i, precio: "100", categoria: "Coches",
+              ciudad: "Jaen", km: "1", dias: "1", reservado: "False", envio: "False",
+              url: "https://w/m" + i, vendedor: "Ana", descripcion: "uno más" }),
+          ),
+        )
+        .join("\r\n") + "\r\n";
+    const b = await loaded({ csv: muchos });
+    b.q("#copyDeck").click();
+    ev(b, 'selectQueryUI("otra.csv")'); // el usuario cambia de búsqueda mientras se copia
+    await flush();
+    const lote = JSON.parse(b.store.wp_aisent || "{}");
+    ok(lote.ids.length === 60,
+      "el lote anotado no es el copiado (tope UNSEEN_CAP): " + lote.ids.length + " ids");
+    ok(lote.ids[59] === "m59" && !lote.ids.includes("m60"),
+      "el lote anotado no son los primeros 60 del mazo: acaba en " + lote.ids[59]);
+    ok(lote.csv === "ford.csv",
+      "el lote quedó etiquetado con la búsqueda a la que se cambió, no con la de origen: " + lote.csv);
+    // el veredicto puede llegar en otra sesión, sin CSV cargado: la ficha tiene que estar cacheada
+    ok(ev(b, 'rowCache["m0"] && rowCache["m0"].titulo') === "Ford 0",
+      "el lote enviado no dejó su ficha en rowCache: sin ella el ?keep= no encuentra las filas");
+  }
+
+  // ── 5c. si la copia falla, el aviso lo dice, no se anota lote y el botón vuelve ──
+  {
+    const b = await loaded();
+    b.sandbox.navigator.clipboard.writeText = () => Promise.reject(new Error("sin permiso"));
+    const btn = b.q("#copyDeck");
+    const antes = String(btn.textContent);
+    btn.click();
+    await flush();
+    await flush();
+    ok(String(b.q("#snackmsg").textContent).includes("No se pudo copiar"),
+      "una copia fallida no avisa: " + b.q("#snackmsg").textContent);
+    ok(!b.store.wp_aisent, "una copia fallida anotó lote igual: " + b.store.wp_aisent);
+    ok(!btn.disabled && String(btn.textContent) === antes,
+      "el botón se queda muerto en 'Preparando…' tras un fallo de copia: " + btn.textContent);
+  }
+
   // ── 6. copiar favoritos (#copyFav / #exportFav): sin favoritos avisa y no copia ──
   {
     const b = await loaded();
