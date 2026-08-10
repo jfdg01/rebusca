@@ -1457,7 +1457,7 @@ async function main() {
   //      Se mira celda a celda (el bloque .lims partido por <label>): si el bloque se renombra,
   //      no hay celdas y los cuatro fallan, en vez de aprobar por no encontrar nada.
   {
-    const celdas = ((HTML.match(/<div class="lims"[\s\S]*?\n        <\/div>/) || [""])[0]).split("<label");
+    const celdas = ((HTML.match(/<details class="lims"[\s\S]*?\n        <\/details>/) || [""])[0]).split("<label");
     for (const c of ["precioMin", "precio", "dias", "km"]) {
       const celda = celdas.find((s) => s.includes(`id="lim_${c}"`));
       if (!celda || !/<span class="lim-t">[^<]+<\/span/.test(celda))

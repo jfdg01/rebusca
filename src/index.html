@@ -189,13 +189,16 @@
                 data-icon="list"
             ></button>
         </div>
-        <!-- tres bloques, una forma de vetar cada uno. Los topes van siempre a la vista: son
-             cuatro cajas y se leen de un vistazo. Los otros dos van plegados porque crecen con
-             lo que hay dentro (chips), y desplegados se comían media pantalla del móvil; cada
-             uno se abre solo si ya veta algo.
+        <!-- tres bloques, una forma de vetar cada uno, los tres plegados: desplegados se comían
+             media pantalla del móvil (los topes solos son 165 px de rejilla 2×2). Ninguno se abre
+             por su cuenta — el (n) del rótulo ya dice si hay algo filtrando.
              El rótulo de cada tope va fuera del campo, no en el placeholder: en cuanto se
              escribe una cifra el placeholder desaparece y «30 10 20» no dice cuál es cuál. -->
-        <div class="lims" id="lims" hidden>
+        <details class="lims" id="lims" hidden>
+            <summary>
+                <span>Filtros</span><span id="limCount"></span>
+            </summary>
+            <div class="lims-grid">
             <label
                 ><span class="lim-t">€ mín</span
                 ><span class="clrwrap"
@@ -224,7 +227,8 @@
                         type="button" class="clr" id="clr_lim_km" aria-label="vaciar km máx">×</button></span
                 ></label
             >
-        </div>
+            </div>
+        </details>
         <details class="excl" id="excl" hidden>
             <summary>
                 <span>Excluir palabras</span><span id="exclCount"></span>

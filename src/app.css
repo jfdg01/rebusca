@@ -333,7 +333,10 @@
   /* topes numéricos del cajón: rejilla 2×2 (precio arriba, antigüedad y distancia abajo), cada
      caja con su rótulo encima. El rótulo va apilado y no al lado: en 320 px un «días máx» en la
      misma línea deja la caja en 100 px y obliga a abreviar a «d», que no se entiende. */
-  .lims { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .45rem; margin-top: 1rem; }
+  .lims { margin-top: 1rem; }
+  .lims > summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-soft); }
+  .lims-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .45rem; margin-top: .55rem; }
   .lims label { display: flex; flex-direction: column; align-items: stretch; gap: .25rem;
     min-width: 0; }
   .lims .lim-t { font: 600 9px var(--mono); letter-spacing: .06em; text-transform: uppercase;

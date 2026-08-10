@@ -1121,7 +1121,7 @@ function renderCats() {
     chips.append(b);
   }
   $("#catLabel").textContent = inc ? "Incluir categorías" : "Excluir categorías";
-  $("#catCount").textContent = excl.length ? ` (${excl.length})` : ""; // nº de categorías marcadas, nada si 0
+  cuentaFiltros($("#catCount"), excl.length); // nº de categorías marcadas, nada si 0
   const mode = $("#catMode"); // alterna excluir/incluir para esta búsqueda
   mode.textContent = inc ? "modo excluir" : "modo incluir";
   mode.onclick = (e) => {
@@ -1172,14 +1172,12 @@ function fillExclChips(chips, onChange) {
     chips.append(b);
   }
 }
-// El resumen dice cuántas palabras hay vetadas, y el desplegable se abre solo si hay alguna:
-// un filtro activo que no se ve es la forma más rápida de creer que la búsqueda no trae nada.
-// Solo al CAMBIAR el número: `render()` corre por cualquier cosa (un favorito, un swipe, un
-// `storage` de otra pestaña) y un `open = true` incondicional no dejaba cerrar la cabecera.
-function cuentaFiltros(box, span, n) {
+// El (n) del rótulo dice cuántos filtros hay puestos ahí dentro: es lo único que avisa de un
+// veto activo con el desplegable cerrado. Ninguno se abre solo — abrirlos por su cuenta dejaba
+// la cabecera desplegada para siempre (`render()` corre por cualquier cosa) y tapaba las cartas.
+// `function` y no `const`: renderCats la llama y vive más arriba en el fichero.
+function cuentaFiltros(span, n) {
   span.textContent = n ? " (" + n + ")" : "";
-  if (n && box.dataset.n !== String(n)) box.open = true;
-  box.dataset.n = String(n); // `dataset` guarda strings; explícito para que la comparación no dependa de eso
 }
 // palabras vetadas + topes numéricos (las categorías van aparte, en renderCats).
 // Solo con CSV cargado y fuera de las vistas de lista.
@@ -1190,7 +1188,8 @@ function renderExcl() {
   box.hidden = lims.hidden = !(loadedCsv && view === "" && curCsv);
   fillExclChips($("#exclChips"), render);
   for (const c of LIM_CAMPOS) $("#lim_" + c).value = limits()[c] ?? "";
-  cuentaFiltros(box, $("#exclCount"), exclTerms().length);
+  cuentaFiltros($("#exclCount"), exclTerms().length);
+  cuentaFiltros($("#limCount"), Object.keys(limits()).length);
 }
 // topes del cajón: vacío o 0 = sin tope
 for (const c of LIM_CAMPOS)

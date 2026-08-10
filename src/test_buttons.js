@@ -1675,13 +1675,14 @@ async function main() {
     const b = await loaded();
     ok(!b.q("#excl").open, "el bloque de palabras tapa los resultados nada más buscar");
     ok(!b.q("#cats").open, "el bloque de categorías tapa los resultados nada más buscar");
+    ok(!b.q("#lims").open, "el bloque de topes tapa los resultados nada más buscar");
     ok(!b.q("#exclCount").textContent, "el resumen cuenta filtros que no hay: " + b.q("#exclCount").textContent);
-    // los topes no se pliegan: son cuatro cajas de alto fijo y su valor SE VE, no hace falta abrir nada
-    ok(!b.q("#lims").hidden, "la fila de topes no se ve con una búsqueda cargada");
-    // una palabra vetada sí abre lo suyo: un filtro invisible parece una búsqueda sin resultados
+    ok(!b.q("#lims").hidden, "el bloque de topes no se ve con una búsqueda cargada");
+    // plegado, el (n) del rótulo es lo único que avisa de un filtro puesto
     ev(b, 'exclMap[curDrawer()] = ["averiado", "roto"]; render()');
-    ok(b.q("#excl").open === true, "una palabra vetada se queda escondida");
     ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántas palabras hay: " + b.q("#exclCount").textContent);
+    ev(b, 'limMap[curDrawer()] = { precio: 1000, km: 50 }; render()');
+    ok(/2/.test(b.q("#limCount").textContent), "el resumen no dice cuántos topes hay: " + b.q("#limCount").textContent);
   }
 
   // ── 41. la tarjeta avisa de la republicación ──
@@ -1905,24 +1906,20 @@ async function main() {
     ok(b2.spy.reloads === 1, "restaurar no recargó la página: " + b2.spy.reloads);
   }
 
-  // ── 44. los desplegables de filtros se dejan cerrar (defecto 4) ──
-  //     `renderExcl()` corre en cada `render()`, y con un filtro puesto volvía a abrir el
-  //     desplegable. Marcar un favorito, hacer swipe o un `storage` de otra pestaña lo
-  //     reabrían: la cabecera se quedaba desplegada para siempre.
+  // ── 44. los desplegables de filtros no se abren nunca solos (defecto 4) ──
+  //     `renderExcl()` corre en cada `render()` — un favorito, un swipe, un `storage` de otra
+  //     pestaña — y llegó a reabrir el desplegable con un filtro puesto: la cabecera se quedaba
+  //     desplegada para siempre. Abre y cierra el usuario, y nadie más.
   {
     const b = await loaded();
-    ev(b, 'exclMap[curDrawer()] = ["averiado"]; render()');
-    ok(b.q("#excl").open === true, "un filtro nuevo no abre el desplegable");
-    b.q("#excl").open = false; // el usuario lo cierra
-    ev(b, 'favorite.add("a2"); saveBuckets(); render()');
-    ok(b.q("#excl").open === false, "el desplegable se reabrió solo con un render ajeno");
-    // …pero un filtro más sí vuelve a abrirlo: un veto invisible parece una búsqueda vacía
-    ev(b, 'exclMap[curDrawer()].push("roto"); render()');
-    ok(b.q("#excl").open === true, "un filtro nuevo no avisa si el desplegable está cerrado");
-    // y solo lo suyo: un tope se ve siempre, así que no tiene por qué reabrir las palabras
-    b.q("#excl").open = false;
-    ev(b, 'limMap[curDrawer()] = { precio: 1000 }; render()');
-    ok(b.q("#excl").open === false, "un tope reabre el desplegable de palabras, que no le toca");
+    for (const id of ["#excl", "#lims", "#cats"]) {
+      ev(b, 'exclMap[curDrawer()] = ["averiado"]; limMap[curDrawer()] = { precio: 1000 }; ' +
+        'catExclMap[curDrawer()] = ["Motor"]; render()');
+      ok(b.q(id).open !== true, "un filtro nuevo abre solo " + id);
+      b.q(id).open = true; // el usuario lo abre
+      ev(b, 'favorite.add("a2"); saveBuckets(); render()');
+      ok(b.q(id).open === true, "un render ajeno cerró " + id + ", que había abierto el usuario");
+    }
   }
 
   // ── 45. una rama que llena su cupo se dice tal cual ──
