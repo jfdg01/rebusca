@@ -425,6 +425,22 @@ async function main() {
     b.q("#lim_precio").dispatch("change", { target: { value: "" } }); // vacío = sin tope
     ok(!b.store.wp_lim.includes("precio"), "#lim_precio no quitó el tope al vaciarlo");
     ok(ev(b, "deckRows().length") === 3, "#lim_precio dejó el mazo filtrado tras quitar el tope");
+    ok(b.store.wp_lim === "{}",
+      "quitar el último tope deja el cajón vacío en el almacén: " + b.store.wp_lim);
+  }
+
+  // ── 18b. el input del tope muestra el del cajón que se está viendo ──
+  // Los topes se guardan por cajón; el input es uno solo para todas las búsquedas. Si no se
+  // repinta, el número que se lee y el filtro que se aplica dejan de ser el mismo.
+  {
+    const b = await loaded();
+    b.q("#lim_precio").dispatch("change", { target: { value: "300" } });
+    ev(b, 'selectQueryUI("otra.csv"); render()'); // cambiar de búsqueda sin re-scrapear
+    ok(b.q("#lim_precio").value === "",
+      "el tope del cajón anterior sigue en pantalla en la búsqueda nueva: " + b.q("#lim_precio").value);
+    ev(b, 'selectQueryUI("ford.csv"); render()');
+    ok(String(b.q("#lim_precio").value) === "300",
+      "al volver al cajón con tope el input no lo muestra: " + b.q("#lim_precio").value);
   }
 
   // ── 19. ajustes (⚙): excluir lejos sin envío + umbral de km ──
@@ -460,6 +476,27 @@ async function main() {
       "al quitar el tope el contador no vuelve a un motivo: " + b.q("#stat").innerHTML);
     b.q("#rejectedExcl").click();
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
+  }
+
+  // ── 20b. una fila ya rechazada no se cuenta también como vetada ──
+  // "sin ver" se calcula restando: una fila contada dos veces lo baja de lo real, y con
+  // bastantes filas rechazadas y vetadas a la vez sale un "sin ver" negativo.
+  {
+    const b = await loaded();
+    b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "roto" } }); // veta a3
+    const stat = () => String(b.q("#stat").innerHTML);
+    ok(/<b>1<\/b> excluidos/.test(stat()), "vetar 'roto' no contó el anuncio: " + stat());
+    ok(/<b>2<\/b> sin ver/.test(stat()), "el vetado sigue contando como sin ver: " + stat());
+    ev(b, 'reject("a3", "Ford Ka roto")'); // ahora está en un cubo Y vetado
+    ok(!/excluidos/.test(stat()), "el rechazado se sigue contando como vetado: " + stat());
+    ok(/<b>2<\/b> sin ver/.test(stat()), "el rechazado se descontó dos veces del sin ver: " + stat());
+    ok(/<b>1<\/b> rechazados/.test(stat()), "el rechazado no aparece en su propia línea: " + stat());
+    // y el desglose por motivo cuenta lo mismo: a1 pasa del tope pero ya está rechazado, así que
+    // el único veto vivo es el de la palabra. Si el desglose cuenta a1, la línea miente el motivo.
+    ev(b, 'reject("a1", "Ford Focus"); restore("a3")');
+    b.q("#lim_precio").dispatch("change", { target: { value: "300" } });
+    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(stat()),
+      "el desglose cuenta como tope un anuncio ya rechazado: " + stat());
   }
 
   // ── 21. gestor de búsquedas: los 5 botones de cada tarjeta ──
