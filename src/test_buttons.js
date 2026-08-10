@@ -567,6 +567,39 @@ async function main() {
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
   }
 
+  // ── 20c. rechazar en bloque: respeta los favoritos, sella la fecha y dice qué hizo ──
+  // Los dos atajos de la barra comparten molde (`bulkReject`). El filtro se probaba; el resto del
+  // molde no. Lo caro es el favorito: un anuncio guardado que además esté lejos no puede irse a la
+  // papelera de rebote, porque el usuario ya lo había clasificado a mano.
+  {
+    const b = await loaded();
+    ev(b, 'favorite.add("a2"); saveBuckets(); render()'); // a2 es el lejos-sin-envío
+    b.q("#rejectedLejos").click();
+    ok(bucket(b, "rejected").length === 0,
+      "el bloque se llevó a la papelera un anuncio que era favorito: " + bucket(b, "rejected"));
+    ok(b.q("#snack").hidden === true, "sin nada que rechazar salió el aviso igual");
+
+    ev(b, 'favorite.delete("a2"); saveBuckets(); render()');
+    b.q("#rejectedLejos").click();
+    ok(bucket(b, "rejected").join() === "a2", "#rejectedLejos no mandó el lejos a la papelera");
+    ok(typeof ev(b, 'stamp["a2"]') === "number", "el rechazo en bloque no sella la fecha: sin ella la papelera no dice «hace X»");
+    ok(/^1 lejos a la papelera$/.test(b.q("#snackmsg").textContent),
+      "el aviso no dice qué se rechazó ni cuántos: " + b.q("#snackmsg").textContent);
+    b.q("#undo").click();
+    ok(ev(b, 'stamp["a2"]') === undefined, "deshacer deja el sello puesto: el anuncio vuelve al mazo con fecha de rechazo");
+
+    // el otro atajo del molde: mensaje propio y plural correcto
+    b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "roto" } }); // veta a3
+    b.q("#rejectedExcl").click();
+    ok(/^1 excluido a la papelera$/.test(b.q("#snackmsg").textContent),
+      "con un solo excluido el aviso no está en singular: " + b.q("#snackmsg").textContent);
+    b.q("#undo").click();
+    b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "ford" } }); // veta los tres
+    b.q("#rejectedExcl").click();
+    ok(/^3 excluidos a la papelera$/.test(b.q("#snackmsg").textContent),
+      "con tres excluidos el aviso no está en plural: " + b.q("#snackmsg").textContent);
+  }
+
   // ── 20b. una fila ya rechazada no se cuenta también como vetada ──
   // "sin ver" se calcula restando: una fila contada dos veces lo baja de lo real, y con
   // bastantes filas rechazadas y vetadas a la vez sale un "sin ver" negativo.

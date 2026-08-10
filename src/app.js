@@ -1240,13 +1240,13 @@ function paintStat() {
   if (cs) cs.onclick = clearSort;
 }
 
-// manda los "lejos y sin envío" actuales a la papelera de una vez (deshacer: los saca)
-function rejectedLejos() {
+// los dos "rechazar en bloque" de la barra de estado eran la misma función con otro filtro y otro
+// mensaje: elige los que no están clasificados, sella, guarda y ofrece deshacer. El deshacer es lo
+// que no conviene tener escrito dos veces: olvidar el `unstamp` en una de las copias no lo nota
+// nadie, y la fecha de "rechazado hace X" se queda mintiendo para siempre.
+const bulkReject = (pred, msg) => () => {
   const ks = data
-    .filter(
-      (r) =>
-        !rejected.has(key(r)) && !favorite.has(key(r)) && isLejos(r),
-    )
+    .filter((r) => !rejected.has(key(r)) && !favorite.has(key(r)) && pred(r))
     .map(key);
   if (!ks.length) return;
   ks.forEach((k) => {
@@ -1255,7 +1255,7 @@ function rejectedLejos() {
   });
   saveBuckets();
   render();
-  snack(`${ks.length} lejos a la papelera`, () => {
+  snack(msg(ks.length), () => {
     ks.forEach((k) => {
       rejected.delete(k);
       unstamp(k);
@@ -1263,36 +1263,14 @@ function rejectedLejos() {
     saveBuckets();
     render();
   });
-}
+};
+// manda los "lejos y sin envío" actuales a la papelera de una vez (deshacer: los saca)
+const rejectedLejos = bulkReject(isLejos, (n) => `${n} lejos a la papelera`);
 // manda todos los excluidos actuales a la papelera de una vez (deshacer: los saca)
-function rejectedExcluded() {
-  const ks = data
-    .filter(
-      (r) =>
-        !rejected.has(key(r)) &&
-        !favorite.has(key(r)) &&
-        isExcluded(r),
-    )
-    .map(key);
-  if (!ks.length) return;
-  ks.forEach((k) => {
-    rejected.add(k);
-    stampNow(k);
-  });
-  saveBuckets();
-  render();
-  snack(
-    `${ks.length} excluido${ks.length === 1 ? "" : "s"} a la papelera`,
-    () => {
-      ks.forEach((k) => {
-        rejected.delete(k);
-        unstamp(k);
-      });
-      saveBuckets();
-      render();
-    },
-  );
-}
+const rejectedExcluded = bulkReject(
+  isExcluded,
+  (n) => `${n} excluido${n === 1 ? "" : "s"} a la papelera`,
+);
 
 // restaurar un item de vendedor bloqueado exige desbloquearlo: si no, enforceBlocks lo re-rechaza
 // en el próximo render. Desbloquear no reinunda (enforceBlocks solo añade): los demás ya-rechazados
