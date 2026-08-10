@@ -44,6 +44,19 @@ const CSV_CATS =
   row({ id: "a5", titulo: "Vespa 125", precio: "1500", categoria: "Motos", ciudad: "Jaen", km: "5", dias: "4", reservado: "False", envio: "False", url: "https://w/a5", vendedor: "Cris", descripcion: "poco uso" }) +
   "\r\n";
 
+// variante para el banner de vendedores: dos vendedores con rechazos, uno con más que el otro,
+// y a los dos les quedan frescos. Es lo que hace falta para ver el ORDEN de la sugerencia.
+// La fila sin categoría es para el chip vacío.
+// Ana: a1, a3, a4, a7 — Bea: a2, a5, a6. Rechazando 3 de Ana y 2 de Bea, a cada una le queda
+// uno fresco y los dos recuentos son distintos.
+const CSV_VEND =
+  CSV_ANA +
+  [
+    row({ id: "a5", titulo: "Ford Mondeo", precio: "900", categoria: "Coches", ciudad: "Jaen", km: "2", dias: "5", reservado: "False", envio: "True", url: "https://w/a5", vendedor: "Bea", descripcion: "vendido ya" }),
+    row({ id: "a6", titulo: "Ford Kuga", precio: "700", categoria: "", ciudad: "Jaen", km: "2", dias: "6", reservado: "False", envio: "True", url: "https://w/a6", vendedor: "Bea", descripcion: "sin categoria" }),
+    row({ id: "a7", titulo: "Ford Galaxy", precio: "600", categoria: "Coches", ciudad: "Jaen", km: "2", dias: "7", reservado: "False", envio: "True", url: "https://w/a7", vendedor: "Ana", descripcion: "familiar" }),
+  ].join("\r\n") + "\r\n";
+
 let n = 0;
 const fail = (m) => {
   throw new Error("FAIL: " + m);
@@ -1986,6 +1999,72 @@ async function main() {
     ev(b, "stamp[" + JSON.stringify(k) + '] = 111; setLS("wp_stamp", JSON.stringify(stamp)); render()');
     ok(ev(b, "stamp[" + JSON.stringify(k) + "]") === 111,
       "el bloqueo re-sella en cada render lo ya rechazado: la antigüedad del descarte se reinicia sola");
+  }
+
+  // ── 70. a quién propone bloquear el mazo ──
+  //     "Rechazar siguientes" es destructivo de un solo clic: manda a la papelera TODO lo fresco
+  //     del vendedor. Quién sale ahí, y en qué orden, decide qué se borra.
+  {
+    const b = await loaded({ csv: CSV_VEND });
+    const cands = () => ev(b, "sellerCandidates().map((c) => c.s)");
+    const rechaza = (...ids) =>
+      ev(b, ids.map((i) => `rejected.add(${JSON.stringify(i)});`).join("") + 'save("wp_rejected", rejected)');
+
+    rechaza("a1");
+    ok(cands().length === 0, "propone bloquear por UN solo rechazo: " + cands());
+
+    rechaza("a3");
+    ok(cands().join() === "Ana", "con 2 rechazos y frescos pendientes no propuso a Ana: " + cands());
+
+    rechaza("a2", "a5"); // Bea llega a 2; Ana va por 2 también, pero le sumamos uno más
+    rechaza("a4");
+    ok(cands().join() === "Ana,Bea",
+      "no propone primero al vendedor con más rechazos: " + cands());
+
+    rechaza("a7"); // a Ana no le queda nada fresco
+    ok(cands().join() === "Bea",
+      "sigue proponiendo a un vendedor sin anuncios frescos: no hay 'siguientes' que rechazar, " + cands());
+
+    ev(b, 'blockSel.add("Bea"); saveBlockSel()');
+    ok(cands().length === 0, "propone bloquear a un vendedor ya bloqueado: " + cands());
+  }
+
+  // ── 71. lo que ya está fuera del mazo no cuenta como "siguiente" ──
+  //     Un anuncio vetado por una palabra no se ve. Contarlo como fresco hace que el mazo
+  //     proponga bloquear por anuncios invisibles, y el bloqueo sí se los lleva a la papelera.
+  {
+    const b = await loaded({ csv: CSV_ANA });
+    ev(b, 'rejected.add("a1"); rejected.add("a3"); save("wp_rejected", rejected)');
+    ok(ev(b, "sellerCandidates().length") === 1, "el escenario no partió con la sugerencia puesta");
+    ev(b, 'addExcl("puma"); render()'); // a4 "Ford Puma" es lo único fresco que le queda a Ana
+    ok(ev(b, "sellerCandidates().length") === 0,
+      "cuenta como fresco un anuncio excluido del mazo: " + ev(b, "JSON.stringify(sellerCandidates().map((c) => c.s))"));
+  }
+
+  // ── 72. los chips de categoría: el vacío, el pintado del modo incluir y "limpiar" ──
+  {
+    const b = await loaded({ csv: CSV_VEND });
+    const chips = () => b.q("#catChips").children;
+    const chip = (nombre) => chips().find((c) => String(c.textContent).startsWith(nombre));
+    ok(chip("Coches"), "#catChips no pintó la categoría que sí existe");
+    ok(chips().every((c) => String(c.textContent).trim() !== "(1)"),
+      "la fila sin categoría pintó un chip sin nombre: " +
+        JSON.stringify(chips().map((c) => String(c.textContent))));
+
+    ok(b.q("#catClear").hidden, "'limpiar' se ve sin ninguna categoría marcada");
+    chip("Coches").click();
+    ok(!b.q("#catClear").hidden, "'limpiar' sigue oculto con una categoría marcada");
+    ok(String(chip("Coches").className).includes("off"),
+      "en modo excluir la categoría marcada no se pinta apagada");
+
+    b.q("#catMode").click(); // modo incluir: lo marcado es lo ÚNICO que se queda
+    ok(!String(chip("Coches").className).includes("off"),
+      "en modo incluir la categoría marcada se pinta apagada, que es lo contrario de lo que hace");
+
+    b.q("#catMode").click(); // vuelta a excluir
+    chip("Coches").click(); // destildar la última
+    ok(!(b.store.wp_catexcl || "{}").includes("ford.csv"),
+      "destildar la última categoría deja el cajón vacío en el almacén: " + b.store.wp_catexcl);
   }
 
   console.log("ok (" + n + " comprobaciones)");
