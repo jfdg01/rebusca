@@ -550,6 +550,21 @@ async function main() {
     ok(b.store["roto:wp_blocksel"] === undefined, "la copia de respaldo cupo: el check no mide nada");
   }
 
+  // ── 7h. cargar el estado repinta lo que ya estaba en pantalla ──
+  // El estado puede llegar después de que la lista esté pintada (otra pestaña, una carga
+  // tardía). Sin repintar, el usuario ve la papelera vacía con anuncios dentro.
+  {
+    const b = await loaded();
+    // `children` no sirve para contar: la lista vacía pinta su propia fila de aviso. Una fila
+    // real se reconoce por su botón de quitar.
+    const filas = () => byClass(ev(b, "tbody"), "quitar").length;
+    ev(b, 'view = "rejected"; rejected.clear(); render()'); // la búsqueda de prueba deja rechazos
+    ok(filas() === 0, "la papelera arranca con anuncios dentro: " + filas());
+    ev(b, 'localStorage.setItem("wp_rejected", JSON.stringify({ [curDrawer()]: [key(data[0])] }))');
+    await ev(b, "hydrateEstado()");
+    ok(filas() === 1, "cargar el estado no repinta la lista que ya estaba en pantalla: " + filas());
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
