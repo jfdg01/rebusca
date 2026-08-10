@@ -430,6 +430,36 @@ async function main() {
     ok(chip(2) === "57,7€", "la tarjeta con envío no pinta el precio final: " + chip(2));
   }
 
+  // ── 7d. las dos fronteras del veto por categoría ──
+  {
+    const b = await loaded();
+    // isExcluded sobre una fila con la categoría cambiada: es el único código que ESCONDE un
+    // anuncio, y un anuncio escondido no deja rastro en ninguna pantalla.
+    const excl = (cat) =>
+      ev(b, `(() => { const r = [...data[0]]; r[headers.indexOf("categoria")] = ${JSON.stringify(cat)};` +
+        " return isExcluded(r); })()");
+    const veto = (cats, modo) =>
+      ev(b, `catExclMap[curDrawer()] = ${JSON.stringify(cats)}; catModeMap[curDrawer()] = ${JSON.stringify(modo)}`);
+
+    // exacta, no por trozo: una categoría que contiene a la otra como texto es el único sitio
+    // donde `includes` de lista y `includes` de cadena se separan
+    veto(["Coches"], "excluir");
+    ok(excl("Coches") === true, "la categoría vetada no saca el anuncio del mazo");
+    ok(excl("Coches clásicos") === false, "el veto de «Coches» se lleva también «Coches clásicos»");
+
+    // lista vacía = no filtro, nunca filtra todo. Sin la guarda, el modo incluir sin ninguna
+    // categoría marcada deja el mazo vacío y sin motivo a la vista.
+    veto([], "incluir");
+    ok(excl("Coches") === false, "en modo incluir con la lista vacía el mazo se vacía entero");
+    veto([], "excluir");
+    ok(excl("Coches") === false, "en modo excluir con la lista vacía se excluye igual");
+
+    // y el modo incluir con lista, para que el check de arriba no pase por no filtrar nunca
+    veto(["Motos"], "incluir");
+    ok(excl("Coches") === true && excl("Motos") === false,
+      "el modo incluir no conserva solo las marcadas");
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
