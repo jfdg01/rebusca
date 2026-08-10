@@ -2710,7 +2710,11 @@ function dragify(root) {
     on = false;
     if (axis === "x" && card) {
       card.classList.remove("grab");
-      const d = decide(dx, dx / Math.max(1, e.timeStamp - t0)); // v en px/ms sobre el gesto
+      // `pointercancel` NO es soltar: el sistema se llevó el dedo (entra una llamada, el
+      // navegador se queda el gesto, salta un gesto del móvil). Decidir ahí es clasificar sin
+      // que el usuario suelte, y con la regla del flick basta un movimiento corto y rápido.
+      // En el mazo cada anuncio pasa una sola vez, así que un rechazo así lo esconde.
+      const d = e.type === "pointercancel" ? 0 : decide(dx, dx / Math.max(1, e.timeStamp - t0)); // v en px/ms
       if (d) return fling(d);
       card.style.transform = ""; // no cuajó: vuelve al centro
     }

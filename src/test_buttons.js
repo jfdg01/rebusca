@@ -967,6 +967,114 @@ async function main() {
     ok(!ev(b3, "rejected.has(" + JSON.stringify(quinta) + ")"), "arrastrar desde #swVer rechazó la tarjeta");
   }
 
+  // ── 32b. lo que el gesto NO debe hacer ──
+  //         El bloque 32 mide lo que el dedo consigue. Esto mide lo que no puede pasar: el mazo
+  //         se usa en el móvil, cada anuncio pasa una sola vez, y una decisión que el usuario no
+  //         tomó lo esconde para siempre.
+  {
+    const abre = async (csv) => {
+      const b = await loaded(csv);
+      b.q("#swipeFab").click();
+      return b;
+    };
+    const carta = (b) => ev(b, "deck[di] && key(deck[di])");
+    const enPantalla = (b) => ev(b, "card && card.style.transform");
+
+    // vertical = scroll de la descripción. El check de arriba mide que no clasifica, y eso sigue
+    // siendo cierto sin la guarda del eje: `pointerup` mira `axis === "x"`. Lo que se pierde es
+    // el scroll, porque `preventDefault()` corre igual. En el móvil la descripción se queda muerta.
+    const b4 = await abre();
+    let frenos = 0;
+    const v4 = b4.q("#swipeView");
+    const g4 = (t, x, y, ts) =>
+      v4.dispatch(t, { clientX: x, clientY: y, timeStamp: ts, pointerId: 1, preventDefault: () => frenos++ });
+    g4("pointerdown", 0, 0, 0);
+    g4("pointermove", 5, 80, 100);
+    ok(frenos === 0, "el arrastre vertical se come el scroll de la descripción: " + frenos + " frenazos");
+    ok(!enPantalla(b4), "el arrastre vertical tuerce la tarjeta: " + enPantalla(b4));
+    g4("pointerup", 5, 80, 100);
+    // …y el horizontal SÍ tiene que frenarlo, o el navegador scrollea mientras arrastras
+    g4("pointerdown", 0, 0, 200);
+    g4("pointermove", 80, 0, 260);
+    ok(frenos > 0, "el arrastre horizontal no frena el scroll del navegador");
+
+    // un temblor de 3px es un toque, no un arrastre. Sin la espera de intención el eje sale "x"
+    // y al soltar rápido `decide` ve una velocidad enorme: el toque clasifica.
+    const b5 = await abre();
+    const k5 = carta(b5);
+    const v5 = b5.q("#swipeView");
+    const g5 = (t, x, ts) => v5.dispatch(t, { clientX: x, clientY: 0, timeStamp: ts, pointerId: 1 });
+    g5("pointerdown", 0, 0);
+    g5("pointermove", 3, 2); // 3px en 2ms son 1.5 px/ms: para `decide` eso es un flick de libro
+    g5("pointerup", 3, 2);
+    await tick(260);
+    ok(carta(b5) === k5, "un temblor de 3px clasificó la tarjeta");
+
+    // el sistema se lleva el dedo: entra una llamada, o el navegador se queda el gesto. No es
+    // soltar, así que no decide. Y la tarjeta vuelve al centro en vez de quedarse torcida.
+    const b6 = await abre();
+    const k6 = carta(b6);
+    const v6 = b6.q("#swipeView");
+    const g6 = (t, x, ts) => v6.dispatch(t, { clientX: x, clientY: 0, timeStamp: ts, pointerId: 1 });
+    g6("pointerdown", 0, 0);
+    g6("pointermove", 40, 50);
+    ok(enPantalla(b6), "el arrastre horizontal no mueve la tarjeta");
+    ok(ev(b6, "likeStamp.style.opacity") > 0 && ev(b6, "nopeStamp.style.opacity") === 0,
+      "los dos sellos se encienden a la vez: like=" + ev(b6, "likeStamp.style.opacity") +
+      " nope=" + ev(b6, "nopeStamp.style.opacity"));
+    // y al otro lado, el espejo: sin los dos ternarios el usuario ve GUARDAR y DESCARTAR juntos
+    g6("pointermove", -40, 55);
+    ok(ev(b6, "nopeStamp.style.opacity") > 0 && ev(b6, "likeStamp.style.opacity") === 0,
+      "arrastrando a la izquierda sigue encendido el sello de guardar: like=" +
+      ev(b6, "likeStamp.style.opacity"));
+    g6("pointercancel", 40, 60); // 40px en 60ms son 0.66 px/ms: como `pointerup` esto clasifica
+    await tick(260);
+    ok(carta(b6) === k6, "el gesto que canceló el sistema clasificó la tarjeta");
+    ok(!ev(b6, "rejected.has(" + JSON.stringify(k6) + ") || favorite.has(" + JSON.stringify(k6) + ")"),
+      "el gesto cancelado metió el anuncio en un cubo");
+    ok(!enPantalla(b6), "el gesto cancelado dejó la tarjeta torcida: " + enPantalla(b6));
+    ok(ev(b6, "likeStamp.style.opacity") === 0 && ev(b6, "nopeStamp.style.opacity") === 0,
+      "los sellos se quedaron encendidos sobre la tarjeta siguiente: like=" +
+      ev(b6, "likeStamp.style.opacity") + " nope=" + ev(b6, "nopeStamp.style.opacity"));
+
+    // la carta en pantalla puede estar YA clasificada: otra pestaña, o un enlace de la IA con
+    // ?no= mientras el mazo está abierto. Los cubos son excluyentes; sin el `delete` el anuncio
+    // sale a la vez en favoritos y en rechazados.
+    for (const [ya, gesto, otro] of [["rejected", "#swYes", "favorite"], ["favorite", "#swNo", "rejected"]]) {
+      const b = await abre();
+      const k = carta(b);
+      ev(b, ya + ".add(" + JSON.stringify(k) + ")");
+      b.q(gesto).click();
+      await tick(260);
+      ok(ev(b, otro + ".has(" + JSON.stringify(k) + ")"), gesto + " no clasificó un anuncio que ya estaba en " + ya);
+      ok(!ev(b, ya + ".has(" + JSON.stringify(k) + ")"),
+        "el anuncio quedó en los dos cubos a la vez tras " + gesto);
+    }
+
+    // durante los 200ms del vuelo no hay tarjeta: una segunda decisión clasificaría otra vez la
+    // misma, y apuntaría dos veces en la pila de deshacer
+    const b7 = await abre();
+    b7.q("#swYes").click();
+    const v7 = b7.q("#swipeView");
+    const g7 = (t, x, ts) => v7.dispatch(t, { clientX: x, clientY: 0, timeStamp: ts, pointerId: 1 });
+    g7("pointerdown", 0, 0);
+    g7("pointermove", 100, 300);
+    g7("pointerup", 100, 300);
+    await tick(260);
+    ok(ev(b7, "undoStack.length") === 1, "un gesto durante el vuelo decidió otra vez: " + ev(b7, "undoStack.length"));
+
+    // «Deshacer» nada más abrir: sin nada apuntado, ni se ofrece ni revienta
+    const b8 = await abre();
+    ok(b8.q("#swUndo").disabled === true, "«Deshacer» se ofrece sin nada que deshacer");
+    let reventó = false;
+    try {
+      ev(b8, "swUndo()");
+    } catch {
+      reventó = true;
+    }
+    ok(!reventó, "«Deshacer» con la pila vacía revienta");
+  }
+
   // ── 33. combobox de búsquedas (#pick): es un <input>, así que el inventario de botones
   //        no lo mira. Enfocar abre la lista entera, teclear filtra, Escape y el clic fuera cierran.
   {
