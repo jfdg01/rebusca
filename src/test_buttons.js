@@ -314,6 +314,25 @@ async function main() {
     ok(!bucket(b, "favorite").includes(primera), "una carta no puede estar en los dos cubos");
   }
 
+  // ── 9c. el escenario del mazo no acumula tarjetas ──
+  // `nextCard()` quita las tarjetas viejas antes de montar la siguiente. Era código inalcanzable:
+  // el arnés devolvía [] a `swipeStage.querySelectorAll(...)`, así que borrar esa limpieza dejaba
+  // las siete suites en verde. En el móvil, una sesión larga apila una tarjeta con su foto por
+  // cada anuncio clasificado y el swipe se atasca.
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    const cartas = () => ev(b, 'swipeStage.querySelectorAll(".swipe-card, .swipe-done").length');
+    ok(cartas() === 1, "el mazo abrió con " + cartas() + " tarjetas en el escenario, no 1");
+    b.q("#swNo").click();
+    await tick(300);
+    b.q("#swNo").click();
+    await tick(300);
+    ok(cartas() === 1, "tras dos clasificaciones el escenario tiene " + cartas() + " tarjetas");
+    ev(b, "di = deck.length; nextCard()");
+    ok(cartas() === 1, "con el mazo agotado el escenario tiene " + cartas() + " nodos, no solo el «✓ Has rebuscado todo»");
+  }
+
   // ── 9b. el hueco de 200ms entre carta y carta, y el mazo agotado ──
   // La carta vuela 200ms. Durante ese vuelo `card` es null y ✓/✕ no hacen nada. Antes seguían
   // encendidos: el segundo toque de un doble-toque se perdía en silencio (síntoma nº1 reportado).

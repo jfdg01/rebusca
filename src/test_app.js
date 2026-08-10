@@ -100,6 +100,20 @@ const ELS = new WeakSet(); // los elementos falsos, para distinguirlos del stub 
 // quién cuelga de quién. Sin esto `remove()` era un no-op: la foto que no carga se quitaba en
 // el navegador y en la suite seguía ahí, así que borrar el `onerror` de app.js no rompía nada.
 const PARENT = new WeakMap();
+// ¿casa este elemento con el selector? Solo la gramática que usa app.js: lista con comas, y de
+// cada trozo el tag, las clases y un `[data-*]` presente. Nada de descendencia ni de :not().
+// ponytail: un motor CSS entero sobra; si algún día aparece un selector que no encaja, `sel`
+// no casa con la expresión regular y `querySelectorAll` devuelve [] como antes.
+const camelize = (n) => n.replace(/-(\w)/g, (_, x) => x.toUpperCase());
+const matches = (el, sel) =>
+  String(sel).split(",").some((s) => {
+    const m = /^([a-z]*)((?:\.[\w-]+)*)(?:\[data-([\w-]+)\])?$/.exec(s.trim());
+    if (!m || !s.trim()) return false;
+    if (m[1] && String(el.tagName || "").toLowerCase() !== m[1]) return false;
+    for (const c of m[2].split(".").filter(Boolean)) if (!el.classList.contains(c)) return false;
+    const camel = camelize(m[3] || "");
+    return !camel || camel in (el.dataset || {});
+  });
 // `append("texto")` es legal en el DOM y una cadena no vale como clave de un WeakMap
 const link = (c, padre) => { if (Object(c) === c) PARENT.set(c, padre); };
 function makeEl(sel, any) {
@@ -197,8 +211,17 @@ function makeEl(sel, any) {
     replaceChildren() {
       st.children = [];
     },
-    setAttribute() {},
-    removeAttribute() {},
+    // los dos únicos atributos que app.js escribe y borra son `data-dir` y `role`. En el DOM real
+    // `removeAttribute("data-dir")` borra `dataset.dir`; el no-op de antes dejaba la flecha vieja
+    // pegada, así que "no limpia la flecha" era indistinguible de "la limpia".
+    setAttribute(n, v) {
+      if (String(n).startsWith("data-")) st.dataset[camelize(String(n).slice(5))] = String(v);
+      else st[n] = String(v);
+    },
+    removeAttribute(n) {
+      if (String(n).startsWith("data-")) delete st.dataset[camelize(String(n).slice(5))];
+      else delete st[n];
+    },
     getAttribute: () => null,
     hasAttribute: () => false,
     // memoizado igual que el del document: `card.querySelector(".sc-del")` devuelve siempre
@@ -207,7 +230,18 @@ function makeEl(sel, any) {
       if (!kids.has(s)) kids.set(s, makeEl(s, any));
       return kids.get(s);
     },
-    querySelectorAll: () => [],
+    // recorre el subárbol de verdad. Antes devolvía [] siempre, así que las cabeceras de orden,
+    // la limpieza del mazo y la espera de las fotos del PDF eran código inalcanzable para la suite.
+    querySelectorAll(sel) {
+      const out = [];
+      (function walk(n) {
+        for (const c of n.children || []) {
+          if (ELS.has(c) && matches(c, sel)) out.push(c);
+          walk(c);
+        }
+      })(el);
+      return out;
+    },
     getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
     focus() {},
     blur() {},
@@ -358,7 +392,13 @@ function makeContext(store, opts = {}) {
     querySelector: q,
     querySelectorAll: qa,
     getElementById: (id) => q("#" + id),
-    createElement: () => makeEl("", any),
+    // con su etiqueta: `querySelectorAll("th[data-col]")` y `closest("a,button,input")`
+    // necesitan saber qué es cada nodo, y antes todo lo creado nacía sin tagName
+    createElement: (tag) => {
+      const e = makeEl("", any);
+      e.tagName = String(tag).toUpperCase();
+      return e;
+    },
     createDocumentFragment: () => makeEl("", any), // elemento normal: así los <tr> que se le
     // cuelgan siguen siendo alcanzables desde tbody y el test puede pulsar sus botones
     // un objeto llano, no `makeAny()`: el proxy se tragaba el texto y la distancia y la ciudad de
@@ -1123,6 +1163,43 @@ async function main() {
     vm.runInContext("delete stamp[key(data[0])]", b.sandbox);
     if (/li-when/.test(carta(b, 0)))
       fail("sin marca de tiempo salió la línea de cuándo se clasificó: " + carta(b, 0));
+  }
+
+  // 12g-ter. las cabeceras de la tabla dicen por qué columna se ordena, en qué sentido y con qué
+  //          prioridad. `paintSortHeaders()` era código inalcanzable: el arnés devolvía [] a
+  //          `thead.querySelectorAll("th[data-col]")`, así que borrar la función entera no rompía
+  //          nada. El orden multinivel es lo que más se nota: sin el número, dos flechas a la vez
+  //          no dicen cuál manda.
+  {
+    const b = await boot({});
+    b.sandbox.__CSV = CSV;
+    vm.runInContext('loadCSV(__CSV, "orden.csv")', b.sandbox);
+    const cabeceras = () =>
+      vm.runInContext(
+        `thead.querySelectorAll("th[data-col]")
+           .filter((t) => t.classList.contains("sorted"))
+           .map((t) => headers[+t.dataset.col] + ":" + (t.dataset.dir || "")).join("|")`,
+        b.sandbox,
+      );
+    const iCol = (h) => vm.runInContext(`headers.indexOf("${h}")`, b.sandbox);
+
+    if (cabeceras() !== "") fail("sin ordenar ya había cabeceras marcadas: " + cabeceras());
+    vm.runInContext(`toggleSort(${iCol("precio")})`, b.sandbox);
+    if (cabeceras() !== "precio:▲") fail("ordenar por precio no marca su cabecera: " + cabeceras());
+    vm.runInContext(`toggleSort(${iCol("precio")})`, b.sandbox);
+    if (cabeceras() !== "precio:▼") fail("el reclic no invierte la flecha: " + cabeceras());
+    vm.runInContext(`toggleSort(${iCol("km")})`, b.sandbox);
+    if (cabeceras() !== "precio:1 ▼|km:2 ▲")
+      fail("con dos columnas las cabeceras no numeran la prioridad: " + cabeceras());
+    vm.runInContext("clearSort()", b.sandbox);
+    if (cabeceras() !== "") fail("limpiar el orden deja cabeceras marcadas: " + cabeceras());
+    // y la flecha vieja se va con la marca: si `data-dir` se queda pegado, al volver a ordenar
+    // por otra columna la tabla enseña dos flechas
+    const pegadas = vm.runInContext(
+      'thead.querySelectorAll("th[data-col]").filter((t) => t.dataset.dir).length',
+      b.sandbox,
+    );
+    if (pegadas !== 0) fail("tras limpiar quedaron " + pegadas + " flechas pegadas");
   }
 
   // 12h. la tabla solo existe en modo lista: en el mazo el swipe monta su propia tarjeta, así que
