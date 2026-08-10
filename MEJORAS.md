@@ -140,7 +140,18 @@ sin que nadie lo viera, porque el fichero no estaba en la lista de comandos de `
 
 ## Pendiente
 
-Nada. El último punto abierto se cerró el 10/08/2026.
+- [ ] **Las cabeceras de seguridad se comparan consigo mismas.** `src/test_servidor.py`
+  comprueba que la respuesta trae cada cabecera de `servidor.SEC_HEADERS`, y el valor
+  esperado lo saca de ese mismo diccionario. Cambiar `script-src 'self'` por `script-src *`
+  pasa los siete checks sin despeinarse, y con él se cae la mitigación del DOM-XSS que
+  documenta `src/servidor.py:19-22` (la app mete datos scrapeados de Wallapop por
+  `innerHTML`). Clavar las directivas que aguantan peso es una decisión de seguridad, no un
+  arreglo mecánico: va a su propia iteración. Encontrado en la iteración 31.
+- [ ] **El arranque del server no se mide.** `PORT` del entorno y el argumento posicional
+  (`src/servidor.py:160-166`) viven dentro de `if __name__ == "__main__"`. Se pueden romper
+  los dos con los siete checks en verde, y `PORT=8123 python3 src/servidor.py` es el
+  servidor de pruebas que documenta `CLAUDE.md`. Alcanzarlo pide levantar un proceso que no
+  termina solo. Encontrado en la iteración 31.
 
 - [x] **No hay runner ni CI.** Era el defecto 6 con otra cara: el bucle de siete comandos
   dependía de que alguien se acordara. Ahora `./check.sh` los corre de una (~5 s, sale 1

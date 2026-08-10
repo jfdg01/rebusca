@@ -37,7 +37,9 @@ SEC_HEADERS = {
 # listados de directorio) no sale. Los `test_*` se caen aparte: son .js/.py y llevan dentro
 # el mapa de la app. ponytail: lista blanca de extensiones, no de ficheros; añadir un icono
 # nuevo no obliga a tocar esto, añadir un .py sí (que es justo lo que se quiere).
-PUB = (".html", ".css", ".js", ".txt", ".webp", ".png", ".svg", ".ico", ".json", ".webmanifest", ".woff2")
+# Solo las que existen en src/: la lista achica lo que sale por un dominio público, así que
+# una extensión especulativa la agranda gratis. Un .svg/.ico/.woff2 de verdad la reabre.
+PUB = (".html", ".css", ".js", ".txt", ".webp", ".png", ".webmanifest")
 
 
 def publico(ruta):
@@ -142,13 +144,18 @@ def demo():
         == '<link href="app.css?v=5"><script src="app.js?v=9"><script src="scrape.js?v=3">'
     # la URL de llms.txt (texto plano o href) sale versionada -> bustea la cache del fetcher IA
     assert "llms.txt?v=" in stamp_versions('lee https://x.com/llms.txt <a href="/llms.txt">', {})
+    # las comillas mandan: se versiona la ref, no una mención del nombre en prosa
+    assert stamp_versions('<script src="app.js"> mira app.js', {"app.js": 9}) \
+        == '<script src="app.js?v=9"> mira app.js'
     # descubrimiento: coge locales existentes (servidor.py existe en HERE); ignora http/absolutas/ancla
     m = stamped_mtimes('<link href="servidor.py"><a href="https://x/y"><img src="/logo.png"><a href="#z">')
     assert list(m) == ["servidor.py"], m
     # lista blanca: sale lo que pide la página, no el fuente ni los tests
     assert all(map(publico, ["/app.js", "/app.css", "/llms.txt", "/wallapop-logo.webp", "/x/i.png"]))
+    # `/Test_App.js`: en un disco que no distingue mayúsculas ese fichero SÍ se abre, así que
+    # el veto a los tests tiene que juzgar el nombre en minúsculas y no tal como venga
     assert not any(map(publico, ["/servidor.py", "/wallapop.py", "/test_app.js", "/SERVIDOR.PY",
-                                 "/__pycache__/", "/deploy.sh", "/.git/config", "/"]))
+                                 "/Test_App.js", "/__pycache__/", "/deploy.sh", "/.git/config", "/"]))
     # charset utf-8 en text/*; binarios sin tocar
     g = H.__new__(H).guess_type
     assert g("x.txt").endswith("charset=utf-8"), g("x.txt")

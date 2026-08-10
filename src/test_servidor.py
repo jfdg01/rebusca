@@ -6,7 +6,7 @@ enrutado, cabeceras, mime, 404 y traversal.
 
     python3 src/test_servidor.py
 """
-import http.client, os, subprocess, sys, threading
+import contextlib, http.client, io, os, subprocess, sys, threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -112,13 +112,55 @@ def main():
                      "/%74est_app.js", "/%74est_buttons.js", "/te%73t_scrape.js"):
             st, _, b = req(port, path)
             assert st != 200, ("se sirve el fuente: " + path, st, b[:80])
-        # ...y lo que la página sí necesita sigue saliendo
-        for path in ("/app.js", "/app.css", "/scrape.js", "/llms.txt", "/wallapop-logo.webp"):
-            assert req(port, path)[0] == 200, "el filtro se llevó por delante " + path
+        # ...y lo que la página sí necesita sigue saliendo. La lista sale de la propia portada
+        # (la misma función que decide qué se versiona), no escrita a mano: así un <script> o un
+        # <img> nuevo entra en la prueba solo. Escrita a mano se quedó vieja y no lo vio nadie:
+        # le faltaban el manifiesto y el icono, y quitar .webmanifest de PUB pasaba los 7 checks.
+        # del fichero de disco, no del `html` que sirvió el server: ese ya viene estampado y REF
+        # descarta a propósito toda ref con `?`
+        locales = servidor.stamped_mtimes((HERE / "index.html").read_text(encoding="utf-8"))
+        assert len(locales) >= 5, "la portada no referencia casi nada: " + str(list(locales))
+        for path in list(locales) + ["llms.txt"]:   # llms.txt va por URL absoluta, no lo pilla REF
+            assert req(port, "/" + path)[0] == 200, "el filtro se llevó por delante " + path
 
         # ── 8. método no soportado: 501, y el server sigue vivo ──
         assert req(port, "/", method="POST")[0] == 501, "POST debería ser 501"
         assert req(port, "/")[0] == 200, "el server se quedó tocado tras el POST"
+
+        # ── 8b. el journal del VPS: el 404 de los bots no sale, todo lo demás sí ──
+        #        Esto mide el accidente que cuenta servidor.py:124-126. La función se llamó
+        #        `log_message` una vez, y BaseHTTPRequestHandler delega log_error EN log_message:
+        #        el journal salía vacío pasara lo que pasara. Renombrarla lo repone entero, así
+        #        que la prueba no mira el nombre, mira que el error llegue a stderr.
+        h = servidor.H.__new__(servidor.H)
+        h.client_address = ("1.2.3.4", 4321)
+
+        def loguea(fmt, *a):
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                h.log_error(fmt, *a)
+            return buf.getvalue()
+
+        assert loguea("code %d, message %s", 404, "File not found") == "", "el 404 de los bots ensucia el journal"
+        assert "500" in loguea("code %d, message %s", 500, "boom"), "un 500 no llega al journal"
+        assert "socket" in loguea("error de socket"), "un error sin código no llega al journal"
+
+        # ── 8c. una ref rota en la portada deja rastro por stderr ──
+        #        servidor.py:61-64: antes se descartaba en silencio, la portada salía 200 con la
+        #        ref rota y Cloudflare cacheaba el 404 cuatro horas. El aviso nombra la que falta
+        #        y SOLO la que falta: si grita por cada URL externa, deja de leerse.
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            servidor.stamped_mtimes('<script src="app.js"><script src="no-existe.js">'
+                                    '<img src="https://x.com/y.png">')
+        aviso = buf.getvalue()
+        assert "no-existe.js" in aviso, "una ref rota no deja rastro: " + repr(aviso)
+        assert "x.com" not in aviso and "app.js" not in aviso, "el aviso grita de más: " + repr(aviso)
+        # una ref absoluta y un ancla tampoco son cosa nuestra: REF solo mira las relativas
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            servidor.stamped_mtimes('<img src="/logo.png"><a href="#arriba">')
+        assert buf.getvalue() == "", "el aviso salta con refs que no son locales: " + repr(buf.getvalue())
 
         # ── 9. la portada se lee como utf-8 aunque el servicio arranque sin locale ──
         env = dict(os.environ, LC_ALL="C", PYTHONCOERCECLOCALE="0", PYTHONUTF8="0")
