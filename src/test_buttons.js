@@ -1723,6 +1723,44 @@ async function main() {
     }
   }
 
+  // ── 55. el mazo no vuelve a enseñar lo que ya está triado ──
+  //     `deckRows` esconde rechazados, favoritos y excluidos. Los rechazados y las exclusiones
+  //     tenían check; los favoritos no. Sin él, quitar `!favorite.has(k)` pasa los siete en verde,
+  //     y el usuario se encuentra en el mazo el anuncio que acaba de guardar: lo vuelve a triar
+  //     cada vez que abre la búsqueda, y el cubo de favoritos deja de significar nada.
+  {
+    const b = await loaded();
+    ok(ev(b, "deckRows().length") === 3, "el mazo no arrancó con los tres anuncios");
+    ev(b, 'favorite.add("a1"); pushEstado(); render()');
+    const ids = ev(b, "deckRows().map((r) => key(r))");
+    ok(!ids.includes("a1"), "el mazo sigue enseñando un anuncio ya guardado en favoritos: " + ids);
+    ok(ids.length === 2, "el mazo escondió de más: " + ids);
+  }
+
+  // ── 56. el filtro de las listas busca por id, y una lista de ids casa con CUALQUIERA ──
+  //     Las dos cosas están en el código y en su comentario, y ninguna tenía check. Buscar por id
+  //     sin `#` es lo que se hace al pegar un id suelto; la lista con `#` es para pegar de una vez
+  //     los ids que te haya dado la IA. Con `some` cambiado por `every` la lista no casa nunca
+  //     —ningún anuncio tiene dos ids—, así que la pantalla sale vacía y parece que no hay nada.
+  {
+    const b = await loaded();
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); rejected.add("a3"); pushEstado(); view = "rejected"; render()');
+    ok(ev(b, "filteredRows().length") === 3, "la papelera no arrancó con los tres anuncios");
+
+    ev(b, 'listQ = "a2"; render()');   // id suelto, sin `#`
+    ok(ev(b, 'filteredRows().map((r) => key(r)).join()') === "a2",
+      "el filtro de texto no encuentra por id: " + ev(b, 'filteredRows().map((r) => key(r)).join()'));
+
+    ev(b, 'listQ = "#a1, a3"; render()');   // lista de ids pegada tal cual
+    ok(ev(b, 'filteredRows().map((r) => key(r)).sort().join()') === "a1,a3",
+      "una lista de ids no casa con cualquiera de ellos: " + ev(b, 'filteredRows().map((r) => key(r)).join()'));
+
+    // y el filtro por vendedor de la papelera, que sale al pulsar el nombre en una fila
+    ev(b, 'listQ = ""; listSeller = "Ana"; render()');
+    ok(ev(b, 'filteredRows().map((r) => key(r)).sort().join()') === "a1,a3",
+      "el filtro por vendedor de la papelera no filtra: " + ev(b, 'filteredRows().map((r) => key(r)).join()'));
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

@@ -79,23 +79,29 @@ o `node <fichero>.js demo`).
 
 ## Arquitectura (flujo de datos)
 
-**El browser hace todo el trabajo; el server solo sirve ficheros.** `api.wallapop.com`
-(`/v3/search`, `/v3/items/<id>`) devuelve `Access-Control-Allow-Origin: *` y permite el header
+**El browser hace todo el trabajo; el server solo sirve ficheros.**
+`api.wallapop.com/api/v3/search` devuelve `Access-Control-Allow-Origin: *` y permite el header
 `X-DeviceOS` en preflight → cada browser scrapea directo sobre su IP (no hay ban compartido de
-la IP del VPS, no hay cuentas, no hay endpoints de escritura).
+la IP del VPS, no hay cuentas, no hay endpoints de escritura). Es el ÚNICO endpoint que se pide:
+no se vuelve a pedir el detalle de cada anuncio (ver `MEJORAS.md`).
 
 - **Scrape:** botón Buscar → `window.Rebusca.scrape({keywords, since, titleOnly, lat, lon,
   onProgress, signal})` (`scrape.js`) → texto CSV → `loadCSV(text, name)` (`app.js`) lo pinta.
-  `AbortController` para el botón parar; `onProgress` para el contador. Cada búsqueda re-scrapea
-  (no hay CSV en disco). Ubicación por defecto Jaén (`getLoc()` lee `wp_loc`; selector de ciudad = pendiente).
+  `AbortController` para el botón parar; `onProgress` para el contador. Ubicación por defecto Jaén;
+  `getLoc()` lee `wp_loc`, y el botón de ubicación lo escribe con la del navegador y re-scrapea.
+- **Cache de resultados:** el texto CSV de cada búsqueda va a IndexedDB (`csv:<nombre>`), y el
+  índice `{csv:{ts, ids}}` a `csvIndex`. Abrir una búsqueda guardada **sirve el cache**, no
+  re-scrapea; «Repetir» es lo que refresca. El cache **no caduca**. Un resultado `parcial` —403,
+  rama caída, botón parar, tope— no se cachea, y uno vacío tampoco. Un corte por no avanzar sí:
+  es determinista (iteración 12).
 - **Búsquedas guardadas:** `localStorage["wp_searches"]` = `[{csv, rows, mtime}]`
-  (definiciones, no resultados). Abrir una guardada = re-scrape con su `kw`/`since`.
+  (definiciones, no resultados). Sin cache, abrir una guardada re-scrapea con su `kw`/`since`.
 - **Estado (un usuario/navegador, sin perfiles):** `localStorage["wp_estado"]` guarda el blob
   `{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}`
   (`hydrateEstado`/`pushEstado`). También `wp_lastcsv`/`wp_lastseen`. Al cargar, una migración
   one-shot adopta el `wp_estado_<perfil>` del perfil activo del modelo viejo a estas claves fijas.
-- **Pesos (precio con envío exacto):** `fetchPesos` hace el bucle en el browser contra
-  `api.wallapop.com/v3/items/<id>` (`itemWeight`, saca `type_attributes.up_to_kg`, jitter, tope 200).
+- **Precio con envío:** estimado, no exacto. `finalPrice` (`app.js`) suma 0,70 € + 5 % + el porte
+  del tramo de 5 kg. El peso real pedía una petición por anuncio y salía mal a menudo.
 - **Cache del móvil:** el HTML se sirve `no-cache`; `stamp_versions()` añade `?v=<mtime>` a
   `app.css`/`app.js`/`scrape.js` para bustear la cache de 4h de Cloudflare en cada deploy.
 
