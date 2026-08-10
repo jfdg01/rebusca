@@ -207,6 +207,9 @@ async function main() {
     b.q("#copyDeck").click();
     ev(b, 'selectQueryUI("otra.csv")'); // el usuario cambia de búsqueda mientras se copia
     await flush();
+    // y el texto lo dice: la IA tiene que saber que ve un tope, no el mazo entero
+    ok(/60 anuncios de 70 sin clasificar/.test(b.spy.copied[0]),
+      "el prompt no avisa de que solo van 60 de 70: " + b.spy.copied[0].slice(0, 300));
     const lote = JSON.parse(b.store.wp_aisent || "{}");
     ok(lote.ids.length === 60,
       "el lote anotado no es el copiado (tope UNSEEN_CAP): " + lote.ids.length + " ids");
@@ -217,6 +220,27 @@ async function main() {
     // el veredicto puede llegar en otra sesión, sin CSV cargado: la ficha tiene que estar cacheada
     ok(ev(b, 'rowCache["m0"] && rowCache["m0"].titulo') === "Ford 0",
       "el lote enviado no dejó su ficha en rowCache: sin ella el ?keep= no encuentra las filas");
+  }
+
+  // ── 5bis. el viaje de ida y vuelta: los ids que salen en las fichas vuelven en el ?keep= ──
+  // El texto copiado y el enlace de respuesta están atados por el formato "[#id]". Si la ficha
+  // cambia de formato, la IA copia otra cosa y el veredicto aterriza en el vacío. Aquí se leen
+  // los ids del texto de verdad, con la misma regla que el prompt le da a la IA, y se le devuelven.
+  {
+    const b = await loaded();
+    b.q("#copyDeck").click();
+    await flush();
+    const texto = b.spy.copied[0];
+    // "N. [#id] título — precio": el "[#...]" literal de las instrucciones no cuenta como ficha
+    const ids = [...texto.matchAll(/^\d+\. \[#([^\]]+)\]/gm)].map((m) => m[1]);
+    ok(ids.join() === "a1,a2,a3", "las fichas no llevan los ids del mazo en [#id]: " + ids.join());
+    ok(ids.join() === JSON.parse(b.store.wp_aisent).ids.join(),
+      "los ids del texto y los del lote anotado no son los mismos: " + ids + " vs " + b.store.wp_aisent);
+    // la IA responde conservando el primero: el resto del lote se descarta
+    b.sandbox.location.search = "?keep=" + ids[0];
+    ev(b, "fromURL()");
+    ok(bucket(b, "favorite").join() === "a1", "el ?keep= del texto copiado no dejó el favorito: " + bucket(b, "favorite"));
+    ok(bucket(b, "rejected").join() === "a2,a3", "el resto del lote no se descartó: " + bucket(b, "rejected"));
   }
 
   // ── 5c. si la copia falla, el aviso lo dice, no se anota lote y el botón vuelve ──
