@@ -710,6 +710,28 @@ async function main() {
   }
   if (tiro) fail("reject() lanzo con la cuota llena (el bug de la carta congelada): " + (tiro.message || tiro));
 
+  // 5b. CUOTA LLENA + DATO DAÑADO: el caso en que `aparta` no puede respaldar. La copia a
+  //     "roto:<clave>" es la UNICA copia, y hydrateEstado reescribe esa misma clave saneada unas
+  //     lineas despues. Si `setLS` dijera que guardo sin guardar, el usuario se queda sin copia
+  //     Y sin original: el dato desaparece del todo, con un aviso diciendo que esta a salvo.
+  //     Por eso `setLS` devuelve un booleano y `sinRespaldo` frena a `espejo`.
+  //     Presupuesto a medida: cabe todo lo que ya hay, no cabe duplicar el dañado.
+  {
+    const danado = "[" + "1,".repeat(900) + "1]"; // JSON valido, forma equivocada (va un objeto)
+    const est = {
+      wp_excl: danado,
+      wp_estado: JSON.stringify({ rejected: {}, favorite: {} }),
+      wp_lastcsv: "ford.csv",
+    };
+    const b = await boot(est, { limit: 2400 });
+    if (b.store["roto:wp_excl"] !== undefined)
+      fail("el escenario no reprodujo el fallo de respaldo: la copia si cupo");
+    if (b.store.wp_excl !== danado)
+      fail("el original dañado se machaco sin haberlo podido respaldar; quedo " + b.store.wp_excl);
+    if (!b.errs.some((e) => String(e).includes("roto:wp_excl")))
+      fail("el respaldo fallido no dejo aviso por consola: " + JSON.stringify(b.errs.map(String)));
+  }
+
   // 6. CAJON POR KEYWORD: "ps4--dia" y "ps4--semana" son la misma caza. Antes el `since` iba en la
   //    clave, asi que cambiar la ventana temporal abria un cajon virgen y resucitaba los rechazados.
   const cajones = {

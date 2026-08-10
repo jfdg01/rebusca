@@ -1761,6 +1761,72 @@ async function main() {
       "el filtro por vendedor de la papelera no filtra: " + ev(b, 'filteredRows().map((r) => key(r)).join()'));
   }
 
+  // ── 57. deshacer un rechazo devuelve el favorito A FAVORITOS ──
+  //     Los cubos son exclusivos: rechazar saca de favoritos. `reject` se guarda `wasFavorite`
+  //     antes justo para reponerlo. Sin esa línea, deshacer deja el anuncio en "sin ver": el
+  //     usuario recupera el anuncio y pierde que lo tenía guardado, y no hay un segundo deshacer.
+  {
+    const b = await loaded();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); render()');
+    ev(b, 'reject("a1", "Ford Focus")');
+    ok(bucket(b, "rejected").includes("a1"), "reject() no rechazó");
+    ok(!bucket(b, "favorite").includes("a1"), "rechazar no sacó el anuncio de favoritos");
+    b.q("#undo").click();
+    ok(!bucket(b, "rejected").includes("a1"), "deshacer no sacó el anuncio de la papelera");
+    ok(bucket(b, "favorite").includes("a1"),
+      "deshacer el rechazo de un favorito no lo devuelve a favoritos: " + JSON.stringify(bucket(b, "favorite")));
+  }
+
+  // ── 58. restaurar desbloquea al vendedor, y deshacer lo vuelve a bloquear ──
+  //     `enforceBlocks` re-rechaza en cada render lo que sea de un vendedor bloqueado. Restaurar
+  //     sin desbloquear es un botón que no hace nada visible: el anuncio sale de la papelera y
+  //     vuelve sola en el render siguiente.
+  {
+    const b = await loaded();
+    const bloqueados = () => JSON.parse(b.store.wp_blocksel || "[]");
+    ev(b, 'rejected.add("a1"); save("wp_rejected", rejected); blockSel.add("Ana"); saveBlockSel(); render()');
+    ok(bloqueados().includes("Ana"), "el vendedor no quedó bloqueado");
+    ev(b, 'restore("a1")');
+    ok(!bloqueados().includes("Ana"),
+      "restaurar no desbloqueó al vendedor: enforceBlocks lo devuelve a la papelera solo");
+    ok(!bucket(b, "rejected").includes("a1"), "el anuncio restaurado volvió a la papelera");
+    b.q("#undo").click();
+    ok(bloqueados().includes("Ana"), "deshacer la restauración no volvió a bloquear al vendedor");
+  }
+
+  // ── 59. deshacer un swipe repone el sello PREVIO, no uno nuevo ──
+  //     `stamp[k]` es cuándo se clasificó ("descartado hace 3 días"). `fling` se lo guarda y
+  //     `swUndo` lo repone; dos líneas en dos extremos, ninguna con check. Rotas, deshacer deja
+  //     un sello de hoy sobre uno viejo, o deja sello en un anuncio que vuelve a "sin ver".
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    const k = ev(b, "key(deck[0])");
+    const sello = () => ev(b, "stamp[" + JSON.stringify(k) + "]");
+
+    // (a) la carta ya tenía sello viejo: vuelve ese, no el de ahora
+    ev(b, "stamp[" + JSON.stringify(k) + '] = 111; setLS("wp_stamp", JSON.stringify(stamp))');
+    b.q("#swYes").click();
+    ok(sello() !== 111, "clasificar no refrescó el sello");
+    await tick(300);
+    b.q("#swUndo").click();
+    ok(sello() === 111, "deshacer el swipe no repuso el sello previo: " + sello());
+  }
+  {
+    const b = await loaded();
+    b.q("#swipeFab").click();
+    const k = ev(b, "key(deck[0])");
+    const sello = () => ev(b, "stamp[" + JSON.stringify(k) + "]");
+
+    // (b) la carta no tenía sello: no puede quedarse uno
+    ok(sello() === undefined, "la carta arrancó con sello");
+    b.q("#swNo").click();
+    ok(sello() !== undefined, "clasificar no dejó sello");
+    await tick(300);
+    b.q("#swUndo").click();
+    ok(sello() === undefined, "deshacer dejó un sello en un anuncio que vuelve a 'sin ver': " + sello());
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 
