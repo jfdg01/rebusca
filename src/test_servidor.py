@@ -6,7 +6,7 @@ enrutado, cabeceras, mime, 404 y traversal.
 
     python3 src/test_servidor.py
 """
-import contextlib, http.client, io, os, subprocess, sys, threading
+import contextlib, http.client, io, os, socket, subprocess, sys, threading, time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -36,6 +36,30 @@ def req(port, path, method="GET", headers=None):
     body = r.read()
     c.close()
     return r.status, r.headers, body   # r.headers busca sin distinguir mayúsculas
+
+
+def libre():
+    """Un puerto que ahora mismo no usa nadie. El kernel lo elige, se suelta y se pasa al
+    proceso hijo: la carrera dura microsegundos y no hay número fijo que chocar con el 8000
+    del usuario ni con el 8123 de las pruebas a mano."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def espera(p, port, intentos=100):
+    """El estado de la portada en cuanto el hijo escuche, o None si se murió o no llegó.
+    El bind tarda unas décimas: pedirla a la primera falla siempre."""
+    for _ in range(intentos):
+        if p.poll() is not None:
+            return None
+        try:
+            return req(port, "/")[0]
+        except OSError:
+            time.sleep(0.05)
+    return None
 
 
 def main():
@@ -198,6 +222,31 @@ def main():
                            capture_output=True, text=True, timeout=30)
         assert r.returncode == 0 and r.stdout.strip() == "200", \
             "la portada falla con el locale en C: " + (r.stderr[-300:] or r.stdout)
+
+        # ── 10. el arranque de verdad: `python3 servidor.py [puerto]` ──
+        #        Todo lo de arriba monta `servidor.H` a mano. El bloque `__main__` — el env
+        #        `PORT`, el argumento posicional y el bind de `ThreadingHTTPServer` — es lo
+        #        único que corre en el VPS, y no lo medía nadie. Aquí se levanta el proceso
+        #        entero, como lo levanta systemd, y se le pide la portada.
+        for con_arg in (True, False):
+            puerto, otro = libre(), libre()
+            args = [str(puerto)] if con_arg else []
+            # el que NO manda va cruzado a propósito: si el server escuchara en él, la portada
+            # no aparece en `puerto` y esto falla. El argumento posicional gana al env.
+            env = dict(os.environ, PORT=str(otro if con_arg else puerto))
+            p = subprocess.Popen([sys.executable, str(HERE / "servidor.py")] + args, cwd=HERE,
+                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                 text=True)
+            try:
+                assert espera(p, puerto) == 200, \
+                    ("el argumento posicional" if con_arg else "PORT") + " no manda: nadie sirve la portada"
+            finally:
+                p.kill()
+                p.wait(timeout=10)
+        # `demo` no es un puerto: sin su rama, `int("demo")` revienta el arranque
+        r = subprocess.run([sys.executable, str(HERE / "servidor.py"), "demo"], cwd=HERE,
+                           capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0 and r.stdout.strip() == "ok", (r.returncode, r.stdout, r.stderr[-300:])
 
         print("ok")
     finally:
