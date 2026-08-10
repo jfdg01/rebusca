@@ -2067,6 +2067,76 @@ async function main() {
       "destildar la última categoría deja el cajón vacío en el almacén: " + b.store.wp_catexcl);
   }
 
+  // ── 73. renombrar una búsqueda: recortar, cancelar y quitar ──
+  //     El check 21 mide que renombrar guarda algo. Aquí se mide QUÉ guarda en los tres casos
+  //     que no son "el usuario escribe un nombre bueno".
+  {
+    const b = await loaded({ prompt: "  Mi coche  " });
+    b.q("#manageSearches").click();
+    const card = () => b.q("#searchesList").children[0];
+    const apodo = () => JSON.parse(b.store.wp_alias || "{}")["ford.csv"];
+
+    card().querySelector(".sc-ren").click();
+    ok(apodo() === "Mi coche", "el apodo no se guardó recortado: " + JSON.stringify(apodo()));
+    ok(String(card().querySelector(".sc-kw").textContent) === "Mi coche",
+      "el apodo no manda como título de la tarjeta: " + card().querySelector(".sc-kw").textContent);
+    ok(String(card().querySelector(".sc-realkw").textContent) === "ford",
+      "la tarjeta con apodo no enseña el término real, y ya no hay forma de saber qué se busca");
+
+    b.sandbox.prompt = () => null; // canceló
+    card().querySelector(".sc-ren").click();
+    ok(apodo() === "Mi coche", "cancelar el renombrado cambió el apodo: " + JSON.stringify(apodo()));
+
+    b.sandbox.prompt = () => "   "; // en blanco = quitar el apodo
+    card().querySelector(".sc-ren").click();
+    ok(apodo() === undefined, "un nombre en blanco no quita el apodo, lo deja vacío: " + JSON.stringify(apodo()));
+    ok(String(card().querySelector(".sc-kw").textContent) === "ford",
+      "quitado el apodo, la tarjeta no vuelve al término real: " + card().querySelector(".sc-kw").textContent);
+  }
+
+  // ── 74. el filtro del gestor: por apodo, por término real, y sin depender del acento ──
+  {
+    const b = await loaded({ prompt: "Mi Bañera" });
+    b.q("#manageSearches").click();
+    b.q("#searchesList").children[0].querySelector(".sc-ren").click();
+    const filtrar = (v) => {
+      b.q("#searchesFilter").dispatch("input", { target: { value: v } });
+      return b.q("#searchesList").children.length;
+    };
+    ok(filtrar("bañera") === 1, "el filtro del gestor no encuentra por apodo");
+    ok(filtrar("ford") === 1, "el filtro del gestor no encuentra por el término real cuando hay apodo");
+    ok(filtrar("BAÑERA") === 1, "el filtro del gestor distingue mayúsculas");
+    ok(filtrar("banera") === 1, "el filtro del gestor distingue acentos: escribir sin tilde no encuentra nada");
+    ok(filtrar("zzz") === 0, "el filtro del gestor encuentra lo que no hay");
+  }
+
+  // ── 75. el orden del gestor: sin ver arriba, y luego lo tocado más recientemente ──
+  //     Es lo primero que se ve al abrir el gestor y no lo medía nadie.
+  {
+    const b = await loaded();
+    const guardadas = JSON.stringify([
+      { csv: "ford.csv", rows: 3, mtime: 100 },
+      { csv: "vespa.csv", rows: 2, mtime: 200 },
+    ]);
+    const orden = () => {
+      ev(b, "renderSearches()");
+      return b.q("#searchesList").children.map((c) => String(c.querySelector(".sc-kw").textContent)).join();
+    };
+    // el scrape del arranque deja su propia huella (wp_lastseen y csvIndex de ford): se limpia
+    // para que el escenario sea el del contrato y no el residuo del boot
+    ev(b, 'setLS("wp_searches", ' + JSON.stringify(guardadas) + ');setLS("wp_lastseen", "{}");csvIndex = {}');
+    b.q("#manageSearches").click();
+    ok(orden() === "vespa,ford", "la búsqueda scrapeada más recientemente no sale la primera: " + orden());
+
+    // abrir una búsqueda cuenta como tocarla: wp_lastseen manda sobre el mtime del scrape
+    ev(b, 'setLS("wp_lastseen", JSON.stringify({ "ford.csv": 999000 }))');
+    ok(orden() === "ford,vespa", "abrir una búsqueda no la sube: solo cuenta la fecha del scrape, " + orden());
+
+    // y las que tienen anuncios sin ver van por delante de todo lo demás
+    ev(b, 'csvIndex["vespa.csv"] = { ts: 1, ids: ["nuevo"] }');
+    ok(orden() === "vespa,ford", "la búsqueda con anuncios sin ver no sube al principio: " + orden());
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 
