@@ -460,6 +460,48 @@ async function main() {
       "el modo incluir no conserva solo las marcadas");
   }
 
+  // ── 7e. lo que el blob de estado tiene que sobrevivir a una recarga ──
+  {
+    // el sello de hora: es lo que pinta "Rechazado hace 3 días" en la papelera. Vive en el blob
+    // y en su clave espejo, y hasta ahora nadie miraba que volviera.
+    const b = await boot({ wp_estado: JSON.stringify({ stamp: { "k1": 1234 } }) }, { csv: CSV, timers: true });
+    ok(ev(b, 'stamp["k1"]') === 1234, "el sello de hora no vuelve del blob: " + ev(b, "JSON.stringify(stamp)"));
+
+    // y al revés: clasificar tiene que dejar el sello escrito en el blob
+    const b2 = await loaded();
+    ev(b2, 'rejected.add("a1"); stampNow("a1"); saveBuckets(); pushEstado()');
+    const blob = JSON.parse(b2.store.wp_estado || "{}");
+    ok(blob.stamp && blob.stamp.a1, "el sello de hora no llega al blob: " + JSON.stringify(blob.stamp));
+
+    // los vendedores bloqueados: sus anuncios van solos a la papelera, presentes y futuros.
+    // Si la lista no vuelve tras recargar, el vendedor bloqueado reaparece entero.
+    const b3 = await boot({ wp_blocksel: JSON.stringify(["v-ana"]) }, { csv: CSV, timers: true });
+    ok(ev(b3, 'blockSel.has("v-ana")') === true,
+      "la lista de vendedores bloqueados no vuelve: " + ev(b3, "JSON.stringify([...blockSel])"));
+    // el vaciado previo solo se ve en la SEGUNDA carga: en la primera la lista ya venía vacía.
+    // Sin él, desbloquear a un vendedor en otra pestaña no lo desbloquea aquí.
+    ev(b3, 'localStorage.setItem("wp_blocksel", JSON.stringify(["v-otro"]))');
+    await ev(b3, "hydrateEstado()");
+    ok(ev(b3, 'blockSel.has("v-ana")') === false && ev(b3, "blockSel.size") === 1,
+      "la lista de bloqueados se rellena sin vaciarse antes: " + ev(b3, "JSON.stringify([...blockSel])"));
+
+    // los cubos son exclusivos POR CAJÓN y la papelera gana. Un id en los dos cubos sale en las
+    // dos listas, y el usuario ve el mismo anuncio como favorito y como rechazado a la vez.
+    const b4 = await loaded();
+    ev(b4, 'localStorage.setItem("wp_rejected", JSON.stringify({ x: ["k1"] }));' +
+      ' localStorage.setItem("wp_favorite", JSON.stringify({ x: ["k1", "k2"], y: ["k3"] }))');
+    await ev(b4, "hydrateEstado()");
+    ok(ev(b4, 'buckets.rejected.x.has("k1")') === true, "la papelera perdió el id al reconciliar");
+    ok(ev(b4, 'buckets.favorite.x.has("k1")') === false,
+      "un id está en la papelera Y en favoritos: gana favoritos, no la papelera");
+    ok(ev(b4, 'buckets.favorite.x.has("k2")') === true,
+      "la reconciliación se llevó un favorito que no estaba en la papelera");
+    // el cajón "y" solo existe en favoritos: no hay papelera contra la que chocar. Sembrado para
+    // medir el mutante que recorre solo los cajones de la papelera; sale igual, es equivalente.
+    ok(ev(b4, 'buckets.favorite.y.has("k3")') === true,
+      "un cajón que solo tiene favoritos pierde el favorito al reconciliar");
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
