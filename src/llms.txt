@@ -154,11 +154,39 @@ Ejemplo de respuesta a "un buen sofá de 3 plazas barato":
 2. **Filtro automático**: tus `excl`/`maxp`/`maxd` y su filtro "lejos sin envío" dejan fuera
    la morralla sin que nadie la mire.
 3. **"COPIAR PARA IA"**: copia al portapapeles los anuncios **sin clasificar** que quedan (hasta
-   60; el texto dice cuántos hay en total y en qué orden van) y los pega en el chat sin haber
+   60; si hay más, van **60 al azar** y el texto lo dice) y los pega en el chat sin haber
    mirado ninguno.
 4. **Tú los cribas** y **empiezas** tu respuesta con el enlace `?keep=`.
 5. **Un toque**: al abrirlo, los que conservas pasan a favoritos, el resto del lote se rechaza,
    y él ya solo mira lo que has salvado.
+6. **Y arreglas la búsqueda** (paso 6, abajo): si el ruido tenía un patrón, cierras con un
+   segundo enlace `?q=…` afinado y el ciclo vuelve a empezar más limpio.
+
+## Paso 6: afinar la búsqueda con lo que acabas de descartar
+
+Los 60 que te llegan son una **muestra al azar** del mazo, precisamente para que veas de qué
+está hecho el ruido y no solo lo más barato o lo más nuevo. Si al cribar descartas cosas de otra
+familia de producto (busca poleas de gimnasio y salen máquinas de coser, patinetes, bujías), el
+problema **no es ese lote: es la query**. Cribar a mano lo mismo cada semana es trabajo perdido.
+
+El pegado incluye la **URL exacta** que trajo esos anuncios, con todos sus parámetros. Trabaja
+sobre ella y devuélvela corregida al final de tu respuesta, como enlace markdown pulsable
+(*"Afinar la búsqueda"*), después del análisis:
+
+- `q`: añade los modelos/sinónimos que faltan; si una palabra atrae otra familia entera,
+  reformúlala o acótala con `title=1`.
+- `excl`: la lista **completa**, no el delta. Repite las palabras que ya llevaba y suma las
+  nuevas: si cambias la `q`, es **otra búsqueda** y no hereda nada de la anterior.
+- `maxp`/`maxd`: solo si el ruido es de precio o de anuncios viejos.
+
+Una línea de qué has quitado y por qué. **Si la búsqueda ya está limpia** y lo que sobra es cosa
+suelta, dilo en una línea y **no des enlace**: repetir la búsqueda por nada le cuesta tiempo.
+
+Ojo con pasarse: cada palabra en `excl` esconde también lo bueno que la mencione de refilón
+(`motor` tapa una multiestación que diga "sin motor"). Ante la duda, deja la palabra fuera —
+sobre todo porque **quitarla luego por enlace no se puede**: el `excl` de un enlace se **suma**
+al que ya tenía esa búsqueda. Si sospechas que una exclusión suya sobra, dile que la borre a mano
+(chip de la palabra, en el menú de filtros).
 
 **Ruta manual** (cuando él sí controla del tema): tría en el mazo tipo Tinder — derecha =
 *Favorito*, izquierda = *Rechazado*, con Deshacer — y luego usa "Copiar favoritos para IA" para
@@ -254,7 +282,8 @@ Si una búsqueda devuelve demasiada morralla, recuérdale que la app puede **exc
 (`funda`, `roto`, `piezas`), **excluir por categoría** (o quedarse solo con una), **poner topes
 de precio / antigüedad / distancia** a esa búsqueda, **bloquear a un vendedor** entero (tiendas y
 revendedores que repiten) y **ocultar lo "lejos sin envío"**. Casi siempre es mejor arreglarlo en
-la `q` del enlace, con `excl`, `title=1` y `maxp`/`maxd`.
+la `q` del enlace, con `excl`, `title=1` y `maxp`/`maxd`. Cuando el ruido lo has visto tú en un
+lote pegado, no se lo expliques: mándale el enlace corregido (ver *Paso 6*).
 
 ## Búsquedas guardadas
 

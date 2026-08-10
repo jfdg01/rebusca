@@ -279,18 +279,45 @@ async function main() {
     ev(b, 'selectQueryUI("otra.csv")'); // el usuario cambia de búsqueda mientras se copia
     await flush();
     // y el texto lo dice: la IA tiene que saber que ve un tope, no el mazo entero
-    ok(/60 anuncios de 70 sin clasificar/.test(b.spy.copied[0]),
+    ok(/60 anuncios \(muestra al azar de 70 sin clasificar\)/.test(b.spy.copied[0]),
       "el prompt no avisa de que solo van 60 de 70: " + b.spy.copied[0].slice(0, 300));
     const lote = JSON.parse(b.store.wp_aisent || "{}");
     ok(lote.ids.length === 60,
       "el lote anotado no es el copiado (tope UNSEEN_CAP): " + lote.ids.length + " ids");
-    ok(lote.ids[59] === "m59" && !lote.ids.includes("m60"),
-      "el lote anotado no son los primeros 60 del mazo: acaba en " + lote.ids[59]);
+    // muestra, no la cabeza del mazo: 60 ids distintos, todos del mazo y en su orden
+    const nOf = (id) => +id.slice(1);
+    ok(new Set(lote.ids).size === 60 && lote.ids.every((id) => nOf(id) >= 0 && nOf(id) < 70),
+      "el lote anotado no es una muestra del mazo: " + lote.ids.slice(0, 5).join(","));
+    ok(lote.ids.every((id, i) => i === 0 || nOf(lote.ids[i - 1]) < nOf(id)),
+      "la muestra rompió el orden del mazo: " + lote.ids.slice(0, 5).join(","));
     ok(lote.csv === "ford.csv",
       "el lote quedó etiquetado con la búsqueda a la que se cambió, no con la de origen: " + lote.csv);
     // el veredicto puede llegar en otra sesión, sin CSV cargado: la ficha tiene que estar cacheada
-    ok(ev(b, 'rowCache["m0"] && rowCache["m0"].titulo') === "Ford 0",
+    const uno = lote.ids[0]; // el primero DE LA MUESTRA: con muestreo, "m0" puede no haber salido
+    ok(ev(b, `rowCache[${JSON.stringify(uno)}] && rowCache[${JSON.stringify(uno)}].titulo`) ===
+      "Ford " + nOf(uno),
       "el lote enviado no dejó su ficha en rowCache: sin ella el ?keep= no encuentra las filas");
+  }
+
+  // ── 5c. el prompt lleva la búsqueda ENTERA, no solo la q ──
+  // Sobre esa URL construye la IA el enlace que AFINA la búsqueda. Si le faltan las exclusiones
+  // o los topes que ya tengo puestos, me devuelve un filtro que borra lo andado y el bucle no
+  // avanza: cada vuelta vuelve a traer el mismo ruido que la anterior ya había quitado.
+  {
+    const b = await loaded({
+      store: {
+        wp_excl: JSON.stringify({ "ford.csv": ["roto", "piezas"] }),
+        wp_lim: JSON.stringify({ "ford.csv": { precio: 600 } }),
+      },
+    });
+    b.q("#titleOnly").checked = true;
+    b.q("#copyDeck").click();
+    await flush();
+    const t = b.spy.copied[0];
+    const url = (t.match(/https:\/\/\S*\?q=ford\S*/) || [])[0] || "";
+    ok(/title=1/.test(url) && /excl=roto%2Cpiezas/.test(url) && /maxp=600/.test(url),
+      "el prompt no lleva la búsqueda entera (excl/title/maxp): " + (url || "no hay URL con ?q="));
+    ok(t.includes("Afinar la búsqueda"), "el prompt no pide el enlace de la búsqueda afinada");
   }
 
   // ── 5bis. el viaje de ida y vuelta: los ids que salen en las fichas vuelven en el ?keep= ──

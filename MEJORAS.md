@@ -165,6 +165,24 @@ sin que nadie lo viera, porque el fichero no estaba en la lista de comandos de `
   Validado rompiendo `src/scrape.js` a propósito: 4 de 7 en rojo, exit 1, y revertido.
   Sin GitHub Actions: el repo no tiene remoto de CI y sería otra pieza que mantener.
 
+- [ ] **Revisar el bucle de afinar la búsqueda** (añadido el 2026-08-11, con la feature
+  recién puesta). La IA recibe ahora una muestra al azar del mazo y la URL entera de la
+  búsqueda, y devuelve un segundo enlace `?q=…` con la query corregida. Está probado con
+  los checks, no con uso real. Lo que hay que mirar cuando lleve unas cuantas vueltas:
+  - **Copiar dos veces manda dos lotes DISTINTOS.** `wp_aisent` guarda solo el último, así
+    que pegar la respuesta del primero rechaza anuncios que esa respuesta nunca vio. Antes
+    no pasaba: los dos lotes eran los mismos 60 primeros. Es el riesgo real que introdujo
+    el muestreo. Arreglo probable: no re-muestrear si el mazo no ha cambiado desde la
+    última copia, o avisar al copiar por segunda vez.
+  - **Quitar una exclusión no se puede por enlace**: el `excl` de un deep-link se suma al
+    del cajón (`app.js`, `fromURL`). Si la IA se pasa de celosa, el usuario tiene que
+    borrar el chip a mano. Documentado en `llms.txt`, sin arreglar.
+  - El bloque de afinar se cuela también en «copiar favoritos» y en el PDF dossier, donde
+    no aporta. Se dejó así por no meter un flag en tres llamadas; si molesta, es trivial.
+  - `URLSearchParams` encodea las comas (`excl=roto%2Cpiezas`). Funciona, se lee peor.
+  - Sin medir: si la IA de verdad devuelve el enlace afinado y si converge en 2-3 vueltas
+    o se queda dando tumbos. Eso solo lo dice el uso.
+
 ## Verificado y limpio
 
 Estas zonas se auditaron y no tienen defecto. No son «sin mirar».

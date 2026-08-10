@@ -3120,20 +3120,58 @@ const LINK_RULES = (n) =>
   "así que sé selectivo: incluye solo los que de verdad recomendarías comprar. Los ids son los [#...] de las " +
   "fichas de abajo, copiados enteros y literales: son códigos opacos, no los acortes, no cambies mayúsculas, " +
   "no uses ninguno que no esté abajo y no te inventes ninguno. Van separados por comas, sin espacios y sin la " +
-  "almohadilla. No añadas ?q=: me obligaría a repetir la búsqueda.";
+  "almohadilla. A ESE enlace no le añadas ?q=: me obligaría a repetir la búsqueda entera (el enlace de " +
+  "la búsqueda afinada, si hace falta, es otro y va al final).";
 console.assert(
   LINK_RULES(7).includes("?keep=<ids que conservarías>") && LINK_RULES(7).includes("resto de los 7"),
   "LINK_RULES roto",
 );
 // instrucción de cabecera para la IA (la misma para el texto de "copiar" y para el PDF dossier)
 // `total` > n avisa de que solo va un tope del mazo (UNSEEN_CAP), no todo.
+// La búsqueda EXACTA que estoy viendo, como URL. Sin ella la IA solo sabía la `q` y la frescura:
+// para afinar tenía que adivinar el resto del filtro, y su enlace nuevo llegaba sin las palabras
+// que yo ya había excluido. Las categorías vetadas no caben en la URL y van aparte, en texto.
+function queryURL() {
+  const { kw, since } = queryParts(loadedCsv || "");
+  if (!kw) return "";
+  const p = new URLSearchParams({ q: kw });
+  if (since) p.set("since", since);
+  if ($("#titleOnly").checked) p.set("title", "1");
+  const ex = exclTerms();
+  if (ex.length) p.set("excl", ex.join(","));
+  const lim = limits();
+  if (lim.precio) p.set("maxp", lim.precio);
+  if (lim.dias) p.set("maxd", lim.dias);
+  return location.origin + location.pathname + "?" + p;
+}
+// Segunda vuelta del bucle: la criba de arriba arregla ESTE lote, esto arregla la BÚSQUEDA. El
+// ruido que la IA acaba de descartar es justo la prueba de qué sobra en la query.
+const REFINE_RULES = (url, cats) =>
+  "\n\nY al final del todo, después del análisis, mira el ruido en conjunto: si lo que sobra se repite " +
+  "por un motivo (aparece otra familia de productos, accesorios, recambios, piezas), la búsqueda está mal " +
+  "y quiero arreglarla, no volver a cribarla a mano.\n\n" +
+  `Esta es la búsqueda que ha traído estos anuncios: ${url}\n` +
+  (cats.length ? `Además tengo vetadas estas categorías en la app: ${cats.join(", ")}.\n` : "") +
+  "Devuélvemela corregida como un segundo enlace markdown pulsable, **[Afinar la búsqueda](...)**, con la " +
+  "misma dirección y los mismos parámetros de arriba, cambiando lo que haga falta: `q` si faltan modelos o " +
+  "sinónimos, `title=1` si la palabra ensucia en las descripciones, `maxp`/`maxd` si procede, y sobre todo " +
+  "`excl` con la lista COMPLETA — repite las palabras que ya lleva y añade las nuevas, porque si cambias la " +
+  "`q` es una búsqueda nueva y no hereda nada. Una línea diciendo qué has quitado y por qué.\n\n" +
+  "Si con lo que ves la búsqueda ya está limpia y el ruido es solo cosa suelta, dime eso en una línea y no " +
+  "me des el enlace: repetirla no me aporta nada.";
+console.assert(
+  REFINE_RULES("https://r/?q=a&excl=roto", []).includes("https://r/?q=a&excl=roto") &&
+    !REFINE_RULES("https://r/?q=a", []).includes("categorías") &&
+    REFINE_RULES("https://r/?q=a", ["Coches", "Motos"]).includes("Coches, Motos"),
+  "REFINE_RULES roto",
+);
 const promptIntro = (n, total) => {
   const { kw, since } = queryParts(loadedCsv || "");
   return (
     "Lee https://rebusca.dibogomez.com/llms.txt antes de responder: es la guía de Rebusca (gramática de " +
     "búsqueda y formato de los enlaces con los que me contestas).\n\n" +
     (kw ? `He buscado "${kw}" en Wallapop con Rebusca (frescura: ${SINCE_LABEL[since] || "cualquiera"}). ` : "") +
-    `Abajo van ${n} anuncios${total > n ? ` de ${total} sin clasificar` : ""}, ordenados por ${ordenLabel()}. ` +
+    `Abajo van ${n} anuncios${total > n ? ` (muestra al azar de ${total} sin clasificar)` : ""}, ordenados por ${ordenLabel()}. ` +
     "No sé de marcas, ni de modelos, ni de qué es un precio justo aquí: la criba la haces tú.\n\n" +
     "Saca el modelo o versión exacta de cada uno por el título + la descripción, no opines solo por el título, " +
     "y compáralo con su precio típico nuevo y de segunda mano. Compara siempre contra el «precio para mí». " +
@@ -3143,7 +3181,8 @@ const promptIntro = (n, total) => {
     "tiene (reservado, anuncio viejo, sin envío y lejos), a qué precio regatear y qué preguntar al vendedor. " +
     "Máximo 3, ordenados de mejor a peor (si no hay ninguno decente, ninguno y me lo dices).\n" +
     "- De los DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno.\n\n" +
-    LINK_RULES(n)
+    LINK_RULES(n) +
+    (queryURL() ? REFINE_RULES(queryURL(), catExclTerms()) : "")
   );
 };
 // ficha de un anuncio para la IA: id + título + precios + señales de decisión + enlace + descripción.
@@ -3198,9 +3237,33 @@ function toClipboard(t) {
 }
 // copia un lote de filas como prompt para la IA y lo registra (wp_aisent): su veredicto
 // vuelve como enlace ?keep=<ids> que conserva esos como favoritos y rechaza el resto del lote.
+// muestra al azar cuando el mazo no cabe en el pegado. La cabeza del orden activo (por precio,
+// por fecha) no representa lo que hay: con el mazo ordenado por precio la IA solo veía lo barato
+// y no se enteraba de que media búsqueda eran bujías, así que no podía afinar la query.
+// Conserva el orden del mazo (filter), para que el "ordenados por ..." del prompt siga siendo cierto.
+function sample(rows, n) {
+  if (rows.length <= n) return rows;
+  const idx = rows.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  const keep = new Set(idx.slice(0, n));
+  return rows.filter((_, i) => keep.has(i));
+}
+console.assert(
+  (() => {
+    const all = Array.from({ length: 40 }, (_, i) => i);
+    const s = sample(all, 10);
+    return sample(all, 40) === all && sample(all, 99) === all && s.length === 10 &&
+      new Set(s).size === 10 && s.every((v) => all.includes(v)) &&
+      s.every((v, i) => i === 0 || s[i - 1] < v); // orden del mazo intacto
+  })(),
+  "sample roto",
+);
 function copyForAI(btn, all, vacio) {
   if (!all.length) return snack(vacio, null);
-  const rows = all.slice(0, UNSEEN_CAP);
+  const rows = sample(all, UNSEEN_CAP);
   const prev = btn.textContent;
   const originCsv = curDrawer(); // el cajón de AHORA: la copia es asíncrona y curCsv puede cambiar
   btn.disabled = true;
