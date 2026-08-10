@@ -391,6 +391,45 @@ async function main() {
     ok(fila.title === "a<b>c", "la fila del desplegable se quedó sin title: " + fila.title);
   }
 
+  // ── 7c. el precio y el chip de chollo de la tarjeta ──
+  // El `console.assert` de median() usa dígitos sueltos, y con dígitos sueltos el orden de texto
+  // y el de número coinciden. Aquí van precios de verdad, que es donde se separan.
+  {
+    const b = await loaded();
+    const med = (nums) => ev(b, `median(${JSON.stringify(nums)})`);
+
+    // 12 precios de distinta longitud. Ordenados a mano: 30 90 120 200 300 [400 500] 600 700 900
+    // 1000 2000 -> la mediana es (400+500)/2 = 450. Con `sort()` a secas el texto manda:
+    // "1000" < "120" < "2000" < "200" < "30" < ... y sale 350.
+    const PRECIOS = [1000, 200, 30, 2000, 90, 120, 400, 700, 300, 600, 500, 900];
+    ok(med(PRECIOS) === 450, "median ordena por texto, no por valor: " + med(PRECIOS));
+    ok(med([1000, 200, 30, 2000, 90, 120, 400, 700, 300]) === 300,
+      "median con un número impar de precios largos falla: " +
+        med([1000, 200, 30, 2000, 90, 120, 400, 700, 300]));
+
+    // dec1 con algo que no es un número: el texto tal cual, nunca "NaN€"
+    ok(ev(b, 'dec1("a consultar")') === "a consultar",
+      "un precio no numérico se pinta como NaN: " + ev(b, 'dec1("a consultar")'));
+    // el precio vacío no llega a dec1: la tarjeta lo corta antes y pinta una raya
+    const sinPrecio = ev(b, '(() => { const r = [...data[0]]; r[headers.indexOf("precio")] = "";' +
+      ' const e = document.createElement("div"); fillCard(e, r);' +
+      ' return e.querySelectorAll(".li-price")[0].textContent; })()');
+    ok(sinPrecio === "—", "un anuncio sin precio pinta un 0: " + sinPrecio);
+
+    // dealOff: un anuncio a 0 € no es el chollo del lote, es un anuncio sin precio
+    ev(b, "medianPrice = 550");
+    ok(ev(b, 'dealOff("0")') === 0, "un anuncio a 0 € sale con chip de chollo: " + ev(b, 'dealOff("0")'));
+    ok(ev(b, 'dealOff("100")') === 82, "el chollo de verdad no saca chip: " + ev(b, 'dealOff("100")'));
+
+    // los dos lados del `if` del envío: con envío el precio final, en mano el anunciado tal cual.
+    // a1 va sin envío y a3 con envío, los dos a precios distintos.
+    const chip = (i) =>
+      ev(b, `(() => { const e = document.createElement("div"); fillCard(e, data[${i}]);` +
+        ' return e.querySelectorAll(".li-price")[0].textContent; })()');
+    ok(chip(0) === "1000€", "la tarjeta sin envío le suma la comisión al precio: " + chip(0));
+    ok(chip(2) === "57,7€", "la tarjeta con envío no pinta el precio final: " + chip(2));
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
