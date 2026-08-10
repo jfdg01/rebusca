@@ -149,3 +149,12 @@ Se leen antes de escribir un check, no después.
 - Un check contra un presupuesto pide dos aserciones: la que mide, y la que comprueba que el
   presupuesto dejó pasar lo que tenía que dejar pasar (it44).
 - Un mutante sobre una llamada mide un sitio. Para medir la regla, muta su definición (it44).
+- Cuando el reloj corta un barrido, se actúa sobre lo medido y el mutador se guarda **en el
+  repo** (`iteraciones/NN-mutantes.py`). La F1 de la iteración siguiente costó dos minutos
+  porque nadie tuvo que volver a pensarla (it46 → it47).
+- Un separador que produce huecos vacíos convierte «filtra por estos ids» en «no filtra». Un
+  `filter(Boolean)` que falta no lo ve ningún check de camino feliz (it46).
+- Un filtro que solo tiene sentido en una vista necesita un check en la OTRA vista. El check de
+  la vista buena no distingue «filtra donde debe» de «filtra en todas partes» (it47).
+- Un bloque que deja puesto un filtro se lleva por delante los bloques de después. Lo que el
+  check ensucia, el check lo limpia al salir (it46).
