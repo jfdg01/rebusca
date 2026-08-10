@@ -502,6 +502,41 @@ async function main() {
       "un cajón que solo tiene favoritos pierde el favorito al reconciliar");
   }
 
+  // ── 7f. las tres puertas por las que el estado cargado se queda a medias ──
+  {
+    const b = await loaded();
+
+    // 1. las vars `rejected`/`favorite` apuntan a un cajón. Cargar el estado sin reapuntarlas
+    // deja al usuario mirando los cubos del cajón anterior.
+    ev(b, 'localStorage.setItem("wp_rejected", JSON.stringify({ [curDrawer()]: ["z9"] }))');
+    await ev(b, "hydrateEstado()");
+    ok(ev(b, 'rejected.has("z9")') === true,
+      "tras cargar el estado los cubos no apuntan al cajón activo: " + ev(b, "JSON.stringify([...rejected])"));
+
+    // 2. una clave espejo dañada NO se tapa con el blob. Taparla esconde el aviso de datos
+    // dañados, y el usuario cree que su estado está entero cuando ya perdió una parte.
+    const b2 = await boot(
+      { wp_stamp: "", wp_estado: JSON.stringify({ stamp: { k1: 1234 } }) },
+      { csv: CSV, timers: true },
+    );
+    ok(ev(b2, 'stamp.k1') === undefined,
+      "una clave espejo vacía cae al blob y se come el aviso de datos dañados: " + ev(b2, "JSON.stringify(stamp)"));
+
+    // 3. los topes de dos csv del mismo cajón chocan al fundirse, y gana el primero. Al revés,
+    // el tope de «ford--semana» pisaría el de «ford», que es el que el usuario puso.
+    const b3 = await boot(
+      { wp_lim: JSON.stringify({ "ford.csv": { precio: 100 }, "ford--semana.csv": { precio: 200 } }) },
+      { csv: CSV, timers: true },
+    );
+    ok(ev(b3, 'limMap["ford.csv"].precio') === 100,
+      "al fundir los topes por cajón gana el csv acotado, no el del cajón: " + ev(b3, "JSON.stringify(limMap)"));
+
+    // 4. un blob que no es un objeto no puede tumbar el arranque. Sembrado para medir el
+    // mutante que quita la guardia `obj(e)`: sale igual, es equivalente.
+    const b4 = await boot({ wp_estado: '"texto"' }, { csv: CSV, timers: true });
+    ok(b4.errs.length === 0, "un wp_estado que no es objeto rompe el arranque: " + b4.errs.join(" | "));
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
