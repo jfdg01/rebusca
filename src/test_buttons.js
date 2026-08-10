@@ -1961,6 +1961,33 @@ async function main() {
       "dropCsvCache dejó el texto huérfano en IndexedDB: " + (await ev(b, 'idb.get("csv:vespa.csv")')));
   }
 
+  // ── 68. bloquear a un vendedor rechaza sus anuncios, los saca de favoritos, y se guarda ──
+  //     Sin sacarlos de favoritos el anuncio queda en los dos cubos a la vez, y los dos
+  //     contadores mienten. Sin guardar, el bloqueo dura hasta que cierras la pestaña.
+  {
+    const b = await loaded();
+    const suyos = ev(b, 'data.filter((r) => col(r, "vendedor") === "Ana").map((r) => key(r))');
+    ok(suyos.length > 0, "el CSV de prueba no trae anuncios de Ana");
+    ev(b, "favorite.add(" + JSON.stringify(suyos[0]) + '); save("wp_favorite", favorite)');
+    ev(b, 'blockSel.add("Ana"); saveBlockSel(); render()');
+    for (const k of suyos) ok(bucket(b, "rejected").includes(k), "bloquear no rechazó " + k);
+    ok(!bucket(b, "favorite").includes(suyos[0]),
+      "bloquear no sacó de favoritos: el anuncio está en los dos cubos, " + JSON.stringify(bucket(b, "favorite")));
+  }
+
+  // ── 69. el bloqueo no vuelve a sellar lo que ya estaba rechazado ──
+  //     enforceBlocks corre en CADA render. Sin la guarda, "descartado hace 3 días" vuelve a
+  //     ser "hace un momento" cada vez que se pinta la pantalla.
+  {
+    const b = await loaded();
+    const k = ev(b, 'data.filter((r) => col(r, "vendedor") === "Ana").map((r) => key(r))')[0];
+    ev(b, 'blockSel.add("Ana"); saveBlockSel(); render()');
+    ok(bucket(b, "rejected").includes(k), "el bloqueo no rechazó el anuncio");
+    ev(b, "stamp[" + JSON.stringify(k) + '] = 111; setLS("wp_stamp", JSON.stringify(stamp)); render()');
+    ok(ev(b, "stamp[" + JSON.stringify(k) + "]") === 111,
+      "el bloqueo re-sella en cada render lo ya rechazado: la antigüedad del descarte se reinicia sola");
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

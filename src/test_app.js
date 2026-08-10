@@ -812,12 +812,50 @@ async function main() {
   if (!/2 búsquedas/.test(String(bd.q("#snackmsg").textContent)))
     fail("?fav= repartido no dijo en cuántas búsquedas cayó, el snack dijo: " + bd.q("#snackmsg").textContent);
 
+  // 9e. los ids del enlace llegan con "#" (así se pegan en el filtro de las listas, y así los
+  //     devuelve la IA). Sin recortarla, ningún id casa: el veredicto no aplica nada y, peor,
+  //     ?keep manda el lote ENTERO a la papelera porque ningún conservado se reconoce.
+  const al = {
+    wp_rows: JSON.stringify({ a1: { id: "a1", _csv: "ps4.csv" }, a2: { id: "a2", _csv: "ps4.csv" } }),
+    wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }),
+  };
+  errs = await bootErrs(al, { search: "?keep=%23a1" });
+  if (errs.length) fail("?keep con almohadilla lanzó: " + (errs[0].message || errs[0]));
+  if (al.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep=#a1: no se quitó la almohadilla del id, favoritos salió " + al.wp_favorite);
+  if (al.wp_rejected !== '{"ps4.csv":["a2"]}')
+    fail("?keep=#a1: el lote entero acabó en la papelera, salió " + al.wp_rejected);
+
+  // 9f. los cubos son exclusivos: un id que llega en ?no= y estaba en favoritos SALE de favoritos.
+  const nf = {
+    wp_rows: JSON.stringify({ a1: { id: "a1", _csv: "ps4.csv" } }),
+    wp_favorite: JSON.stringify({ "ps4.csv": ["a1"] }),
+    wp_estado: JSON.stringify({ favorite: { "ps4.csv": ["a1"] } }),
+  };
+  errs = await bootErrs(nf, { search: "?no=a1" });
+  if (errs.length) fail("?no= sobre un favorito lanzó: " + (errs[0].message || errs[0]));
+  if ((JSON.parse(nf.wp_favorite)["ps4.csv"] || []).includes("a1"))
+    fail("?no=: el rechazado sigue en favoritos, está en los dos cubos: " + nf.wp_favorite);
+  if (!(JSON.parse(nf.wp_rejected || "{}")["ps4.csv"] || []).includes("a1"))
+    fail("?no=: el id no llegó a la papelera, salió " + nf.wp_rejected);
+
   // 10. deep-link con topes ?maxp/?maxd: son los topes del cajón (wp_lim), se aplican al render
   const tp = {};
   errs = await bootErrs(tp, { search: "?q=kindle&maxp=80&maxd=30" });
   if (errs.length) fail("deep-link ?maxp/?maxd lanzó: " + (errs[0].message || errs[0]));
   if (tp.wp_lim !== '{"kindle.csv":{"precio":80,"dias":30}}')
     fail("?maxp/?maxd: no quedaron como topes del cajón, salió " + tp.wp_lim);
+
+  // 10d. un tope no numérico se AVISA. `NaN > 0` es false, así que ?maxp=barato se descartaba en
+  //      silencio: el usuario veía precios por encima de su tope creyendo que el enlace lo aplicaba.
+  const tm = {};
+  const bt = await boot(tm, { search: "?q=kindle&maxp=barato&maxd=30", timers: true });
+  if (bt.errs.length) fail("?maxp no numérico lanzó: " + (bt.errs[0].message || bt.errs[0]));
+  await new Promise((r) => setTimeout(r, 5)); // el aviso sale en un setTimeout(..., 0)
+  if (!/maxp=barato/.test(String(bt.q("#snackmsg").textContent)))
+    fail("?maxp=barato se ignoró sin avisar, el snack dijo: " + bt.q("#snackmsg").textContent);
+  if (tm.wp_lim !== '{"kindle.csv":{"dias":30}}')
+    fail("?maxp=barato: el tope bueno no sobrevivió al malo, salió " + tm.wp_lim);
 
   // 10b. ?excl= FUSIONA con lo que el usuario ya vetó a mano en ese cajón, no lo sustituye.
   //      Se siembra también wp_estado: hoy hydrateEstado() reasigna exclMap desde el blob, así
