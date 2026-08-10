@@ -171,6 +171,12 @@ async function main() {
     const { api } = load(async () => (ctrl.aborted = true, resp(200, page([item("a")], "CUR"))));
     const csv = await api.scrape({ keywords: "ford", signal: ctrl });
     ok(filas(csv).length === 1, "al parar se perdió lo ya recogido");
+    // …y ese recorte tiene que quedar marcado. `app.js` no cachea lo `parcial`, y el cache no
+    // caduca: sin la marca, lo que el usuario paró a medias se guarda como definitivo para siempre.
+    // Los doce sitios de `test_buttons.js` que miran `.parcial` escriben `lastScrape` a mano; este
+    // es el único que lo saca del `scrape.js` de verdad.
+    ok(api.lastScrape.abortado, "parar no quedó registrado en el diagnóstico");
+    ok(api.lastScrape.parcial, "una búsqueda parada no se marca parcial: se cachearía como completa");
   }
 
   // ── 11b. parar DURANTE una espera: el sleep tiene que cortarse, no cumplirse ──
@@ -238,6 +244,22 @@ async function main() {
     ok(filas(csv).length === 9, "el cupo de la rama vacía se perdió: " + filas(csv).length + " de 9");
   }
 
+  // ── 13c. el cupo de UNA rama basta para marcar parcial, sin tocar el tope total ──
+  //      El check 13 llega al tope global; este no. La rama "aaa" llena su cupo de 5 y "bbb" viene
+  //      vacía, así que el total se queda en 5 de 10 y `diag.tope` nunca se pone. Si `ramasTope` se
+  //      cayera de `diag.parcial`, ese recorte se cachearía como el resultado definitivo.
+  {
+    const { api } = load(async (url) => {
+      const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
+      return resp(200, page(kw === "bbb" ? [] : Array.from({ length: 20 }, (_, i) => item(kw + i))));
+    });
+    const csv = await api.scrape({ keywords: "aaa OR bbb", maxRows: 10 });
+    ok(filas(csv).length === 5, "el cupo de la rama no recortó: " + filas(csv).length + " de 5");
+    ok(api.lastScrape.tope === 0, "este escenario no debe llegar al tope total: " + api.lastScrape.tope);
+    ok(api.lastScrape.ramasTope === 1, "el cupo de la rama no quedó contado: " + api.lastScrape.ramasTope);
+    ok(api.lastScrape.parcial, "una rama que llena su cupo no marca parcial: se cachearía un recorte");
+  }
+
   // ── 14. una API que nunca deja de dar cursor no puede hacer un bucle sin fin ──
   //     Sin filtro de frescura `old` no se pone nunca, y `lleno` mira las filas: si las filas
   //     no crecen, las dos condiciones locales no llegan jamás. Tres formas de que no crezcan,
@@ -283,6 +305,20 @@ async function main() {
     ok(calls.length === 250, "el freno recortó una búsqueda que avanza: " + calls.length + " páginas de 250");
     ok(filas(csv).length === 880, "faltan anuncios de un catálogo que se agota solo: " + filas(csv).length + " de 880");
     ok(!api.lastScrape.parcial, "una búsqueda completa se marcó parcial: no se cachea y se re-scrapea en cada apertura");
+  }
+
+  // ── 14c. el freno corta SU rama, no el scrape: las de detrás se siguen pidiendo ──
+  //     Es lo que dice el comentario de `scrape.js` y lo que nadie comprobaba. Con un
+  //     `return finish()` en vez del `break`, la rama "bbb" no se pide nunca: se pierde entera,
+  //     `ramasRotas` sigue en cero, no hay error en consola, y `parcial` sigue en `false`. Un
+  //     resultado al que le falta una rama, cacheado como definitivo y sin un solo indicio.
+  {
+    const { api, calls } = load(async (_u, _init, i) =>
+      i < 30 ? resp(200, page([], "CUR")) : resp(200, page([item("bbb-hit")], null)));
+    const csv = await api.scrape({ keywords: "aaa OR bbb" });
+    ok(filas(csv).length === 1, "la rama de detrás se perdió con la rama seca: " + filas(csv).length);
+    ok(calls.some((u) => decodeURIComponent(u).includes("keywords=bbb")), "la rama 'bbb' no se pidió");
+    ok(api.lastScrape.ramasSecas === 1, "la rama seca no quedó contada: " + api.lastScrape.ramasSecas);
   }
 
   // ── 15. el 403 corta el scrape ENTERO: insistir con el bloqueo puesto lo alarga ──
