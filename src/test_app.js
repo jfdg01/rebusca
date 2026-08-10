@@ -41,6 +41,14 @@ function htmlChildren(id, tag) {
     return dataset;
   });
 }
+// recorre la tarjeta que pinta fillCard y devuelve "clase:texto" de cada hijo, anidados incluidos
+const carta = (b, i) =>
+  vm.runInContext(
+    `(() => { const el = document.createElement("div"); fillCard(el, data[${i}]); const out = [];
+      (function walk(n) { for (const c of n.children || []) { out.push(c.className + ":" + c.textContent); walk(c); } })(el);
+      return out.join("|"); })()`,
+    b.sandbox,
+  );
 const HTML_INIT = (() => {
   const html = HTML;
   const init = {};
@@ -89,6 +97,11 @@ function makeAny() {
 // leer de vuelta ni el `onclick` ni el `hidden`. Este guarda todo en `st` y cae al `any` para
 // lo que no conozca; los handlers (`on*`) arrancan en null para poder preguntar "¿está cableado?".
 const ELS = new WeakSet(); // los elementos falsos, para distinguirlos del stub `any`
+// quién cuelga de quién. Sin esto `remove()` era un no-op: la foto que no carga se quitaba en
+// el navegador y en la suite seguía ahí, así que borrar el `onerror` de app.js no rompía nada.
+const PARENT = new WeakMap();
+// `append("texto")` es legal en el DOM y una cadena no vale como clave de un WeakMap
+const link = (c, padre) => { if (Object(c) === c) PARENT.set(c, padre); };
 function makeEl(sel, any) {
   const st = {
     id: sel.replace(/^#/, ""),
@@ -166,13 +179,19 @@ function makeEl(sel, any) {
         })
         ? el
         : null,
-    remove() {},
+    remove() {
+      const p = PARENT.get(el);
+      if (p) p.children = p.children.filter((c) => c !== el);
+      PARENT.delete(el);
+    },
     appendChild(c) {
       st.children.push(c);
+      link(c, st);
       return c;
     },
     append(...cs) {
       st.children.push(...cs);
+      for (const c of cs) link(c, st);
     },
     insertBefore: (c) => c,
     replaceChildren() {
@@ -342,7 +361,10 @@ function makeContext(store, opts = {}) {
     createElement: () => makeEl("", any),
     createDocumentFragment: () => makeEl("", any), // elemento normal: así los <tr> que se le
     // cuelgan siguen siendo alcanzables desde tbody y el test puede pulsar sus botones
-    createTextNode: () => makeAny(),
+    // un objeto llano, no `makeAny()`: el proxy se tragaba el texto y la distancia y la ciudad de
+    // la tarjeta quedaban invisibles para la suite. Los dos únicos usos de app.js lo `append`an y
+    // no lo vuelven a tocar, así que con estas cuatro propiedades basta.
+    createTextNode: (t) => ({ nodeType: 3, className: "", textContent: String(t), children: [] }),
     addEventListener: (t, fn) => (docListeners[t] ||= []).push(fn),
     removeEventListener: (t, fn) => {
       docListeners[t] = (docListeners[t] || []).filter((f) => f !== fn);
@@ -983,14 +1005,6 @@ async function main() {
   //      mediana del lote, y CALLA con muestra corta (una búsqueda con OR mezcla productos y
   //      ahí la mediana engaña).
   {
-    // recorre la tarjeta que pinta fillCard y devuelve "clase:texto" de cada hijo
-    const carta = (b, i) =>
-      vm.runInContext(
-        `(() => { const el = document.createElement("div"); fillCard(el, data[${i}]); const out = [];
-          (function walk(n) { for (const c of n.children || []) { out.push(c.className + ":" + c.textContent); walk(c); } })(el);
-          return out.join("|"); })()`,
-        b.sandbox,
-      );
     const lote = (precios) =>
       [CSV_FIELDS, ...precios.map((p, i) => csvRow({ id: "a" + i, titulo: "Ford Focus", precio: p,
         categoria: "Coches", ciudad: "Jaen", cp: "23001", km: 3, dias: 1, reservado: "False",
@@ -1016,13 +1030,6 @@ async function main() {
   // 12g. la tarjeta pinta lo que el CSV ya sabía: reservado (solo lo leía el texto para la IA),
   //      número de fotos (solo lo usaba el PDF) y las banderas garantía/reacondicionado/perfil top.
   {
-    const carta = (b, i) =>
-      vm.runInContext(
-        `(() => { const el = document.createElement("div"); fillCard(el, data[${i}]); const out = [];
-          (function walk(n) { for (const c of n.children || []) { out.push(c.className + ":" + c.textContent); walk(c); } })(el);
-          return out.join("|"); })()`,
-        b.sandbox,
-      );
     const b = await boot({});
     b.sandbox.__CSV =
       [CSV_FIELDS,
@@ -1048,6 +1055,74 @@ async function main() {
       fail("con una sola foto la tarjeta no dice «1 foto»: " + c2);
     for (const t of ["garantía", "reacondicionado", "perfil top"])
       if (c2.includes(t)) fail(`la tarjeta pinta "${t}" en un anuncio que no lo trae: ` + c2);
+  }
+
+  // 12g-bis. el resto de la tarjeta compuesta, parte por parte. `fillCard()` monta nueve piezas y
+  //          la suite solo miraba cuatro. La cara: con envío la etiqueta enseña el precio FINAL
+  //          estimado, no el del anuncio — comparar precios comparables es para lo que existe la
+  //          app —, y un precio vacío pone una raya, porque `dec1("")` devuelve "0" y un anuncio
+  //          sin precio no vale 0 €.
+  {
+    const b = await boot({});
+    b.sandbox.__CSV =
+      [CSV_FIELDS,
+        csvRow({ id: "c1", titulo: "Ford Focus", precio: 100, categoria: "Coches", ciudad: "Jaen",
+          dias: 1, reservado: "False", envio: "True", url: "https://w/c1", vendedor: "Ana",
+          imagen: "http://x/1.jpg", descripcion: "buen estado" }),
+        csvRow({ id: "c2", titulo: "Ford Fiesta", categoria: "Coches", ciudad: "Ubeda", km: 25,
+          dias: 40, reservado: "False", envio: "False", url: "https://w/c2", vendedor: "Bea",
+          descripcion: "sin precio" }),
+      ].join("\r\n") + "\r\n";
+    vm.runInContext('view = ""; loadCSV(__CSV, "carta.csv")', b.sandbox);
+
+    const final = vm.runInContext("eur(finalPrice(100))", b.sandbox);
+    const c1 = carta(b, 0);
+    if (!c1.includes("li-price:" + final))
+      fail(`con envío la etiqueta no enseña el precio final ${final}: ` + c1);
+    if (!/li-age:[^|]/.test(c1)) fail("la tarjeta no lleva el chip de frescura: " + c1);
+    // el texto suelto de la línea de envío es un nodo de texto, por eso sale como "|:, (Jaen)"
+    if (!/ship:Con envío\|:, \(Jaen\)/.test(c1))
+      fail("con envío y sin km la línea no es «Con envío, (Jaen)»: " + c1);
+    if (/li-id/.test(c1)) fail("el chip del id salió en el mazo, donde no hay veredicto que cotejar: " + c1);
+
+    const c2 = carta(b, 1);
+    if (!c2.includes("li-price:—")) fail("un anuncio sin precio no pone la raya: " + c2);
+    if (!/ship no:Sin envío/.test(c2)) fail("un anuncio sin envío no lo dice en naranja: " + c2);
+    if (!/ship no:Sin envío\|:, a 25 km \(Ubeda\)/.test(c2))
+      fail("sin envío la línea no es «Sin envío, a 25 km (Ubeda)»: " + c2);
+
+    // la foto que no carga se quita y queda el fondo neutro, no el icono roto del navegador
+    const rota = vm.runInContext(
+      `(() => { const el = document.createElement("div"); fillCard(el, data[0]);
+        const media = el.children[0], antes = media.children.length;
+        media.children[0].onerror();
+        return antes + "->" + media.children.length; })()`,
+      b.sandbox,
+    );
+    if (rota !== "3->2") fail("la foto que no carga no se quita de la tarjeta: " + rota);
+
+    // en las listas sale el chip del id, y un toque lo copia
+    vm.runInContext('view = "favorite"', b.sandbox);
+    if (!carta(b, 0).includes("li-id:#c1")) fail("en la lista la tarjeta no lleva el chip del id: " + carta(b, 0));
+    vm.runInContext(
+      `(() => { const el = document.createElement("div"); fillCard(el, data[0]); let chip = null;
+        (function walk(n) { for (const c of n.children || []) { if (c.className === "li-id") chip = c; walk(c); } })(el);
+        chip.onclick(); })()`,
+      b.sandbox,
+    );
+    if (b.spy.copied.join() !== "c1")
+      fail("el chip del id no copió el id: " + JSON.stringify(b.spy.copied));
+
+    // cuándo se clasificó: la línea nombra el cubo en el que está, y sin marca de tiempo no sale
+    vm.runInContext("stamp[key(data[0])] = Date.now() - 3600e3", b.sandbox);
+    if (!/li-when interested:Favorito /.test(carta(b, 0)))
+      fail("en Destacados la línea no dice «Favorito»: " + carta(b, 0));
+    vm.runInContext('view = "rejected"', b.sandbox);
+    if (!/li-when:Rechazado /.test(carta(b, 0)))
+      fail("en la Papelera la línea no dice «Rechazado»: " + carta(b, 0));
+    vm.runInContext("delete stamp[key(data[0])]", b.sandbox);
+    if (/li-when/.test(carta(b, 0)))
+      fail("sin marca de tiempo salió la línea de cuándo se clasificó: " + carta(b, 0));
   }
 
   // 12h. la tabla solo existe en modo lista: en el mazo el swipe monta su propia tarjeta, así que
