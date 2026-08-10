@@ -207,7 +207,6 @@ console.assert(
 );
 const load = (k) => new Set(readJSON(k, []));
 const BUCKET_NAMES = ["rejected", "favorite"]; // los "ficheros" de cada cajón (sin ver = el resto)
-const BUCKET_KEYS = new Set(BUCKET_NAMES.map((n) => "wp_" + n));
 // cache de filas por id (objeto {columna:valor}). Permite ver favoritos aunque su
 // CSV no esté cargado; guarda _csv (cajón de origen) para migrar el modelo global viejo.
 let rowCache = readJSON("wp_rows", {});
@@ -256,9 +255,13 @@ function pointBuckets(csv) { // reapunta las vars al cajón `csv` (créalo vací
   rejected = buckets.rejected[c] ||= new Set();
   favorite = buckets.favorite[c] ||= new Set();
 }
-const save = (k, _set) => {
-  if (BUCKET_KEYS.has(k)) { setLS(k, JSON.stringify(fromMap(buckets[k.slice(3)]))); saveRows(); }
-  else setLS(k, JSON.stringify([..._set]));
+// Los dos cubos son exclusivos y se escriben siempre juntos: rechazar implica sacar de favoritos
+// y al revés. Escribir uno solo es la forma de fallo que las iteraciones 20 y 21 encontraron dos
+// veces, así que aquí no se puede escribir uno solo. De paso, `saveRows()` (que recorre `data` y
+// `rowCache` enteros) y `pushEstado()` corren una vez por gesto y no dos.
+const saveBuckets = () => {
+  for (const n of BUCKET_NAMES) setLS("wp_" + n, JSON.stringify(fromMap(buckets[n])));
+  saveRows();
   pushEstado();
 };
 // último lote copiado/exportado a la IA: {csv, ids}. Su respuesta es un enlace ?keep=<ids>:
@@ -1262,14 +1265,14 @@ function rejectedLejos() {
     rejected.add(k);
     stampNow(k);
   });
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   snack(`${ks.length} lejos a la papelera`, () => {
     ks.forEach((k) => {
       rejected.delete(k);
       unstamp(k);
     });
-    save("wp_rejected", rejected);
+    saveBuckets();
     render();
   });
 }
@@ -1288,7 +1291,7 @@ function rejectedExcluded() {
     rejected.add(k);
     stampNow(k);
   });
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   snack(
     `${ks.length} excluido${ks.length === 1 ? "" : "s"} a la papelera`,
@@ -1297,7 +1300,7 @@ function rejectedExcluded() {
         rejected.delete(k);
         unstamp(k);
       });
-      save("wp_rejected", rejected);
+      saveBuckets();
       render();
     },
   );
@@ -1335,7 +1338,7 @@ function bulkRestore(ks, msg) {
     unstamp(k);
   });
   rejectedSel.clear();
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   snack(msg, () => {
     snap.forEach(([k, s]) => {
@@ -1344,7 +1347,7 @@ function bulkRestore(ks, msg) {
     });
     reblock(unblocked);
     setLS("wp_stamp", JSON.stringify(stamp));
-    save("wp_rejected", rejected);
+    saveBuckets();
     render();
   });
 }
@@ -1405,8 +1408,7 @@ function enforceBlocks() {
     }
   }
   if (changed) {
-    save("wp_favorite", favorite);
-    save("wp_rejected", rejected);
+    saveBuckets();
   }
 }
 // candidatos a bloqueo: vendedor con ≥2 rechazados y ≥1 anuncio fresco en el CSV actual, no bloqueado aún
@@ -1440,8 +1442,7 @@ function blockSeller(s) {
     rejected.add(k);
     stampNow(k);
   });
-  save("wp_favorite", favorite);
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   if (!swipeView.hidden) rebuildDeck(); // saca del mazo lo recién rechazado
   snack(`Vendedor bloqueado · ${newly.length} a la papelera`, () => {
@@ -1455,8 +1456,7 @@ function blockSeller(s) {
       favorite.add(k);
       stampNow(k);
     }); // los que eran favoritos, vuelven a favoritos
-    save("wp_favorite", favorite);
-    save("wp_rejected", rejected);
+    saveBuckets();
     render();
     if (!swipeView.hidden) rebuildDeck();
   });
@@ -1518,8 +1518,7 @@ function reject(k, titulo) {
   favorite.delete(k);
   rejected.add(k);
   stampNow(k);
-  save("wp_favorite", favorite);
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   snack(`Rechazado: ${(titulo || "").slice(0, 40)}`, () => {
     rejected.delete(k);
@@ -1527,8 +1526,7 @@ function reject(k, titulo) {
       favorite.add(k);
       stampNow(k);
     } else unstamp(k);
-    save("wp_favorite", favorite);
-    save("wp_rejected", rejected);
+    saveBuckets();
     render();
   });
 }
@@ -1537,13 +1535,13 @@ function restore(k) {
   rejected.delete(k);
   unstamp(k);
   const unblocked = unblockFor([k]); // si su vendedor estaba bloqueado, desbloquéalo o vuelve solo a la papelera
-  save("wp_rejected", rejected);
+  saveBuckets();
   render();
   snack("Restaurado", () => {
     rejected.add(k);
     stampNow(k);
     reblock(unblocked);
-    save("wp_rejected", rejected);
+    saveBuckets();
     render();
   });
 }
@@ -2512,7 +2510,7 @@ function fromURL() {
       if (outN) touched.add(sentCsv);
       localStorage.removeItem("wp_aisent"); // veredicto consumido: el lote queda resuelto
     }
-    save("wp_rejected", rejected); save("wp_favorite", favorite);
+    saveBuckets();
   }
   // "3 a favoritos y 40 a rechazados · 12 más del lote a rechazados · repartido en 2 búsquedas"
   // Cuenta lo que aterrizó, no lo que pedía el enlace: si no, un id ignorado salía a la vez
@@ -2774,8 +2772,7 @@ function fling(dir) {
     nopeStamp.style.opacity = 1;
   } // clasifica en un cubo exclusivo; sello a tope
   stampNow(k);
-  save("wp_favorite", favorite);
-  save("wp_rejected", rejected);
+  saveBuckets();
   card.style.transition = "transform .25s ease, opacity .25s ease";
   card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 20}deg)`;
   card.style.opacity = 0;
@@ -2804,8 +2801,7 @@ function swUndo() {
     stamp[h.k] = h.wasStamp;
     setLS("wp_stamp", JSON.stringify(stamp));
   }
-  save("wp_favorite", favorite);
-  save("wp_rejected", rejected);
+  saveBuckets();
   di = h.di;
   nextCard(); // vuelve a la tarjeta que se había swipeado
 }

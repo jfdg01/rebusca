@@ -178,7 +178,7 @@ async function main() {
   // ── 5. COPIAR PARA IA (#copyDeck): manda el mazo sin clasificar y deja el lote pendiente ──
   {
     const b = await loaded();
-    ev(b, 'rejected.add("a2"); save("wp_rejected", rejected)'); // a2 ya clasificado: no debe ir
+    ev(b, 'rejected.add("a2"); saveBuckets()'); // a2 ya clasificado: no debe ir
     await b.q("#copyDeck").click();
     await flush();
     ok(b.spy.copied.length === 1, "#copyDeck no copió nada");
@@ -196,7 +196,7 @@ async function main() {
     await flush();
     ok(b.spy.copied.length === 0, "#copyFav copió sin haber favoritos");
     ok(String(b.q("#snackmsg").textContent).includes("favoritos"), "#copyFav no avisó de que no hay favoritos");
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await b.q("#copyFav").click();
     await flush();
     ok(b.spy.copied.length === 1 && b.spy.copied[0].includes("a1"), "#copyFav no copió el favorito");
@@ -208,7 +208,7 @@ async function main() {
   // ── 7. dossier PDF (#dossierFav): imprime y cuenta como lote enviado ──
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await b.q("#dossierFav").click();
     await flush();
     await flush();
@@ -336,7 +336,7 @@ async function main() {
   // ── 13. papelera: ver rechazados (#toggleTrash), vaciar (#rejectedEmpty), restaurar selección ──
   {
     const b = await loaded();
-    ev(b, 'rejected.add("a1"); rejected.add("a2"); save("wp_rejected", rejected); render()');
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); saveBuckets(); render()');
     b.q("#toggleTrash").click();
     ok(ev(b, "view") === "rejected", "#toggleTrash no abrió la papelera");
     // seleccionar todo + restaurar la selección
@@ -345,7 +345,7 @@ async function main() {
     b.q("#rejectedRestoreSel").click();
     ok(bucket(b, "rejected").length === 0, "#rejectedRestoreSel no restauró los seleccionados");
     // vaciar papelera: con confirm en "no" no toca nada
-    ev(b, 'rejected.add("a1"); save("wp_rejected", rejected); render()');
+    ev(b, 'rejected.add("a1"); saveBuckets(); render()');
     const no = await loaded({ store: JSON.parse(JSON.stringify(b.store)), confirm: false });
     no.q("#toggleTrash").click();
     no.q("#rejectedEmpty").click();
@@ -359,7 +359,7 @@ async function main() {
   // ── 14. favoritos: #toggleFavorite abre la lista y #listBack vuelve ──
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); render()');
+    ev(b, 'favorite.add("a1"); saveBuckets(); render()');
     b.q("#toggleFavorite").click();
     ok(ev(b, "view") === "favorite", "#toggleFavorite no abrió los favoritos");
     b.q("#listBack").click();
@@ -400,7 +400,7 @@ async function main() {
     ok(ev(b, 'deck.map((r) => col(r, "precio")).join()') === "1000,200,50",
       "el segundo clic en #swipeSort precio no invirtió el orden");
     b.q("#swipeX").click();
-    ev(b, 'favorite.add("a1"); favorite.add("a3"); save("wp_favorite", favorite); view = "favorite"; render()');
+    ev(b, 'favorite.add("a1"); favorite.add("a3"); saveBuckets(); view = "favorite"; render()');
     const lb = ev(b, 'document.querySelectorAll("#listSort button")').find((x) => x.dataset.sort === "precio");
     lb.click();
     ok(ev(b, 'filteredRows().map((r) => col(r, "precio")).join()') === "50,1000",
@@ -501,7 +501,7 @@ async function main() {
   // ── 22. filtros de texto: lista (#listFilter) y gestor (#searchesFilter) ──
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); favorite.add("a2"); save("wp_favorite", favorite); view = "favorite"; render()');
+    ev(b, 'favorite.add("a1"); favorite.add("a2"); saveBuckets(); view = "favorite"; render()');
     b.q("#listFilter").dispatch("input", { target: { value: "fiesta" } });
     ok(ev(b, "filteredRows().length") === 1, "#listFilter no filtró la lista por título");
     b.q("#listFilter").dispatch("input", { target: { value: "" } });
@@ -516,7 +516,7 @@ async function main() {
   // ── 23. botones de cada fila de la lista: Quitar (favoritos) y Restaurar (papelera) ──
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); view = "favorite"; render()');
+    ev(b, 'favorite.add("a1"); saveBuckets(); view = "favorite"; render()');
     const quitar = byClass(b.q("tbody"), "quitar");
     ok(quitar.length === 1 && String(quitar[0].textContent) === "Quitar",
       "la fila de favoritos no pintó su botón Quitar");
@@ -589,7 +589,7 @@ async function main() {
   // ── 26. banner de vendedores del mazo: "Rechazar siguientes" bloquea al vendedor ──
   {
     const b = await loaded({ csv: CSV_ANA });
-    ev(b, 'rejected.add("a1"); rejected.add("a3"); save("wp_rejected", rejected); render()');
+    ev(b, 'rejected.add("a1"); rejected.add("a3"); saveBuckets(); render()');
     b.q("#swipeFab").click();
     const bloquear = byClass(b.q("#sellerBanner"), "sb-block");
     ok(bloquear.length === 1, "el banner no ofreció bloquear al vendedor con 2+ rechazos");
@@ -946,7 +946,7 @@ async function main() {
   // ── 38. copia de seguridad: guardar, perderlo todo, restaurar ──
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); rejected.add("a3"); save("wp_rejected", rejected)');
+    ev(b, 'favorite.add("a1"); saveBuckets(); rejected.add("a3"); saveBuckets()');
     b.q("#exportState").click();
     const copia = b.spy.blobs[0].partes.join("");
     ok(/"app":"rebusca"/.test(copia), "la copia no se identifica: " + copia.slice(0, 60));
@@ -1007,7 +1007,7 @@ async function main() {
   //     y el Ka suelto (a3): el aviso sale en los dos primeros y NO en el tercero.
   {
     const b = await loaded({ csv: CSV_DUP });
-    ev(b, 'favorite.add("a1"); favorite.add("a3"); favorite.add("a6"); save("wp_favorite", favorite); view = "favorite"; render()');
+    ev(b, 'favorite.add("a1"); favorite.add("a3"); favorite.add("a6"); saveBuckets(); view = "favorite"; render()');
     const textos = byClass(ev(b, "tbody"), "li-extra").map((e) => e.textContent);
     const avisos = textos.filter((t) => /2 anuncios iguales/.test(t));
     ok(avisos.length === 2, "el aviso de republicación no sale en las dos copias: " + JSON.stringify(textos));
@@ -1032,7 +1032,7 @@ async function main() {
     b.q("#kw").value = "ford";
     await b.q("#scrape").click();
     await flush();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     ok(b.store.wp_estado, "el arranque no dejó estado que perder: " + Object.keys(b.store).join());
 
     // una copia sana, pero que ya no cabe en este navegador: revienta en la segunda clave
@@ -1061,7 +1061,7 @@ async function main() {
     b3.q("#kw").value = "ford";
     await b3.q("#scrape").click();
     await flush();
-    ev(b3, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b3, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     const favBueno = b3.store.wp_favorite;
     const bytes = (s) => Object.values(s).reduce((n, v) => n + v.length, 0);
     const holgura = 300;
@@ -1089,7 +1089,7 @@ async function main() {
     b4.q("#kw").value = "ford";
     await b4.q("#scrape").click();
     await flush();
-    ev(b4, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b4, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     const foto = (s) => JSON.stringify(Object.entries(s).sort());
     const antes = foto(b4.store);
     ev(b4, 'idb.set = async () => { throw new Error("IndexedDB llena") }');
@@ -1115,7 +1115,7 @@ async function main() {
     b5.q("#kw").value = "ford";
     await b5.q("#scrape").click();
     await flush();
-    ev(b5, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b5, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     const antes5 = foto(b5.store);
     opts5.idbFalla = "commit";
     b5.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia4 }] } });
@@ -1130,7 +1130,7 @@ async function main() {
     b6.q("#kw").value = "ford";
     await b6.q("#scrape").click();
     await flush();
-    ev(b6, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b6, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     const antes6 = foto(b6.store);
     ev(b6, "lecturaRota = true");
     b6.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia4 }] } });
@@ -1145,7 +1145,7 @@ async function main() {
     b7.q("#kw").value = "ford";
     await b7.q("#scrape").click();
     await flush();
-    ev(b7, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ev(b7, 'favorite.add("a1"); saveBuckets(); pushEstado()');
     ok(b7.store.wp_favorite, "el arranque no dejó una clave sobrante que borrar");
     const copia7 = JSON.stringify({ app: "rebusca", v: 1, datos: { wp_estado: "{}" } });
     b7.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia7 }] } });
@@ -1168,7 +1168,7 @@ async function main() {
   //     borde al restaurar: el id sigue ahí y la lista no enseña nada.
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     b.q("#exportState").click();
     const copia = b.spy.blobs.at(-1).partes.join("");
     ok(/Ford Focus/.test(copia), "la copia no lleva la fila del favorito, solo su id");
@@ -1193,7 +1193,7 @@ async function main() {
     ev(b, 'exclMap[curDrawer()] = ["averiado"]; render()');
     ok(b.q("#excl").open === true, "un filtro nuevo no abre el desplegable");
     b.q("#excl").open = false; // el usuario lo cierra
-    ev(b, 'favorite.add("a2"); save("wp_favorite", favorite); render()');
+    ev(b, 'favorite.add("a2"); saveBuckets(); render()');
     ok(b.q("#excl").open === false, "el desplegable se reabrió solo con un render ajeno");
     // …pero un filtro más sí vuelve a abrirlo: un tope invisible parece una búsqueda vacía
     ev(b, 'limMap[curDrawer()] = { precio: 1000 }; render()');
@@ -1273,12 +1273,12 @@ async function main() {
     b.q("#kw").value = "ford";
     await b.q("#scrape").click();
     await flush();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await flush();
     ok((await ev(b, 'idb.get("rows")')).a1, "el escenario no dejó una ficha buena que perder");
 
     ev(b, "lecturaRota = true; rowCache = {}"); // como queda un arranque que no pudo leer
-    ev(b, 'favorite.add("a2"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a2"); saveBuckets()');
     await flush();
     await flush();
     ok((await ev(b, 'idb.get("rows")')).a1,
@@ -1342,7 +1342,7 @@ async function main() {
     b.q("#kw").value = "ford";
     await b.q("#scrape").click();
     await flush();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)'); // solo se cachea lo que está en un cajón
+    ev(b, 'favorite.add("a1"); saveBuckets()'); // solo se cachea lo que está en un cajón
     await flush();
     const antes = JSON.stringify(await ev(b, 'idb.get("rows")'));
     ok(/Ford Focus/.test(antes), "el scrape no dejó filas que perder: " + antes);
@@ -1361,7 +1361,7 @@ async function main() {
   {
     // primero el caso que importa: falló una escritura, `rowCache` está entero, la copia lo lleva.
     const bw = await loaded();
-    ev(bw, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(bw, 'favorite.add("a1"); saveBuckets()');
     await flush();
     ev(bw, 'idb.set("rows", rowCache)'); // el usuario ya vio el aviso de que una escritura falló
     ev(bw, "avisadoEscritura = true");
@@ -1373,7 +1373,7 @@ async function main() {
       "el aviso del export culpa a la lectura de un fallo de escritura: " + bw.q("#snackmsg").textContent);
 
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await flush();
     ev(b, "lecturaRota = true; rowCache = {}");
     b.q("#exportState").click();
@@ -1624,7 +1624,7 @@ async function main() {
     b.q("#kw").value = "ford";
     await b.q("#scrape").click();
     await flush();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await flush();
     ok((await ev(b, 'idb.get("rows")')).a1, "el escenario no dejó una ficha que perder");
 
@@ -1645,7 +1645,7 @@ async function main() {
     b.q("#kw").value = "ford";
     await b.q("#scrape").click();
     await flush();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    ev(b, 'favorite.add("a1"); saveBuckets()');
     await flush();
 
     // la otra pestaña clasifica un anuncio de una búsqueda que esta no tiene cargada
@@ -1780,7 +1780,7 @@ async function main() {
   //     usuario recupera el anuncio y pierde que lo tenía guardado, y no hay un segundo deshacer.
   {
     const b = await loaded();
-    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite); render()');
+    ev(b, 'favorite.add("a1"); saveBuckets(); render()');
     ev(b, 'reject("a1", "Ford Focus")');
     ok(bucket(b, "rejected").includes("a1"), "reject() no rechazó");
     ok(!bucket(b, "favorite").includes("a1"), "rechazar no sacó el anuncio de favoritos");
@@ -1797,7 +1797,7 @@ async function main() {
   {
     const b = await loaded();
     const bloqueados = () => JSON.parse(b.store.wp_blocksel || "[]");
-    ev(b, 'rejected.add("a1"); save("wp_rejected", rejected); blockSel.add("Ana"); saveBlockSel(); render()');
+    ev(b, 'rejected.add("a1"); saveBuckets(); blockSel.add("Ana"); saveBlockSel(); render()');
     ok(bloqueados().includes("Ana"), "el vendedor no quedó bloqueado");
     ev(b, 'restore("a1")');
     ok(!bloqueados().includes("Ana"),
@@ -1847,7 +1847,7 @@ async function main() {
   {
     const b = await loaded();
     ev(b, 'rowCache["z9"] = { id: "z9", titulo: "Ford viejo", precio: "300", vendedor: "Zoe" }');
-    ev(b, 'rejected.add("a1"); rejected.add("z9"); save("wp_rejected", rejected); view = "rejected"; render()');
+    ev(b, 'rejected.add("a1"); rejected.add("z9"); saveBuckets(); view = "rejected"; render()');
     const ids = ev(b, "filteredRows().map((r) => key(r))");
     ok(ids.includes("z9"),
       "la papelera esconde el anuncio que solo vive en cache (vendido/caducado): " + ids);
@@ -1861,7 +1861,7 @@ async function main() {
   //     De paso: la flecha invierte, y la celda vacía tiene un sitio fijo (primera al ascender).
   {
     const b = await loaded();
-    ev(b, 'rejected.add("a1"); rejected.add("a2"); rejected.add("a3"); save("wp_rejected", rejected); view = "rejected"');
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); rejected.add("a3"); saveBuckets(); view = "rejected"');
     const orden = () => ev(b, 'filteredRows().map((r) => col(r, "precio")).join()');
 
     ev(b, 'listSort = "precio"; listSortDir = 1; render()');
@@ -1887,7 +1887,7 @@ async function main() {
   //     Es el orden por defecto, el que ve quien no ha tocado la barra. `Set` preserva inserción.
   {
     const b = await loaded();
-    ev(b, 'rejected.add("a3"); rejected.add("a1"); rejected.add("a2"); save("wp_rejected", rejected); view = "rejected"; listSort = ""');
+    ev(b, 'rejected.add("a3"); rejected.add("a1"); rejected.add("a2"); saveBuckets(); view = "rejected"; listSort = ""');
     const orden = () => ev(b, "filteredRows().map((r) => key(r)).join()");
     ev(b, "listSortDir = 1; render()");
     ok(orden() === "a3,a1,a2", "sin columna no salió en orden de llegada al cubo: " + orden());
@@ -1901,7 +1901,7 @@ async function main() {
   //     render, lista en blanco, y el usuario no puede borrar la clave que no le deja abrir nada.
   {
     const b = await loaded();
-    ev(b, 'rejected.add("a1"); rejected.add("a2"); save("wp_rejected", rejected); view = "rejected"; listSort = "columna_de_otra_version"');
+    ev(b, 'rejected.add("a1"); rejected.add("a2"); saveBuckets(); view = "rejected"; listSort = "columna_de_otra_version"');
     let tiro = null;
     try { ev(b, "render()"); } catch (e) { tiro = e; }
     ok(!tiro, "un orden guardado por una columna que ya no existe tumba el render: " + (tiro && (tiro.message || tiro)));
@@ -1981,7 +1981,7 @@ async function main() {
     const b = await loaded();
     const suyos = ev(b, 'data.filter((r) => col(r, "vendedor") === "Ana").map((r) => key(r))');
     ok(suyos.length > 0, "el CSV de prueba no trae anuncios de Ana");
-    ev(b, "favorite.add(" + JSON.stringify(suyos[0]) + '); save("wp_favorite", favorite)');
+    ev(b, "favorite.add(" + JSON.stringify(suyos[0]) + '); saveBuckets()');
     ev(b, 'blockSel.add("Ana"); saveBlockSel(); render()');
     for (const k of suyos) ok(bucket(b, "rejected").includes(k), "bloquear no rechazó " + k);
     ok(!bucket(b, "favorite").includes(suyos[0]),
@@ -2008,7 +2008,7 @@ async function main() {
     const b = await loaded({ csv: CSV_VEND });
     const cands = () => ev(b, "sellerCandidates().map((c) => c.s)");
     const rechaza = (...ids) =>
-      ev(b, ids.map((i) => `rejected.add(${JSON.stringify(i)});`).join("") + 'save("wp_rejected", rejected)');
+      ev(b, ids.map((i) => `rejected.add(${JSON.stringify(i)});`).join("") + 'saveBuckets()');
 
     rechaza("a1");
     ok(cands().length === 0, "propone bloquear por UN solo rechazo: " + cands());
@@ -2034,7 +2034,7 @@ async function main() {
   //     proponga bloquear por anuncios invisibles, y el bloqueo sí se los lleva a la papelera.
   {
     const b = await loaded({ csv: CSV_ANA });
-    ev(b, 'rejected.add("a1"); rejected.add("a3"); save("wp_rejected", rejected)');
+    ev(b, 'rejected.add("a1"); rejected.add("a3"); saveBuckets()');
     ok(ev(b, "sellerCandidates().length") === 1, "el escenario no partió con la sugerencia puesta");
     ev(b, 'addExcl("puma"); render()'); // a4 "Ford Puma" es lo único fresco que le queda a Ana
     ok(ev(b, "sellerCandidates().length") === 0,
@@ -2135,6 +2135,20 @@ async function main() {
     // y las que tienen anuncios sin ver van por delante de todo lo demás
     ev(b, 'csvIndex["vespa.csv"] = { ts: 1, ids: ["nuevo"] }');
     ok(orden() === "vespa,ford", "la búsqueda con anuncios sin ver no sube al principio: " + orden());
+  }
+
+  // ── 76. rechazar también actualiza el blob de estado, no solo la clave espejo ──
+  // `wp_estado` es lo que `hydrateEstado()` lee al arrancar. Si un gesto escribe `wp_rejected`
+  // y se olvida del blob, el arranque siguiente repone la versión vieja y el rechazo se pierde.
+  {
+    const b = await loaded();
+    const k = ev(b, "key(data[0])");
+    ev(b, "reject(" + JSON.stringify(k) + ', "Ford Focus")');
+    const blob = JSON.parse(b.store.wp_estado || "{}");
+    ok(
+      ((blob.rejected || {})["ford.csv"] || []).includes(k),
+      "rechazar no llega al blob de estado: al recargar vuelve el anuncio, " + b.store.wp_estado,
+    );
   }
 
   console.log("ok (" + n + " comprobaciones)");
