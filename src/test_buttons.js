@@ -537,6 +537,19 @@ async function main() {
     ok(b4.errs.length === 0, "un wp_estado que no es objeto rompe el arranque: " + b4.errs.join(" | "));
   }
 
+  // ── 7g. la clave dañada que no se pudo respaldar es la única copia ──
+  // `aparta` copia el dato dañado a `roto:<clave>` antes de ignorarlo. Si esa copia no cabe,
+  // el original en su sitio es lo ÚNICO que queda, y la escritura espejo tiene que dejarlo
+  // quieto. El arnés reproduce el disco lleno con `opts.limit` (el QuotaExceededError real).
+  {
+    const BASURA = "x".repeat(2000); // no es JSON: `wp_blocksel` se aparta al cargar
+    const b = await boot({ wp_blocksel: BASURA }, { csv: CSV, timers: true, limit: 3000 });
+    ok(b.store.wp_blocksel === BASURA,
+      "la escritura espejo machacó el dato dañado que no se pudo respaldar: " +
+        String(b.store.wp_blocksel).slice(0, 40));
+    ok(b.store["roto:wp_blocksel"] === undefined, "la copia de respaldo cupo: el check no mide nada");
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
