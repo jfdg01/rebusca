@@ -356,8 +356,11 @@ const saveExcl = saver("wp_excl", () => exclMap);
 // topes numéricos por cajón: lo que pase de precio/antigüedad/distancia sale del mazo solo,
 // igual que una palabra vetada (y con el mismo atajo "mandar a rechazados" en el stat).
 // Se guardan por búsqueda, así se re-aplican en cada re-scrape sin volver a teclearlos.
-const LIMITS = [["precio", "€"], ["dias", "días"], ["km", "km"]];
-let limMap = readJSON("wp_lim", {}); // {cajon: {precio, dias, km}}
+const LIMITS = [["precio", "€"], ["dias", "días"], ["km", "km"]]; // techos, uno por columna
+// `precioMin` es el único suelo (de ahí overMax/underMin aparte); esta lista es además el
+// orden en que salen las cajas en el cajón.
+const LIM_CAMPOS = ["precioMin", ...LIMITS.map(([c]) => c)];
+let limMap = readJSON("wp_lim", {}); // {cajon: {precioMin, precio, dias, km}}
 const limits = () => (curCsv && limMap[curDrawer()]) || {};
 const saveLimits = saver("wp_lim", () => limMap);
 let catExclMap = readJSON("wp_catexcl", {}); // {csv: [categorias]}: categorías vetadas por query (match exacto sobre la columna categoria)
@@ -449,7 +452,7 @@ function hydrateEstado() {
       exclMap = foldDrawers(obj(mir("wp_excl", e.excl)), uni); // {cajon:[palabras]}
       catExclMap = foldDrawers(obj(mir("wp_catexcl", e.catExcl)), uni); // {cajon:[categorias]}
       catModeMap = foldDrawers(obj(mir("wp_catmode", e.catMode)), (a, b) => a || b); // {cajon:"incluir"}
-      limMap = foldDrawers(obj(mir("wp_lim", e.lim)), (a, b) => ({ ...b, ...a })); // {cajon:{precio,dias,km}}
+      limMap = foldDrawers(obj(mir("wp_lim", e.lim)), (a, b) => ({ ...b, ...a })); // {cajon:{precioMin,precio,dias,km}}
       espejo("wp_lim", JSON.stringify(limMap));
       aliasMap = obj(mir("wp_alias", e.alias)); // {csv:"apodo"}
       espejo("wp_alias", JSON.stringify(aliasMap));
@@ -849,7 +852,17 @@ console.assert(
     !overMax("120", undefined),
   "overMax() roto",
 );
-const overLimit = (r) => LIMITS.some(([c]) => overMax(col(r, c), limits()[c]));
+// el suelo de precio va aparte de los techos, pero con el mismo criterio: un precio vacío o no
+// numérico no cae por él (si no, un anuncio sin precio desaparecía al poner un mínimo cualquiera)
+const underMin = (v, min) => min != null && isNum(v) && +v < min;
+console.assert(
+  underMin("80", 100) && !underMin("100", 100) && !underMin("", 100) && !underMin("x", 100) &&
+    !underMin("80", undefined),
+  "underMin() roto",
+);
+const overLimit = (r) =>
+  LIMITS.some(([c]) => overMax(col(r, c), limits()[c])) ||
+  underMin(col(r, "precio"), limits().precioMin);
 // "lejos sin envío": a más de N km y sin envío, difícil en la práctica. Entran al mazo como cualquiera; su línea en el stat es un atajo para rechazarlos en bloque (o quedan excluidos solos con el ajuste).
 let lejosKm = +localStorage.getItem("wp_lejoskm") || 10; // umbral configurable (Ajustes)
 const isLejos = (r) => {
@@ -955,7 +968,6 @@ function render() {
     for (const r of rows) frag.append(rowTr(r)); // lista = ficheros del cajón activo (curCsv), sin agrupar
     tbody.append(frag);
   }
-  paintCogBadge();
   return finishRender(rows, listView);
 }
 function rowTr(r) {
@@ -1160,24 +1172,28 @@ function fillExclChips(chips, onChange) {
     chips.append(b);
   }
 }
-// chips de palabras vetadas de la query activa (solo con CSV cargado y fuera de las vistas de lista)
-function renderExcl() {
-  const box = $("#excl");
-  if (!box) return;
-  box.hidden = !(loadedCsv && view === "" && curCsv);
-  fillExclChips($("#exclChips"), render);
-  for (const [c] of LIMITS) $("#lim_" + c).value = limits()[c] ?? "";
-  // El resumen dice cuántos filtros hay puestos, y el desplegable se abre solo si hay alguno:
-  // un tope activo que no se ve es la forma más rápida de creer que la búsqueda no trae nada.
-  // Solo al CAMBIAR el número: `render()` corre por cualquier cosa (un favorito, un swipe, un
-  // `storage` de otra pestaña) y un `open = true` incondicional no dejaba cerrar la cabecera.
-  const puestos = exclTerms().length + Object.keys(limits()).length;
-  $("#exclCount").textContent = puestos ? " (" + puestos + ")" : "";
-  if (puestos && box.dataset.n !== String(puestos)) box.open = true;
-  box.dataset.n = String(puestos); // `dataset` guarda strings; explícito para que la comparación no dependa de eso
+// El resumen dice cuántas palabras hay vetadas, y el desplegable se abre solo si hay alguna:
+// un filtro activo que no se ve es la forma más rápida de creer que la búsqueda no trae nada.
+// Solo al CAMBIAR el número: `render()` corre por cualquier cosa (un favorito, un swipe, un
+// `storage` de otra pestaña) y un `open = true` incondicional no dejaba cerrar la cabecera.
+function cuentaFiltros(box, span, n) {
+  span.textContent = n ? " (" + n + ")" : "";
+  if (n && box.dataset.n !== String(n)) box.open = true;
+  box.dataset.n = String(n); // `dataset` guarda strings; explícito para que la comparación no dependa de eso
 }
-// topes máximos del cajón: vacío o 0 = sin tope
-for (const [c] of LIMITS)
+// palabras vetadas + topes numéricos (las categorías van aparte, en renderCats).
+// Solo con CSV cargado y fuera de las vistas de lista.
+function renderExcl() {
+  const box = $("#excl"),
+    lims = $("#lims");
+  if (!box) return;
+  box.hidden = lims.hidden = !(loadedCsv && view === "" && curCsv);
+  fillExclChips($("#exclChips"), render);
+  for (const c of LIM_CAMPOS) $("#lim_" + c).value = limits()[c] ?? "";
+  cuentaFiltros(box, $("#exclCount"), exclTerms().length);
+}
+// topes del cajón: vacío o 0 = sin tope
+for (const c of LIM_CAMPOS)
   $("#lim_" + c).onchange = (e) => {
     if (!curCsv) return;
     const v = +e.target.value,
@@ -1188,6 +1204,16 @@ for (const [c] of LIMITS)
     saveLimits();
     render();
   };
+// la ✕ de vaciar (`#clr_<campo>`, ver app.css). Vaciar el valor no basta: el campo solo reacciona
+// a su `onchange`, así que sin llamarlo el tope se borraba de la caja pero seguía filtrando el mazo.
+for (const id of ["kw", "exclAdd", ...LIM_CAMPOS.map((c) => "lim_" + c)]) {
+  const inp = $("#" + id);
+  $("#clr_" + id).onclick = () => {
+    inp.value = "";
+    inp.onchange?.({ target: inp });
+    inp.focus?.(); // el teclado sigue abierto: lo normal tras vaciar es escribir otra cosa
+  };
+}
 
 function paintStat() {
   if (!loadedCsv) {
@@ -1812,18 +1838,9 @@ function unseenCount(csv) {
   for (const n of BUCKET_NAMES) for (const id of buckets[n][d] || []) done.add(id);
   return e.ids.filter((id) => !done.has(id)).length;
 }
-// El mismo recuento, pero fuera del gestor: sin esto, una búsqueda guardada acumula anuncios en
-// silencio y el usuario solo se entera si abre el gestor. Un backend mandaría un aviso push;
-// sin backend, esto es lo más cerca que se llega.
-// ponytail: se recalcula en cada render(), que ya reconstruye la tabla entera. Guarda el número
-// en una variable si algún día se notan las búsquedas cacheadas.
-function paintCogBadge() {
-  const b = $("#cogBadge");
-  if (!b) return;
-  const n = loadSearches().reduce((t, s) => t + (unseenCount(s.csv) || 0), 0);
-  b.hidden = !n;
-  b.textContent = n > 99 ? "99+" : n;
-}
+// La rueda es el menú de opciones y nada más: llevaba un badge con la suma de anuncios sin
+// clasificar de TODAS las búsquedas guardadas (la activa incluida), y con volúmenes reales vivía
+// clavado en "99+". El recuento sigue donde sirve, por búsqueda, en el gestor.
 // migración one-shot: saca de localStorage lo gordo (CSVs + cache de filas) y lo mete en IndexedDB.
 // Hasta ahora compartían los 5 MB con el triaje; al llenarse, clasificar una carta lanzaba y el
 // mazo se congelaba. Tras esto, localStorage solo guarda ids.

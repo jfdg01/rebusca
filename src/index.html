@@ -58,11 +58,7 @@
     <div class="brand">
         <details class="opts">
             <summary title="opciones">
-                <!-- el icono baja a un <i> propio: data-icon se pinta con innerHTML y se llevaría
-                     por delante al badge. Y el badge va dentro del <summary>, porque lo que cuelga
-                     del <details> cerrado no se ve, y este aviso tiene que verse con el menú cerrado. -->
                 <i data-icon="settings"></i>
-                <b class="cog-badge" id="cogBadge" hidden></b>
             </summary>
             <div class="menu">
                 <div class="opt-group">
@@ -130,7 +126,7 @@
                     placeholder=" "
                     aria-label="Buscar en Wallapop"
                     autocomplete="off"
-                />
+                /><button type="button" class="clr" id="clr_kw" aria-label="vaciar la búsqueda">×</button>
                 <span class="kwph" id="kwph" aria-hidden="true">Prueba con "microondas"</span>
             </div>
             <select id="since" title="frescura del anuncio">
@@ -193,31 +189,56 @@
                 data-icon="list"
             ></button>
         </div>
-        <!-- plegado por defecto: con resultados en pantalla, la cabecera se comía la mitad del
-             móvil y las cartas empezaban fuera de la vista. Se abre solo si el cajón ya veta algo. -->
+        <!-- tres bloques, una forma de vetar cada uno. Los topes van siempre a la vista: son
+             cuatro cajas y se leen de un vistazo. Los otros dos van plegados porque crecen con
+             lo que hay dentro (chips), y desplegados se comían media pantalla del móvil; cada
+             uno se abre solo si ya veta algo.
+             El rótulo de cada tope va fuera del campo, no en el placeholder: en cuanto se
+             escribe una cifra el placeholder desaparece y «30 10 20» no dice cuál es cuál. -->
+        <div class="lims" id="lims" hidden>
+            <label
+                ><span class="lim-t">€ mín</span
+                ><span class="clrwrap"
+                    ><input type="number" id="lim_precioMin" min="0" step="1" placeholder=" " /><button
+                        type="button" class="clr" id="clr_lim_precioMin" aria-label="vaciar € mín">×</button></span
+                ></label
+            >
+            <label
+                ><span class="lim-t">€ máx</span
+                ><span class="clrwrap"
+                    ><input type="number" id="lim_precio" min="0" step="1" placeholder=" " /><button
+                        type="button" class="clr" id="clr_lim_precio" aria-label="vaciar € máx">×</button></span
+                ></label
+            >
+            <label
+                ><span class="lim-t">días máx</span
+                ><span class="clrwrap"
+                    ><input type="number" id="lim_dias" min="0" step="1" placeholder=" " /><button
+                        type="button" class="clr" id="clr_lim_dias" aria-label="vaciar días máx">×</button></span
+                ></label
+            >
+            <label
+                ><span class="lim-t">km máx</span
+                ><span class="clrwrap"
+                    ><input type="number" id="lim_km" min="0" step="1" placeholder=" " /><button
+                        type="button" class="clr" id="clr_lim_km" aria-label="vaciar km máx">×</button></span
+                ></label
+            >
+        </div>
         <details class="excl" id="excl" hidden>
             <summary>
-                <span>Afinar</span><span id="exclCount"></span>
+                <span>Excluir palabras</span><span id="exclCount"></span>
             </summary>
             <div class="chips" id="exclChips"></div>
-            <input
-                id="exclAdd"
-                type="search"
-                autocomplete="off"
-                placeholder="Palabra a excluir"
-                title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)"
-            />
-            <div class="lims">
-                <label
-                    ><input type="number" id="lim_precio" min="0" step="1" placeholder="€ máx" /></label
-                >
-                <label
-                    ><input type="number" id="lim_dias" min="0" step="1" placeholder="días máx" /></label
-                >
-                <label
-                    ><input type="number" id="lim_km" min="0" step="1" placeholder="km máx" /></label
-                >
-            </div>
+            <span class="clrwrap"
+                ><input
+                    id="exclAdd"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Palabra a excluir"
+                    title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)"
+                /><button type="button" class="clr" id="clr_exclAdd" aria-label="vaciar la palabra">×</button></span
+            >
         </details>
         <details class="cats" id="cats" hidden>
             <summary>

@@ -308,13 +308,17 @@
   .sb-block:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
   .stat .link[hidden] { display: none; }
 
-  /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
-  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+  /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título). El .45rem va
+     pegado a los topes, que son los que llevan el 1rem de separación con el buscador. */
+  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .45rem; }
   /* mismo resumen que .cats: los dos desplegables de la cabecera se leen igual */
   .excl > summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-soft); }
   .excl > summary { padding: .1rem 0 .45rem; }
-  .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  /* margin-bottom sobre el gap de .excl: las píldoras son el resultado y el campo la entrada,
+     y con solo .5rem se leían como una misma pila. Con :empty en display:none no sobra hueco
+     cuando no hay ninguna. */
+  .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .4rem; }
   .excl .chips:empty { display: none; }
   /* `.chips .excl-chip`, no `.excl-chip`: la regla genérica `.chip` está más abajo en el fichero
      y con la misma especificidad gana, así que el padding de aquí no llegaba a aplicarse. */
@@ -326,30 +330,54 @@
   .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.6rem; font-size: 12px;
     padding: .55rem .75rem; }
 
-  /* topes numéricos del cajón: tres cajas iguales en una fila. Sin etiqueta fuera: la unidad
-     va en el placeholder («€ máx»), que en 320 px devuelve a cada caja el ancho del rótulo. */
-  /* margin-top: se suma al gap de .excl. Separa la fila de números del campo de palabras,
-     que son dos filtros distintos, sin separar los chips de su propio campo. */
-  .lims { display: flex; gap: .45rem; margin-top: .4rem; }
-  .lims label { flex: 1; display: flex; align-items: center; gap: .3rem;
-    font: 600 11px var(--mono); color: var(--ink-soft); }
+  /* topes numéricos del cajón: rejilla 2×2 (precio arriba, antigüedad y distancia abajo), cada
+     caja con su rótulo encima. El rótulo va apilado y no al lado: en 320 px un «días máx» en la
+     misma línea deja la caja en 100 px y obliga a abreviar a «d», que no se entiende. */
+  .lims { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .45rem; margin-top: 1rem; }
+  .lims label { display: flex; flex-direction: column; align-items: stretch; gap: .25rem;
+    min-width: 0; }
+  .lims .lim-t { font: 600 9px var(--mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-soft); padding-left: .15rem; }
   .lims input { width: 100%; min-width: 0; min-height: 2.6rem; font-size: 12px;
     padding: .55rem .7rem; }
   /* Chrome reserva sitio para las flechitas del input number aunque no se vean, y en 320 px
-     eso recortaba el placeholder («días má»). Sin flechas, el teclado numérico del móvil sigue. */
+     eso se comía casi un tercio de una caja de 94 px. Sin flechas, el teclado numérico sigue. */
   .lims input { appearance: textfield; -moz-appearance: textfield; }
   .lims input::-webkit-outer-spin-button,
   .lims input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-  /* sin regla ni hueco grande: con AFINAR plegado, los dos rótulos son dos líneas seguidas */
+  /* ✕ para vaciar el campo de un toque: borrar «1250» a mano son cinco toques al retroceso con
+     el teclado tapando media pantalla. La nativa de input[type=search] no vale — Chrome Android
+     no la pinta y los topes son type=number, que no la tiene.
+     Solo asoma con algo escrito: los seis campos llevan placeholder (los topes uno de un espacio,
+     que no se ve pero mantiene vivo :placeholder-shown) y esa pseudo-clase la esconde. */
+  .clrwrap { position: relative; display: flex; min-width: 0; }
+  .clr { position: absolute; top: 0; right: 0; bottom: 0; width: 2.1rem; padding: 0;
+    display: flex; align-items: center; justify-content: center; background: none; border: 0;
+    box-shadow: none; font: 16px var(--sans); line-height: 1; color: var(--ink-soft);
+    cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .clr:hover { color: var(--ink); }
+  input:placeholder-shown + .clr { display: none; }
+  input:has(+ .clr) { padding-right: 2.1rem; }
+
+  /* sin regla ni hueco grande: plegados, los tres rótulos son tres líneas seguidas */
   .cats { margin-top: .45rem; }
   .cats summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-soft); }
   .cats .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
-  .cat-chip { font: 600 11px var(--mono); padding: .28rem .6rem; min-height: 0;
-    background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
-  .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
-    text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
+  /* dentro del mazo = teal de marca relleno; fuera = solo el contorno de puntos. Antes las dos
+     eran la misma píldora gris y la de fuera iba tachada con opacidad .6: en modo incluir la
+     mayoría están «off», así que la lista entera quedaba gris sobre gris con una raya encima de
+     una tipografía de 11px y no se distinguía nada.
+     `.chips .cat-chip` y no `.cat-chip` a secas: la regla genérica `.chip` va más abajo en este
+     fichero con la misma especificidad y le ganaba el `color`. */
+  .chips .cat-chip { font: 600 11px var(--mono); padding: .28rem .6rem; min-height: 0;
+    background: var(--pine); border: 1px solid var(--pine); color: #fff; }
+  /* 2px y en --ink-soft: con 1px de --line la línea discontinua se cortaba tanto contra el panel
+     que la píldora parecía texto suelto. El padding compensa el punto extra de borde para que
+     las dos píldoras midan igual y la rejilla no baile. */
+  .chips .cat-chip.off { background: transparent; border: 2px dashed var(--ink-soft);
+    color: var(--ink-soft); padding: calc(.28rem - 1px) calc(.6rem - 1px); }
   /* nowrap: en 320 px "cambiar a modo incluir" se partía y "incluir" caía pegado al borde
      izquierdo. El enlace baja entero a la línea de abajo. */
   .cats summary .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline;

@@ -809,6 +809,34 @@ async function main() {
       "quitar el último tope deja el cajón vacío en el almacén: " + b.store.wp_lim);
   }
 
+  // ── 18a. el suelo de precio (#lim_precioMin) va al revés que los techos ──
+  //     Es el único mínimo del cajón: si se colase en LIMITS, un mínimo de 100 € tiraría del
+  //     mazo todo lo que pasara de 100 €, o sea lo contrario de lo que dice el rótulo.
+  {
+    const b = await loaded();
+    b.q("#lim_precioMin").dispatch("change", { target: { value: "100" } });
+    ok(ev(b, "deckRows().length") === 2, "el mínimo de precio no sacó del mazo lo que baja de él");
+    ok(ev(b, 'deckRows().every((r) => +col(r, "precio") >= 100)'), "el mínimo dejó en el mazo algo por debajo");
+    b.q("#lim_precio").dispatch("change", { target: { value: "300" } }); // suelo y techo a la vez
+    ok(ev(b, "deckRows().length") === 1, "suelo y techo juntos no dejan la horquilla: " + ev(b, "deckRows().length"));
+  }
+
+  // ── 18a-bis. la ✕ de vaciar deja el campo Y el filtro en nada ──
+  //     Borrar el valor a mano dispara el `change` del campo; la cruz tiene que hacer lo mismo.
+  //     Solo con `input.value = ""` el número desaparecía de la caja y el mazo seguía filtrado.
+  {
+    const b = await loaded();
+    b.q("#lim_precio").dispatch("change", { target: { value: "100" } });
+    ok(ev(b, "deckRows().length") === 1, "el techo de precio no filtró: " + ev(b, "deckRows().length"));
+    b.q("#clr_lim_precio").click();
+    ok(b.q("#lim_precio").value === "", "la ✕ no vació la caja: " + b.q("#lim_precio").value);
+    ok(ev(b, "deckRows().length") === 3, "la ✕ vació la caja pero el tope sigue filtrando el mazo");
+    ok(ev(b, "limMap[curDrawer()] === undefined"), "el tope vaciado se quedó guardado en wp_lim");
+    b.q("#kw").value = "espejo"; // los campos sin `onchange` solo se vacían, sin efectos
+    b.q("#clr_kw").click();
+    ok(b.q("#kw").value === "", "la ✕ del buscador no vacía el campo");
+  }
+
   // ── 18b. el input del tope muestra el del cajón que se está viendo ──
   // Los topes se guardan por cajón; el input es uno solo para todas las búsquedas. Si no se
   // repinta, el número que se lee y el filtro que se aplica dejan de ser el mismo.
@@ -1639,26 +1667,21 @@ async function main() {
       "un fichero cualquiera pasó por copia: " + b3.q("#snackmsg").textContent);
   }
 
-  // ── 39. el aviso de novedades se ve con el menú cerrado ──
-  {
-    const b = await loaded();
-    ok(b.q("#cogBadge").hidden === false && +b.q("#cogBadge").textContent === 3,
-      "el cog no avisa de los anuncios sin ver: " + b.q("#cogBadge").textContent);
-    // clasificar los tres lo apaga: ya no hay nada nuevo que mirar
-    ev(b, 'for (const id of csvIndex["ford.csv"].ids) favorite.add(id); pushEstado(); render()');
-    ok(b.q("#cogBadge").hidden === true,
-      "el aviso sigue puesto sin nada sin ver: " + b.q("#cogBadge").textContent);
-  }
+  // (39 era el badge de novedades de la rueda; se quitó: la rueda es el menú de opciones y ya
+  //  está. Que no vuelva lo vigila test_app.js, que mira el markup)
 
-  // ── 40. la cabecera no se come la pantalla: "Afinar" empieza plegado ──
+  // ── 40. la cabecera no se come la pantalla: los desplegables empiezan plegados ──
   {
     const b = await loaded();
-    ok(!b.q("#excl").open, "el bloque de afinar tapa los resultados nada más buscar");
+    ok(!b.q("#excl").open, "el bloque de palabras tapa los resultados nada más buscar");
+    ok(!b.q("#cats").open, "el bloque de categorías tapa los resultados nada más buscar");
     ok(!b.q("#exclCount").textContent, "el resumen cuenta filtros que no hay: " + b.q("#exclCount").textContent);
-    // con un filtro puesto se abre solo: un tope invisible parece una búsqueda sin resultados
-    ev(b, 'exclMap[curDrawer()] = ["averiado"]; limMap[curDrawer()] = { precio: 1000 }; render()');
-    ok(b.q("#excl").open === true, "un filtro activo se queda escondido");
-    ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántos filtros hay: " + b.q("#exclCount").textContent);
+    // los topes no se pliegan: son cuatro cajas de alto fijo y su valor SE VE, no hace falta abrir nada
+    ok(!b.q("#lims").hidden, "la fila de topes no se ve con una búsqueda cargada");
+    // una palabra vetada sí abre lo suyo: un filtro invisible parece una búsqueda sin resultados
+    ev(b, 'exclMap[curDrawer()] = ["averiado", "roto"]; render()');
+    ok(b.q("#excl").open === true, "una palabra vetada se queda escondida");
+    ok(/2/.test(b.q("#exclCount").textContent), "el resumen no dice cuántas palabras hay: " + b.q("#exclCount").textContent);
   }
 
   // ── 41. la tarjeta avisa de la republicación ──
@@ -1882,7 +1905,7 @@ async function main() {
     ok(b2.spy.reloads === 1, "restaurar no recargó la página: " + b2.spy.reloads);
   }
 
-  // ── 44. "Afinar" se deja cerrar (defecto 4) ──
+  // ── 44. los desplegables de filtros se dejan cerrar (defecto 4) ──
   //     `renderExcl()` corre en cada `render()`, y con un filtro puesto volvía a abrir el
   //     desplegable. Marcar un favorito, hacer swipe o un `storage` de otra pestaña lo
   //     reabrían: la cabecera se quedaba desplegada para siempre.
@@ -1893,9 +1916,13 @@ async function main() {
     b.q("#excl").open = false; // el usuario lo cierra
     ev(b, 'favorite.add("a2"); saveBuckets(); render()');
     ok(b.q("#excl").open === false, "el desplegable se reabrió solo con un render ajeno");
-    // …pero un filtro más sí vuelve a abrirlo: un tope invisible parece una búsqueda vacía
-    ev(b, 'limMap[curDrawer()] = { precio: 1000 }; render()');
+    // …pero un filtro más sí vuelve a abrirlo: un veto invisible parece una búsqueda vacía
+    ev(b, 'exclMap[curDrawer()].push("roto"); render()');
     ok(b.q("#excl").open === true, "un filtro nuevo no avisa si el desplegable está cerrado");
+    // y solo lo suyo: un tope se ve siempre, así que no tiene por qué reabrir las palabras
+    b.q("#excl").open = false;
+    ev(b, 'limMap[curDrawer()] = { precio: 1000 }; render()');
+    ok(b.q("#excl").open === false, "un tope reabre el desplegable de palabras, que no le toca");
   }
 
   // ── 45. una rama que llena su cupo se dice tal cual ──

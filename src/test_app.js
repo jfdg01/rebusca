@@ -1447,7 +1447,36 @@ async function main() {
     if (!/aria-label="/.test(tag)) fail("el buscador se quedó sin nombre accesible: " + tag);
   }
 
-  // 12o. el modo oscuro no se pudre. Solo se invierten variables, así que un color
+  // 12ñ. la rueda de la cabecera abre las opciones y nada más. Llevó un badge con los anuncios sin
+  //      clasificar de todas las búsquedas guardadas: con volúmenes reales vivía clavado en "99+",
+  //      así que no avisaba de nada y hacía pensar en mensajes. El recuento vive en el gestor.
+  if (/id="cogBadge"/.test(HTML)) fail("la rueda volvió a llevar un contador encima");
+
+  // 12o. cada tope del cajón lleva su rótulo fuera del campo. Estuvo en el placeholder, que se
+  //      borra al escribir: tres cajas con «30 10 20» y ni idea de cuál era el precio.
+  //      Se mira celda a celda (el bloque .lims partido por <label>): si el bloque se renombra,
+  //      no hay celdas y los cuatro fallan, en vez de aprobar por no encontrar nada.
+  {
+    const celdas = ((HTML.match(/<div class="lims"[\s\S]*?\n        <\/div>/) || [""])[0]).split("<label");
+    for (const c of ["precioMin", "precio", "dias", "km"]) {
+      const celda = celdas.find((s) => s.includes(`id="lim_${c}"`));
+      if (!celda || !/<span class="lim-t">[^<]+<\/span/.test(celda))
+        fail(`el tope ${c} se quedó sin rótulo visible`);
+    }
+  }
+
+  // 12o-bis. la ✕ de vaciar va PEGADA a su campo: `input:placeholder-shown + .clr` la esconde
+  //      cuando no hay nada escrito, y ese `+` pide hermano inmediato. Un espacio o un comentario
+  //      en medio y la cruz se queda visible sobre los seis campos vacíos.
+  for (const id of ["kw", "exclAdd", "lim_precioMin", "lim_precio", "lim_dias", "lim_km"]) {
+    if (!new RegExp(`id="${id}"[^>]*/><button[^>]*id="clr_${id}"`).test(HTML))
+      fail(`la ✕ de ${id} no es hermana inmediata de su campo (o no está)`);
+    // sin placeholder no hay :placeholder-shown y la ✕ se ve siempre, también en vacío
+    if (!new RegExp(`id="${id}"[^>]*placeholder=`).test(HTML))
+      fail(`el campo ${id} se quedó sin placeholder: su ✕ ya no sabe esconderse`);
+  }
+
+  // 12p. el modo oscuro no se pudre. Solo se invierten variables, así que un color
   //      escrito a pelo en una regla se queda claro sobre fondo oscuro y nadie lo ve hasta prod.
   {
     const dark = (CSS.match(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n  \}\n/) || [])[0];
