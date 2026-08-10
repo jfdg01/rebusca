@@ -1876,7 +1876,7 @@ async function main() {
       await flush();
       ok(/Rechazado/.test(b.q("#snackmsg").textContent),
         "el evento de la otra pestaña pisó el aviso honesto: " + b.q("#snackmsg").textContent);
-      ok(!b.q("#snackundo").hidden === true, "el evento de la otra pestaña escondió el botón «Deshacer»");
+      ok(b.q("#undo").hidden === false, "el evento de la otra pestaña escondió el botón «Deshacer»");
 
       // (b) con la lectura rota ni se pide: no hay nada que fusionar, y el aviso del arranque manda
       const b2 = await boot({}, { csv: CSV, timers: true, idbFalla: "peticion" });

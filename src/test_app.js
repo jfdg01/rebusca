@@ -49,6 +49,13 @@ const carta = (b, i) =>
       return out.join("|"); })()`,
     b.sandbox,
   );
+// Todos los id que existen de verdad: los del HTML estático, más los que app.js se pinta a
+// sí misma por innerHTML (la barra de estado, las cabeceras de orden). El arnés fabrica un
+// elemento por selector, así que sin esta lista `$("#boton-que-ya-no-existe")` devuelve un
+// objeto que funciona, los siete checks salen verdes y el botón está muerto en el navegador.
+const IDS = new Set(
+  [...HTML.matchAll(/\bid="([\w-]+)"/g), ...APP.matchAll(/\bid="([\w-]+)"/g)].map(([, id]) => id),
+);
 const HTML_INIT = (() => {
   const html = HTML;
   const init = {};
@@ -367,6 +374,9 @@ function makeContext(store, opts = {}) {
   // puede leer el onclick que le puso app.js y pulsarlo.
   const els = new Map();
   const q = (sel) => {
+    const id = /^#([\w-]+)$/.exec(sel);
+    if (id && !IDS.has(id[1]))
+      throw new Error(`el arnés se inventó ${sel}: ese id no está ni en index.html ni en app.js`);
     if (!els.has(sel)) els.set(sel, makeEl(sel, any));
     return els.get(sel);
   };
@@ -377,7 +387,12 @@ function makeContext(store, opts = {}) {
   const qa = (sel) => {
     const m = /^#([\w-]+)\s+([a-z]+)$/.exec(sel);
     if (!m) return [];
-    if (!lists.has(sel))
+    if (!lists.has(sel)) {
+      // el mismo agujero que el de `q`, por la otra puerta: si el contenedor se renombra,
+      // `htmlChildren` devuelve [] sin quejarse, el bucle de app.js no hace nada y el check
+      // que lo mira no distingue "no hay botones" de "los botones ya no se llaman así".
+      if (!htmlChildren(m[1], m[2]).length)
+        throw new Error(`el arnés se inventó "${sel}": #${m[1]} no tiene ningún <${m[2]}> en index.html`);
       lists.set(
         sel,
         htmlChildren(m[1], m[2]).map((data, i) => {
@@ -386,6 +401,7 @@ function makeContext(store, opts = {}) {
           return e;
         }),
       );
+    }
     return lists.get(sel);
   };
   const document = {
@@ -579,6 +595,25 @@ async function main() {
   const fail = (m) => {
     throw new Error("FAIL: " + m);
   };
+
+  // 0. el arnés se queja de un selector inventado. Va el primero a propósito: los otros 400
+  //    checks se apoyan en que `q("#x")` devuelve el elemento de verdad, y el arnés fabrica
+  //    uno por selector. Sin este check, quitar los dos guardias deja los siete en verde y la
+  //    suite vuelve a creerse cualquier errata (así vivió `#snackundo` en test_buttons.js).
+  const b0 = await boot({});
+  for (const [pide, que] of [
+    [() => b0.q("#no-existe-en-ninguna-parte"), "un id inventado"],
+    [() => vm.runInContext('document.querySelectorAll("#no-existe-tampoco button")', b0.sandbox),
+      "un contenedor inventado"],
+  ]) {
+    let saltó = false;
+    try {
+      pide();
+    } catch {
+      saltó = true;
+    }
+    if (!saltó) fail(`el arnés se tragó ${que} sin quejarse`);
+  }
 
   // 1. arranque en blanco (usuario nuevo): sin crash
   let errs = await bootErrs({});
