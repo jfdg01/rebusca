@@ -565,6 +565,23 @@ async function main() {
     ok(filas() === 1, "cargar el estado no repinta la lista que ya estaba en pantalla: " + filas());
   }
 
+  // ── 7i. el buscador de la lista: tres fronteras que no medía nadie ──
+  {
+    const b = await loaded();
+    ev(b, 'view = "rejected"; data.forEach((r) => rejected.add(key(r)));');
+    const ids = ev(b, 'data.map((r) => col(r, "id"))');
+    const tit = ev(b, 'col(data[0], "titulo")');
+    const n = (q) => ev(b, `listQ = ${JSON.stringify(q)}; filteredRows().length`);
+    // una coma de más al pegar la lista que te dio la IA deja un hueco vacío. Un hueco vacío
+    // casa con todo, así que el filtro dejaría de filtrar sin decirlo.
+    ok(n("#" + ids[0] + ",") === 1, "una coma suelta en la lista de ids saca todo el cubo: " + n("#" + ids[0] + ","));
+    // el id parcial vale: pegas los primeros caracteres y encuentras el anuncio
+    ok(n("#" + ids[0].slice(0, -1)) >= 1, "un id a medias no encuentra su anuncio");
+    // el filtro normaliza los dos lados: buscar en mayúsculas encuentra igual
+    ok(n(tit.toUpperCase()) >= 1, "buscar en mayúsculas no encuentra el título: " + tit);
+    ev(b, 'listQ = ""'); // el buscador queda limpio para los bloques de después
+  }
+
   // ── 8. FAB (#swipeFab): abre el mazo; #swipeX lo cierra ──
   {
     const b = await loaded();
