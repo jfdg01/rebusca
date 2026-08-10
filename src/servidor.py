@@ -9,7 +9,7 @@ perfiles y las búsquedas (localStorage). El server ya no escribe nada.
 import io, os, re, sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 HERE = Path(__file__).resolve().parent   # src/
 PORT = int(os.environ.get("PORT", 8000))
@@ -97,7 +97,11 @@ class H(SimpleHTTPRequestHandler):
     # Todo pasa por send_head: es lo que usan GET y HEAD, así que el HEAD anuncia el mismo
     # tamaño que luego sirve el GET (los bots y Cloudflare preguntan con HEAD antes de bajar).
     def send_head(self):
-        ruta = urlparse(self.path).path
+        # `unquote`, y con la misma función que usa quien sirve el fichero: `translate_path`
+        # decodifica los `%XX`, así que juzgar la ruta cruda deja pasar `/%74est_app.js`.
+        # Dos lecturas distintas de la misma ruta hacen decorativo el filtro de abajo.
+        # `unquote`, no `unquote_plus`: en una ruta el `+` es un `+`.
+        ruta = unquote(urlparse(self.path).path)
         if ruta in ("/", "/index.html"):
             # encoding explícito: systemd arranca sin LANG y read_text() cogería ascii
             html = (HERE / "index.html").read_text(encoding="utf-8")

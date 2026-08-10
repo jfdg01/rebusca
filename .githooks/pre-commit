@@ -1,0 +1,3 @@
+#!/bin/sh
+# Los siete checks antes de cada commit. Saltar una vez: git commit --no-verify
+exec "$(git rev-parse --show-toplevel)/check.sh"

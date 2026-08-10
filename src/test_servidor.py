@@ -104,9 +104,12 @@ def main():
         # ── 7b. el código fuente NO se sirve: src/ tiene el server, el scraper de
         #        referencia y los tests, y el dominio es público. Solo salen los estáticos
         #        que usa la página.
+        # Los `%XX` van en la lista a propósito: el filtro juzga la ruta cruda y quien sirve el
+        # fichero la decodifica, así que sin igualar las dos lecturas `%74est_app.js` sale con 200.
         for path in ("/servidor.py", "/wallapop.py", "/test_app.js", "/test_buttons.js",
                      "/test_scrape.js", "/test_servidor.py", "/__pycache__/",
-                     "/servidor.py?v=1", "/SERVIDOR.PY"):
+                     "/servidor.py?v=1", "/SERVIDOR.PY",
+                     "/%74est_app.js", "/%74est_buttons.js", "/te%73t_scrape.js"):
             st, _, b = req(port, path)
             assert st != 200, ("se sirve el fuente: " + path, st, b[:80])
         # ...y lo que la página sí necesita sigue saliendo

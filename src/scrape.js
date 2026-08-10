@@ -16,8 +16,32 @@
   // Con frescura "cualquiera" no hay corte por fecha ni por páginas: doce ramas OR son minutos de
   // peticiones y un CSV que no cabe en el móvil. El CLI ya tenía --limit; el browser, nada.
   const MAX_ROWS = 1500;
+  // El tope de filas era el único freno, y falla justo cuando las filas no crecen: una API que
+  // repite cursor, o un `titleOnly` que descarta página tras página, giran para siempre. Sin
+  // frescura `old` no se pone nunca, así que no quedaba ninguna condición local de parada.
+  // Mide el AVANCE, no el volumen: un tope de páginas totales no distingue "no avanza" de
+  // "avanza despacio", y recortaba búsquedas sanas —medido: `titleOnly` con 4 aciertos de cada
+  // 40 perdía 700 anuncios—. Peor aún, el recorte las marcaba parciales, así que no se cacheaban
+  // y se re-scrapeaban en cada apertura: 2,3 veces más peticiones que sin freno ninguno.
+  // 30 páginas seguidas sin una sola fila nueva son 1200 anuncios sin un acierto; el que avanza
+  // despacio pone el contador a cero mucho antes.
+  const MAX_PAGINAS_SECAS = 30;
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // El sleep escucha el abort. Sin esto, «parar búsqueda» se quedaba esperando a que la espera
+  // en curso se cumpliera: medio segundo en el jitter, hasta 17s en un backoff por 429, o lo
+  // que mandara un Retry-After. El signal ya abortado se mira antes de armar el timer, porque
+  // addEventListener("abort") no dispara sobre un signal que ya abortó.
+  // `once: true` solo retira el listener si el abort llega, y en una búsqueda normal no llega:
+  // sin el removeEventListener, cada página dejaba el suyo pegado al signal hasta el final.
+  const sleep = (ms, signal) =>
+    new Promise((r) => {
+      if (signal && signal.aborted) return r();
+      if (!signal || !signal.addEventListener) return void setTimeout(r, ms);
+      let t; // `let`, y el listener antes del timer: el arnés llama al callback dentro del propio setTimeout
+      const fin = () => (clearTimeout(t), signal.removeEventListener("abort", fin), r());
+      signal.addEventListener("abort", fin, { once: true });
+      t = setTimeout(fin, ms);
+    });
   // ponytail: los empates exactos (x.x5 km) suben, el round() de Python los deja pares. Es la
   // única desviación conocida frente a wallapop.py, y solo cambia una décima de km en la tarjeta.
   const round1 = (x) => Math.round(x * 10) / 10;
@@ -157,6 +181,8 @@
 
   async function getJSON(url, signal) {
     for (let a = 0; a < 5; a++) {                 // backoff ante 429/5xx; 403 = bloqueo -> corta
+      // el último intento no duerme: esperar 16 s y rendirse igual es media espera regalada
+      const esperar = (ms) => (a < 4 ? sleep(ms, signal) : Promise.resolve());
       let res;
       try {
         res = await fetch(url, { headers: HEADERS, signal });
@@ -170,11 +196,15 @@
           return d;
         }
       }
-      catch (e) { if (e.name === "AbortError" || e.fatal) throw e; await sleep(2 ** a * 1000 + Math.random() * 1000); continue; }
+      catch (e) { if (e.name === "AbortError" || e.fatal) throw e; await esperar(2 ** a * 1000 + Math.random() * 1000); continue; }
       if (res.status === 403) throw new Error("403: bloqueo (DataDome). Baja el ritmo o cambia de red.");
       if (![429, 500, 502, 503, 504].includes(res.status)) throw new Error("HTTP " + res.status);
+      // El `Retry-After` sí se respeta en el último intento. No precede a un reintento que no
+      // existe, pero sí a la primera petición de la rama siguiente, y es una instrucción del
+      // servidor: tirarla es perder funcionalidad. Lo que sobra es la espera exponencial a ciegas.
       const ra = parseFloat(res.headers.get("Retry-After"));
-      await sleep((ra ? ra * 1000 : 2 ** a * 1000) + Math.random() * 1000);
+      if (ra) await sleep(ra * 1000 + Math.random() * 1000, signal);
+      else await esperar(2 ** a * 1000 + Math.random() * 1000);
     }
     throw new Error("agotados los reintentos");
   }
@@ -195,10 +225,20 @@
     // y un scrape completo daban exactamente el mismo CSV: el llamador no podía distinguirlos y
     // lo cacheaba como definitivo. `scrape()` sigue devolviendo un string, así que nada cambia
     // para quien no mire el diagnóstico.
-    const diag = { ramas: 0, ramasRotas: 0, ramasTope: 0, sinId: 0, abortado: false, tope: 0, parcial: false };
+    const diag = { ramas: 0, ramasRotas: 0, ramasTope: 0, sinId: 0, abortado: false, tope: 0,
+                   paginas: 0, ramasSecas: 0, bloqueado: false, parcial: false };
     const finish = () => {
       // ordena por cercanía al terminar (el server siempre lo hace: nunca pasa --max-km)
       rows.sort((a, b) => (a.km === "" ? 1 : 0) - (b.km === "" ? 1 : 0) || (parseFloat(a.km) || 0) - (parseFloat(b.km) || 0));
+      // `bloqueado` no está en la lista a propósito: solo se pone justo detrás de `ramasRotas++`,
+      // así que sumarlo aquí es un término que ningún mutante mata. Con el término quitado los 48
+      // checks siguen verdes; eso es lo que se midió, y por eso no vuelve.
+      // `ramasSecas` NO entra: los otros cinco motivos son transitorios —un 403, una rama caída, el
+      // botón parar—, así que re-scrapear puede traer más y no cachear tiene sentido. Un corte por
+      // no avanzar es determinista: la rama volverá a dar las mismas páginas secas. Marcarlo
+      // parcial le quitaba el cache y costaba un scrape entero por apertura sin ganar un anuncio
+      // —medido: 210 páginas en tres aperturas donde los dos predecesores hacían 200, con los
+      // mismos 160 anuncios en pantalla—. El usuario sí se entera: `app.js` avisa igual.
       diag.parcial = diag.ramasRotas > 0 || diag.abortado || diag.tope > 0 || diag.ramasTope > 0;
       api.lastScrape = diag;
       if (diag.parcial) console.warn("Rebusca: scrape incompleto", diag);
@@ -219,8 +259,15 @@
       if (orderBy) params.order_by = orderBy;
       if (tf) params.time_filter = tf;
       let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo, se pasa a la siguiente
+      let secas = 0;                    // páginas seguidas de ESTA rama que no trajeron ni una fila
       while (!old && !lleno) {
         if (signal && signal.aborted) { diag.abortado = true; return finish(); }
+        // Corta la RAMA, no el scrape: una rama sinónima que solo repite lo que ya trajo otra da
+        // cero filas nuevas de principio a fin, y las ramas que quedan detrás sí tienen algo que
+        // decir. Los tres escenarios sin fin mueren igual: en todos, ninguna página avanza nunca.
+        if (secas >= MAX_PAGINAS_SECAS) { diag.ramasSecas++; break; }
+        diag.paginas++;
+        const antes = rows.length;
         let d;
         try { d = await getJSON(API + "?" + new URLSearchParams(params), signal); }
         catch (e) {
@@ -229,7 +276,10 @@
           // scrape() resolvía con un CSV de solo cabecera y eso se leía como "no hay nada".
           console.error(`Rebusca: la rama "${kw}" se corta`, e);
           diag.ramasRotas++;
-          if (String(e.message).startsWith("403")) break;   // bloqueo: corta esta rama, conserva lo ya recogido
+          // El bloqueo de DataDome no es de una rama: es de esta IP. Seguir pidiendo con el "no"
+          // ya puesto solo alarga el castigo, así que corta el scrape entero. Lo ya recogido se
+          // conserva —`finish()` devuelve las filas—, y `bloqueado` le dice al llamador qué pasó.
+          if (String(e.message).startsWith("403")) { diag.bloqueado = true; return finish(); }
           // `break`, igual que el 403: muere ESTA rama, las siguientes se piden igual. Lo ya
           // recogido no se tira (wallapop.py deja en disco lo que llevara escrito). Sin filas
           // todavía sí sube el error: si no, la caída se vería como "no hay nada".
@@ -257,10 +307,11 @@
           if (rows.length >= maxRows) { diag.tope = maxRows; return finish(); }
           if (rows.length >= cupo(iRama)) { diag.ramasTope++; lleno = true; break; }
         }
+        secas = rows.length > antes ? 0 : secas + 1;   // una sola fila nueva perdona la racha entera
         const np = ((d || {}).meta || {}).next_page;
         if (!np || old || lleno) break;
         params = { next_page: np };                            // el cursor ya lleva keywords/lat/lon
-        await sleep(500 + Math.random() * 500);                // jitter anti-patrón
+        await sleep(500 + Math.random() * 500, signal);                // jitter anti-patrón
       }
     }
     return finish();

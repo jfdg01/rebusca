@@ -49,6 +49,10 @@ function parseCSV(text) {
 // ("los botones no funcionan"). Ahora nunca lanza: avisa una vez y sigue.
 // ponytail: una sola red para los ~30 setItem del fichero, en vez de try/catch en cada sitio.
 const csvCacheKey = "wp_csv"; // cache de CSVs viejo (localStorage): solo se lee para migrarlo a IDB
+// marca que deja una restauración: el cache de anuncios que hay en IndexedDB es del ocupante
+// anterior. Vive en localStorage a propósito — el almacén que hay que vaciar puede ser justo el
+// que no escribe, y la marca tiene que sobrevivir a la recarga para reintentarlo.
+const cacheAjenaKey = "wp_cacheajena";
 // El aviso NO puede ser una vez por sesión: el snack dura 5 s y en modo swipe lo tapa la carta.
 // El usuario seguía clasificando 40 cartas con toda la UI confirmando lo que no se guardaba.
 // Throttle de 30 s: vuelve a avisar mientras el fallo siga vivo, sin convertirse en un bucle.
@@ -107,15 +111,17 @@ const readJSON = (k, fb) => {
 // localStorage son 5 MB DUROS por origen; IndexedDB es un % del disco libre. Aquí viven los CSVs
 // (uno por búsqueda, "csv:<nombre>") y "rows" (el cache de filas): justo lo que reventaba la cuota
 // y congelaba el triaje. En localStorage solo quedan listas de ids, unos KB.
-// ponytail: 20 líneas de wrapper en vez de una librería; sin `indexedDB` (tests) cae a un Map.
-// El almacén falló al LEER: rowCache/csvIndex están vacíos por el fallo, no porque no haya datos.
+// ponytail: 20 líneas de wrapper en vez de una librería.
+// El arranque NO pudo leer: rowCache/csvIndex están vacíos por el fallo, no porque no haya datos.
 // Escribir encima con ese vacío es la pérdida silenciosa. Se cierra el grifo hasta recargar.
-let almacenRoto = false;
+// Una escritura que falla es otra cosa y tiene otra bandera: la memoria sigue buena, no hay nada
+// que machacar, e IndexedDB vuelve en sí en cuanto baja la presión. Ahí se avisa y se sigue.
+let lecturaRota = false;
+let avisadoEscritura = false;
 const idb = (() => {
-  if (typeof indexedDB === "undefined") {
-    const mem = new Map();
-    return { get: async (k) => mem.get(k) ?? null, set: async (k, v) => void mem.set(k, v), del: async (k) => void mem.delete(k) };
-  }
+  // Sin rama de memoria para cuando no hay `indexedDB`: su único usuario eran los tests, y el
+  // arnés ya trae uno de mentira. Un navegador siempre lo define; si no, `open()` rechaza,
+  // `hydrateStores` cierra el grifo y avisa, que es más honesto que un Map que muere al recargar.
   let db;
   // El fallo NO se cachea: `db ||= promesa` guardaba la promesa rechazada, así que un bloqueo
   // transitorio (otra pestaña con la base abierta) rompía IndexedDB para el resto de la sesión.
@@ -128,19 +134,42 @@ const idb = (() => {
   const tx = async (mode, fn) => {
     const d = await open();
     return new Promise((res, rej) => {
-      const q = fn(d.transaction("kv", mode).objectStore("kv"));
-      q.onsuccess = () => res(q.result);
+      const t = d.transaction("kv", mode);
+      const q = fn(t.objectStore("kv"));
       q.onerror = () => rej(q.error);
+      // Una escritura NO está guardada cuando la petición dice que sí: lo está cuando la
+      // transacción completa. La cuota de IndexedDB salta justo ahí, al commitear. Con
+      // `q.onsuccess` a secas, `await idb.set(...)` resolvía sobre una escritura que se perdía,
+      // y el importador recargaba dejando los favoritos restaurados sin sus filas.
+      if (mode === "readwrite") {
+        t.oncomplete = () => res(q.result);
+        t.onabort = () => rej(t.error);
+      } else q.onsuccess = () => res(q.result); // leer no commitea nada
     });
   };
+  // Un fallo al escribir NO relanza: los `idb.set` del triaje son fire-and-forget, y un rechazo
+  // suelto llegaba al unhandledrejection global, que pintaba "Fallo interno" encima del snack de
+  // «Deshacer». Se avisa una vez por sesión y se calla.
+  // Tampoco cierra el grifo. Cerrarlo convierte un `QuotaExceededError` pasajero — el usuario
+  // vacía la papelera y ya cabe — en una sesión entera de solo lectura. Quien necesite saber si
+  // SU escritura entró mira el booleano que devuelve, que es la única respuesta que no miente.
+  const fallo = (e) => {
+    if (avisadoEscritura) return false;
+    avisadoEscritura = true;
+    console.error("Rebusca: el almacén local no aceptó una escritura", e);
+    // snack ya existe cuando esto corre (la primera escritura es muy posterior al módulo), pero
+    // la guarda cuesta cuatro palabras y el arranque es el único sitio donde podría no estarlo.
+    if (typeof snack === "function") snack("No se pudo guardar en el almacén: puede que algo no quede guardado", null);
+    return false;
+  };
+  // `escribe` devuelve si la transacción commiteó. Con la LECTURA rota ni se intenta: lo que hay
+  // en memoria es el vacío del fallo, y volcarlo borra los datos buenos del disco.
+  const escribe = (fn) => (lecturaRota ? Promise.resolve(false) : tx("readwrite", fn).then(() => true, fallo));
   return {
-    // Sin .catch mudo. Un `get` que devolvía null confundía "el almacén falló" con "no hay dato",
-    // y un `set` que resolvía sin escribir era la pérdida silenciosa de favoritos. Los llamadores
-    // fire-and-forget quedan cubiertos por el listener global de unhandledrejection de arriba.
+    // Sin .catch mudo. Un `get` que devolvía null confundía "el almacén falló" con "no hay dato".
     get: (k) => tx("readonly", (s) => s.get(k)),
-    // Único punto de guardia: cubre saveRows, cacheCsv, dropCsvCache y setAisent de una vez.
-    set: (k, v) => (almacenRoto ? Promise.resolve() : tx("readwrite", (s) => s.put(v, k))),
-    del: (k) => (almacenRoto ? Promise.resolve() : tx("readwrite", (s) => s.delete(k))),
+    set: (k, v) => escribe((s) => s.put(v, k)),
+    del: (k) => escribe((s) => s.delete(k)),
   };
 })();
 // ── cajón = búsqueda SIN ventana temporal ──
@@ -1717,8 +1746,9 @@ const SINCE_SHORT = {
 function queryParts(csv) {
   const base = csv.replace(/\.csv$/, "");
   const i = base.lastIndexOf("--");
-  const since =
-    i >= 0 && SINCE_LABEL[base.slice(i + 2)] ? base.slice(i + 2) : "";
+  // hasOwn y no la indexación a secas: el nombre viene del usuario y `SINCE_LABEL["constructor"]`
+  // devuelve una función, así que "ps4--constructor" pasaba por frescura y llegaba al scraper.
+  const since = i >= 0 && Object.hasOwn(SINCE_LABEL, base.slice(i + 2)) ? base.slice(i + 2) : "";
   return { kw: (since ? base.slice(0, i) : base).replace(/-/g, " "), since };
 }
 function queryLabel(csv) {
@@ -1767,18 +1797,29 @@ const getCsvCache = async (csv) => {
   const text = await idb.get("csv:" + csv);
   return text ? { text, ts: e.ts } : null;
 };
-function cacheCsv(csv, text, ts) {
+// Retira la marca cuando el índice entra. Sin esto, la marca que se queda puesta porque el almacén
+// no commiteó no caduca nunca, y el arranque de dentro de dos días se lleva por delante el cache
+// que el usuario construyó DESPUÉS de restaurar. OJO con la premisa: el índice que entra prueba
+// que el disco tiene lo que hay en MEMORIA, no que el texto del ocupante anterior se haya ido. Por
+// eso solo lo llama quien acaba de pisar ese texto; ver `cacheCsv`.
+const guardaIndice = async () => {
+  if (await idb.set("csvIndex", csvIndex)) localStorage.removeItem(cacheAjenaKey);
+};
+async function cacheCsv(csv, text, ts) {
   csvIndex[csv] = { ts, ids: data.map((r) => col(r, "id")).filter(Boolean) }; // `data` = este CSV recién cargado
   const saved = new Set(loadSearches().map((s) => s.csv)); // poda: solo búsquedas vivas
   for (const k in csvIndex) if (!saved.has(k) && k !== csv) { delete csvIndex[k]; idb.del("csv:" + k); }
-  idb.set("csv:" + csv, text);
-  idb.set("csvIndex", csvIndex);
+  // El texto se espera: si entra, pisa al homónimo que dejara el ocupante anterior y la marca ya
+  // se puede retirar. Si no entra —el índice son unos KB y cabe, el CSV son cientos y no—, el
+  // nombre del índice apuntaría al texto del ocupante y sus anuncios saldrían como del usuario.
+  const okTexto = await idb.set("csv:" + csv, text);
+  if (okTexto) guardaIndice(); else idb.set("csvIndex", csvIndex);
 }
 function dropCsvCache(csv) {
   if (!(csv in csvIndex)) return;
   delete csvIndex[csv];
   idb.del("csv:" + csv);
-  idb.set("csvIndex", csvIndex);
+  idb.set("csvIndex", csvIndex); // borrar UN nombre no prueba nada sobre los demás textos del ocupante
 }
 // anuncios cacheados de esa búsqueda que aún no están en ningún cubo de su cajón. null = sin cache
 // (no se puede saber sin re-scrapear). Es lo que responde "¿qué búsqueda tiene algo nuevo?".
@@ -1805,34 +1846,61 @@ function paintCogBadge() {
 // migración one-shot: saca de localStorage lo gordo (CSVs + cache de filas) y lo mete en IndexedDB.
 // Hasta ahora compartían los 5 MB con el triaje; al llenarse, clasificar una carta lanzaba y el
 // mazo se congelaba. Tras esto, localStorage solo guarda ids.
+// Una restauración dejó el cache de anuncios del ocupante anterior, y lo dijo con una marca en
+// localStorage. Se vacía aquí y no en el importador: allí, un almacén que no escribiese obligaba a
+// lanzar, y ese `throw` deshacía la restauración entera — los cubos, las búsquedas y los alias
+// viven en localStorage y se restauran sin tocar IndexedDB. `csvIndex` se vacía en memoria pase lo
+// que pase: sin índice, un texto suelto no lo pinta nadie, y por eso la llamada va FUERA del `try`
+// —dentro, un `throw` de la migración se la saltaba entera y el arranque pintaba los anuncios del
+// ocupante anterior—. La marca se queda hasta que una escritura del índice entre.
+async function dropCacheAjena() {
+  if (localStorage.getItem(cacheAjenaKey) === null) return;
+  for (const k in csvIndex) idb.del("csv:" + k);
+  csvIndex = {};
+  await guardaIndice();
+}
 async function hydrateStores() {
   try {
     await hydrateStoresRaw();
   } catch (e) {
     // Cierra el grifo: idb.set/del ya no escriben, así que el primer swipe no machaca el
     // cache bueno con el vacío que dejó el fallo de lectura.
-    almacenRoto = true;
+    lecturaRota = true;
     console.error("Rebusca: no se pudo leer el almacén local", e);
-    setTimeout(() => snack("No se pudo abrir el almacén: esta sesión NO guardará cambios", null), 0);
+    // Sin `setTimeout`: `snack` es una declaración de función, así que está izada, y esto corre
+    // después de un `await`, con el módulo ya evaluado y el DOM en pie. El retraso solo servía
+    // para que el aviso genérico de la escritura fallida se quedase encima de este, que es el
+    // honesto: aquí no hay «puede que algo no quede guardado», aquí no se guarda nada.
+    snack("No se pudo abrir el almacén: esta sesión NO guardará cambios", null);
   }
+  await dropCacheAjena(); // fuera del `try`: el vaciado del cache ajeno no depende de que la lectura fuera bien
 }
 async function hydrateStoresRaw() {
   if (localStorage.getItem("wp_rows") !== null) {
-    await idb.set("rows", rowCache); // rowCache ya se leyó de localStorage al evaluar el módulo
-    localStorage.removeItem("wp_rows"); // solo si el set de arriba no lanzó: `await` corta el borrado
+    // El wrapper se traga el fallo de escritura para no dejar rechazos sueltos por el triaje, así
+    // que el `await` no corta el borrado: hay que mirar lo que devuelve, o este borrado tira la
+    // única copia de las fichas que quedaba.
+    if (!(await idb.set("rows", rowCache))) // rowCache se leyó de localStorage al evaluar el módulo
+      throw new Error("el almacén no aceptó las filas migradas");
+    localStorage.removeItem("wp_rows");
   } else rowCache = (await idb.get("rows")) || {};
   const viejo = localStorage.getItem(csvCacheKey);
   if (viejo === null) { csvIndex = (await idb.get("csvIndex")) || {}; return; }
   // readJSON avisa y copia a roto:wp_csv; el catch mudo tiraba TODOS los CSVs cacheados sin rastro
   const m = readJSON(csvCacheKey, {});
   localStorage.removeItem(csvCacheKey); // ya leído (o ya apartado): libera la cuota
+  let ok = true;
   for (const k in m) {
     const rows = parseCSV(m[k].text || ""), i = (rows[0] || []).indexOf("id");
     if (i < 0) continue;
     csvIndex[k] = { ts: m[k].ts, ids: rows.slice(1).map((r) => r[i]).filter(Boolean) };
-    await idb.set("csv:" + k, m[k].text);
+    ok = (await idb.set("csv:" + k, m[k].text)) && ok;
   }
-  await idb.set("csvIndex", csvIndex);
+  // Igual que su hermana de arriba: `wp_csv` ya se borró, así que si el texto no entró el CSV se
+  // perdió. Devolver OK deja `csvIndex` lleno de entradas cuyo texto no existe, y el badge de
+  // «sin ver» cuenta anuncios que no se pueden abrir. Lanzar cierra el grifo y avisa.
+  if (!((await idb.set("csvIndex", csvIndex)) && ok))
+    throw new Error("el almacén no aceptó los CSVs migrados");
 }
 
 // búsquedas guardadas → items del combobox (kw + ventana temporal, filtrable al escribir)
@@ -1940,17 +2008,29 @@ async function runScrape(kw, since, titleOnly) {
     // Un CSV parcial (rama caída, 403 de DataDome, botón parar) se guardaba como definitivo: al
     // volver a abrir la búsqueda se servía el recorte desde cache y no se re-scrapeaba nunca más.
     // No se cachea Y se dice por qué. El cache anterior, si lo hay, se respeta: es mejor que este.
-    const diag = Rebusca.lastScrape;
-    if (diag && diag.parcial) {
-      snack(diag.abortado
-        ? "Búsqueda parada: resultado parcial, no se guarda"
-        : diag.tope
-          ? `Tope de ${diag.tope} anuncios: resultado recortado, no se guarda. Afina la búsqueda.`
-          : diag.ramasRotas
-            ? `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`
-            // el tope se reparte entre ramas: una rama puede quedarse corta sin que el total llegue
-            : `${diag.ramasTope} de ${diag.ramas} ramas llenaron su cupo: resultado recortado, no se guarda. Afina la búsqueda.`, null);
-    } else cacheCsv(csv, text, curCsvScrape); // guarda resultados: seleccionar esta búsqueda no re-scrapea
+    const diag = Rebusca.lastScrape || {};
+    // El aviso y el cache van por separado. Atados con un `else`, avisar costaba el cache, y un
+    // corte por no avanzar —determinista: re-scrapear da los mismos bytes— pagaba un scrape entero
+    // por apertura sin ganar un anuncio. Se avisa siempre, se cachea solo lo que no es parcial.
+    const aviso = !diag.parcial
+      ? diag.ramasSecas
+        ? `${diag.ramasSecas} de ${diag.ramas} ramas dejaron de traer anuncios nuevos y se cerraron ahí.`
+        : ""
+      : diag.abortado
+      ? "Búsqueda parada: resultado parcial, no se guarda"
+      : diag.bloqueado
+      ? "Wallapop ha bloqueado esta red: espera un rato o cámbiala. Resultado parcial, no se guarda"
+      : diag.tope
+      ? `Tope de ${diag.tope} anuncios: resultado recortado, no se guarda. Afina la búsqueda.`
+      : diag.ramasRotas
+      ? `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`
+      // el tope se reparte entre ramas: una rama puede quedarse corta sin que el total llegue
+      : `${diag.ramasTope} de ${diag.ramas} ramas llenaron su cupo: resultado recortado, no se guarda. Afina la búsqueda.`;
+    if (aviso) snack(aviso, null);
+    // guarda resultados: seleccionar esta búsqueda no re-scrapea. El cache no caduca, así que el
+    // vacío se queda vacío para siempre: una API que responde 200 sin anuncios dejaría la búsqueda
+    // a cero aunque tenga miles. Re-scrapear una búsqueda sin resultados cuesta una página.
+    if (!diag.parcial && data.length) cacheCsv(csv, text, curCsvScrape);
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
   } finally {
@@ -2201,7 +2281,6 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !searchesView.hidden) closeManager();
 });
 
-const opts = $("#perfilOpts"); // menú de ajustes (engranaje del header)
 // ── ajustes: auto-exclusión y umbral "lejos" (por dispositivo, en localStorage) ──
 const autoExclEl = $("#autoExclLejos"),
   lejosKmEl = $("#lejosKm");
@@ -2267,7 +2346,7 @@ locReset.onclick = () => {
 // en iOS lo limpia tras unos días sin visitas. Se copian TODAS las claves wp_*, no una lista
 // escrita a mano, para que una clave nueva entre sola en la copia. Los CSVs cacheados quedan
 // fuera: pesan y se regeneran solos, porque abrir una búsqueda guardada la vuelve a scrapear.
-const BACKUP_SKIP = ["wp_rows", "wp_csv"]; // caches de resultados del modelo viejo
+const BACKUP_SKIP = ["wp_rows", "wp_csv", cacheAjenaKey]; // caches del modelo viejo + marca local
 const backupKeys = () => {
   const out = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -2285,7 +2364,12 @@ const backupJSON = () =>
     v: 1,
     fecha: new Date().toISOString(),
     datos: Object.fromEntries(backupKeys().map((k) => [k, localStorage.getItem(k)])),
-    filas: rowCache,
+    // Con la LECTURA rota `rowCache` está vacío por el fallo, no porque no haya filas. Llevárselo
+    // como `filas: {}` hace que restaurar esta copia en un móvil sano borre las filas buenas,
+    // porque `{}` es truthy. Una copia SIN el campo es un formato que el importador ya acepta —
+    // las copias viejas tampoco lo traen — y el triaje se sigue guardando entero.
+    // Un fallo al ESCRIBIR no mira aquí: la memoria está entera, y es justo lo que hay que salvar.
+    ...(lecturaRota ? {} : { filas: rowCache }),
   });
 $("#exportState").onclick = () => {
   const url = URL.createObjectURL(new Blob([backupJSON()], { type: "application/json" }));
@@ -2294,7 +2378,7 @@ $("#exportState").onclick = () => {
   a.download = "rebusca-" + new Date().toISOString().slice(0, 10) + ".json";
   a.click();
   URL.revokeObjectURL(url);
-  snack("Copia guardada", null);
+  snack(lecturaRota ? "Copia guardada, pero sin las fichas de los anuncios: este navegador no las lee" : "Copia guardada", null);
 };
 $("#importBtn").onclick = () => $("#importState").click();
 $("#importState").onchange = (e) => {
@@ -2304,24 +2388,67 @@ $("#importState").onchange = (e) => {
     .then(async (t) => {
       const copia = JSON.parse(t) || {};
       const datos = copia.datos;
-      if (!datos || typeof datos !== "object") throw new Error("no es una copia de Rebusca");
+      if (!datos || typeof datos !== "object")
+        throw Object.assign(new Error("no es una copia de Rebusca"), { culpaDelFichero: true });
       // Escribe antes de borrar. Al revés, una cuota reventada a media escritura dejaba al
       // usuario sin nada: el borrado ya había pasado y el `setItem` es crudo, sin `setLS`.
       // Así lo viejo sobrevive al fallo. Solo claves `wp_`: una copia manipulada no escribe
       // en el almacén de nadie más. Las sobrantes se borran después, con la lista ya leída.
       const nuevas = Object.keys(datos).filter((k) => k.startsWith("wp_"));
-      for (const k of nuevas) localStorage.setItem(k, datos[k]);
-      for (const k of backupKeys()) if (!nuevas.includes(k)) localStorage.removeItem(k);
-      // Se espera a IndexedDB: `location.reload()` mata la transacción a medias y el favorito
-      // restaurado se quedaría sin fila. Una copia vieja no trae `filas` y sigue valiendo.
-      if (copia.filas) await idb.set("rows", copia.filas);
+      // El bucle no es atómico: si la cuota revienta en la tercera clave, las dos primeras ya
+      // están escritas y el aviso de abajo miente. Peor: `hydrateEstado` da precedencia por
+      // campo a la clave espejo sobre el blob, así que un `wp_favorite` a medias manda sobre
+      // los favoritos buenos que `wp_estado` conserva. Se deshace lo escrito y el aviso vuelve
+      // a ser verdad. La vuelta atrás vacía antes de reponer: reponer sin más puede reventar
+      // también, porque una clave que encogió se repone con otra que creció ya escrita, y el
+      // pico se sale de la cuota. Vaciando primero, el pico nunca pasa de lo que ya cabía.
+      // La foto cubre TODO lo que se toca, no solo lo que se escribe: el borrado de las
+      // sobrantes y las filas de IndexedDB también se deshacen. `rowCache` ya es lo que hay
+      // guardado, así que las filas se reponen de memoria sin volver a leer el almacén.
+      const viejas = backupKeys();
+      const tocadas = [...new Set([...nuevas, ...viejas])];
+      const previo = new Map(tocadas.map((k) => [k, localStorage.getItem(k)]));
+      try {
+        for (const k of nuevas) localStorage.setItem(k, datos[k]);
+        for (const k of viejas) if (!nuevas.includes(k)) localStorage.removeItem(k);
+        // Se espera a IndexedDB: `location.reload()` mata la transacción a medias y el favorito
+        // restaurado se quedaría sin fila. El wrapper no relanza — cerrar un rechazo suelto es lo
+        // correcto para el triaje, que escribe fire-and-forget — así que un commit abortado se ve
+        // por el booleano. Recargar sin mirarlo es dar por buena una restauración a medias.
+        // `Object.keys` y no `if (copia.filas)`: una copia de una sesión sin clasificar trae
+        // `filas: {}`, que es truthy, y escribirla borra las fichas del móvil de destino.
+        if (Object.keys(copia.filas || {}).length && !(await idb.set("rows", copia.filas)))
+          throw new Error("el almacén de filas de este navegador no responde");
+        // El cache de anuncios es del ocupante anterior: abrir una búsqueda restaurada pintaría
+        // sus precios y sus fotos en vez de scrapear. Se tira, pero NO aquí: la marca la recoge
+        // el arranque de después de la recarga (`hydrateStores`), que vacía `csvIndex` en memoria
+        // aunque el almacén no acepte la escritura, y se queda con la marca puesta hasta que la
+        // acepte. Tirarlo aquí obligaba a lanzar cuando el almacén no escribía, y ese `throw`
+        // deshacía TODA la restauración: los favoritos, los rechazados, las búsquedas, los alias
+        // y las exclusiones viven en localStorage y se restauran perfectamente sin IndexedDB.
+        localStorage.setItem(cacheAjenaKey, "1");
+      } catch (err) {
+        // Las filas sí pueden haberse escrito, y no se reponen: `rowCache` en memoria sigue siendo
+        // el bueno, así que la primera clasificación lo vuelca encima. Lo que se deshace es
+        // localStorage, que es lo que decide qué es un favorito.
+        for (const k of tocadas) localStorage.removeItem(k);
+        for (const [k, v] of previo) if (v !== null) localStorage.setItem(k, v);
+        throw err;
+      }
       location.reload(); // el estado vive en variables ya leídas: recargar es lo único honesto
     })
     .catch((err) =>
       snack(
-        err.name === "QuotaExceededError"
-          ? "La copia no cabe en este navegador: no se ha restaurado nada, tu triaje sigue intacto"
-          : "Copia no válida: " + (err.message || err),
+        // Solo el fichero mal formado es culpa del fichero. Todo lo demás que puede fallar aquí
+        // (la cuota, un commit abortado de IndexedDB, un error de disco) es de este navegador, y
+        // decirle al usuario que su copia no vale hace que tire la única que tiene.
+        // `err.name` y no `instanceof`: el `JSON` del arnés viene de otro realm, así que el
+        // `SyntaxError` de `JSON.parse` no es el SyntaxError de aquí. El nombre sí cruza.
+        err.culpaDelFichero || err.name === "SyntaxError"
+          ? "Copia no válida: " + (err.message || err)
+          : err.name === "QuotaExceededError"
+            ? "La copia no cabe en este navegador: no se ha restaurado nada, tu triaje sigue intacto"
+            : "Este navegador no pudo guardar la copia: no se ha restaurado nada, tu triaje sigue intacto",
         null,
       ),
     );
@@ -2460,8 +2587,22 @@ queueMicrotask(async () => {
 // final, así que re-hidratar es todo lo que hace falta. Sin esto, la pestaña vieja seguía con su
 // copia en memoria y el siguiente pushEstado() borraba lo que la otra acababa de clasificar.
 // `e.key` es null cuando alguien llama a localStorage.clear().
+// Las fichas no viven en localStorage, así que no llegan en el evento: hay que ir a por ellas.
+// Sin esto, la otra pestaña clasifica un anuncio que esta no tiene cargado, esta se queda con su
+// `rowCache` de antes y el siguiente saveRows() lo escribe encima — `put` reemplaza el registro
+// entero, no fusiona — y ese favorito se queda sin ficha para siempre. Lo de esta pestaña manda
+// sobre lo del almacén: es más nuevo. Los cubos ya vienen re-hidratados, así que la poda de
+// saveRows() respeta lo fusionado.
 window.addEventListener("storage", (e) => {
-  if (e.key == null || e.key.startsWith("wp_")) hydrateEstado();
+  if (e.key != null && !e.key.startsWith("wp_")) return;
+  hydrateEstado();
+  // El `.catch` no es decorativo: `get` sí relanza — a diferencia de `set`/`del`, que se tragan el
+  // rechazo a propósito para el triaje —, y un rechazo suelto aquí llega al `unhandledrejection` de
+  // arriba, que pinta «Fallo interno» encima del aviso honesto y esconde el botón «Deshacer».
+  // La fusión es oportunista: si el almacén no lee, esta pestaña se queda con lo suyo. Aquí había
+  // además un guardián `if (!lecturaRota)`, y se fue: con el `.catch` puesto, quitarlo no cambia
+  // nada que el usuario vea, y lo que ningún mutante mata no es código, es adorno.
+  idb.get("rows").then((filas) => { if (filas) rowCache = { ...filas, ...rowCache }; }, () => {});
 });
 
 // ── modo swipe (tinder): una tarjeta a la vez; arrastra ← rechazar / → favorito ──

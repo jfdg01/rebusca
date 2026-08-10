@@ -697,6 +697,30 @@ async function main() {
     await b.q("#scrape").click();
     await flush();
     ok(!!ev(b, 'csvIndex["ford.csv"]'), "un resultado completo no se guardó en cache");
+
+    // Un corte por no avanzar SÍ se cachea, y aun así se avisa. Los otros motivos son transitorios
+    // —un 403, una rama caída, el botón parar—: re-scrapear puede traer más. Este es determinista:
+    // la rama dio 30 páginas seguidas sin una fila nueva y volverá a darlas. Negarle el cache no
+    // gana un anuncio y cuesta un scrape entero por apertura (medido: 210 páginas frente a 70).
+    const b3 = await boot({}, { timers: true, scrape: async () => CSV });
+    b3.sandbox.Rebusca.lastScrape = { ramas: 2, ramasRotas: 0, ramasSecas: 1, sinId: 0, abortado: false, parcial: false };
+    b3.q("#kw").value = "ford";
+    await b3.q("#scrape").click();
+    await flush();
+    ok(!!ev(b3, 'csvIndex["ford.csv"]'), "un recorte por no avanzar no se cacheó: se re-scrapea entero en cada apertura");
+    ok(/dejaron de traer/i.test(b3.q("#snackmsg").textContent),
+      "no avisó de que una rama se cerró sola: " + b3.q("#snackmsg").textContent);
+
+    // El cache no caduca (`loadQuery`), así que cachear el vacío lo deja vacío para siempre. Una
+    // API que responde 200 con páginas vacías —un bloqueo silencioso, sin 403 que lo delate— da
+    // cero filas sin marcar nada, y esa búsqueda se quedaría a cero aunque tenga miles de anuncios.
+    const b4 = await boot({}, { timers: true, scrape: async () => CSV.split("\n")[0] + "\n" });
+    b4.sandbox.Rebusca.lastScrape = { ramas: 1, ramasRotas: 0, sinId: 0, abortado: false, parcial: false };
+    b4.q("#kw").value = "ford";
+    await b4.q("#scrape").click();
+    await flush();
+    ok(ev(b4, "data.length") === 0, "el CSV vacío del check trajo filas: " + ev(b4, "data.length"));
+    ok(!ev(b4, 'csvIndex["ford.csv"]'), "un resultado vacío se cacheó: la búsqueda se queda a cero para siempre");
   }
 
   // ── 31c. el precio con envío es el precio FINAL, no el del anuncio ──
@@ -753,6 +777,22 @@ async function main() {
     v2.dispatch("pointerup", { clientX: 5, clientY: 80, timeStamp: 100, pointerId: 1 });
     await tick(260);
     ok(ev(b2, "deck[di] && key(deck[di])") === cuarta, "un arrastre vertical clasificó la tarjeta");
+
+    // pulsar un botón de dentro del mazo no arma el arrastre. El pointerdown burbujea hasta
+    // #swipeView, que es toda la zona de arrastre, así que sin la guarda un dedo que se mueve
+    // un poco al pulsar "Ver" clasificaría la tarjeta sin querer.
+    const b3 = await loaded();
+    b3.q("#swipeFab").click();
+    const quinta = ev(b3, "deck[di] && key(deck[di])");
+    const v3 = b3.q("#swipeView");
+    const sobreVer = (t, x, ts) =>
+      v3.dispatch(t, { clientX: x, clientY: 0, timeStamp: ts, pointerId: 1, target: b3.q("#swVer") });
+    sobreVer("pointerdown", 0, 0);
+    sobreVer("pointermove", -100, 300);
+    sobreVer("pointerup", -100, 300);
+    await tick(260);
+    ok(ev(b3, "deck[di] && key(deck[di])") === quinta, "arrastrar desde #swVer pasó a la tarjeta siguiente");
+    ok(!ev(b3, "rejected.has(" + JSON.stringify(quinta) + ")"), "arrastrar desde #swVer rechazó la tarjeta");
   }
 
   // ── 33. combobox de búsquedas (#pick): es un <input>, así que el inventario de botones
@@ -992,8 +1032,114 @@ async function main() {
     await flush();
     ok(b.store.wp_estado, "una restauración a medias se llevó el estado por delante");
     ok(b.spy.reloads === 0, "la app recargó con la restauración a medias: " + b.spy.reloads);
+    // No basta con que `wp_estado` sobreviva: `hydrateEstado` da precedencia POR CAMPO a la
+    // clave espejo sobre el blob, así que un `wp_favorite` machacado a medias manda sobre los
+    // favoritos buenos que `wp_estado` conserva. Y no se ve hasta la siguiente recarga.
+    ok(b.store.wp_favorite === '{"ford.csv":["a1"]}',
+      "la restauración a medias dejó wp_favorite machacado: " + b.store.wp_favorite);
     ok(/no cabe|espacio/i.test(b.q("#snackmsg").textContent),
       "el aviso culpa al fichero de un problema de espacio: " + b.q("#snackmsg").textContent);
+
+    // …y la vuelta atrás tampoco puede reventar ella misma. Si una clave de la copia ENCOGE y
+    // otra CRECE, reponer la primera con la segunda ya escrita sube la ocupación por encima de
+    // la de partida: la cuota vuelve a saltar y la reposición se corta a medias.
+    const opts3 = { csv: CSV, timers: true };
+    const b3 = await boot({}, opts3);
+    b3.q("#kw").value = "ford";
+    await b3.q("#scrape").click();
+    await flush();
+    ev(b3, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    const favBueno = b3.store.wp_favorite;
+    const bytes = (s) => Object.values(s).reduce((n, v) => n + v.length, 0);
+    const holgura = 300;
+    opts3.limit = bytes(b3.store) + holgura;
+    // wp_searches crece lo justo: cabe al escribirse, pero deja al almacén sin sitio para que la
+    // reposición devuelva wp_favorite a su tamaño. El punto medio del margen que da esa cuenta.
+    const crece = holgura + Math.round((favBueno.length - 2) / 2);
+    const copia3 = JSON.stringify({
+      app: "rebusca", v: 1,
+      datos: {
+        wp_favorite: "{}", // encoge
+        wp_searches: "z".repeat((b3.store.wp_searches || "").length + crece), // crece, y cabe
+        wp_lastcsv: "z".repeat(opts3.limit), // no cabe: la cuota revienta aquí
+      },
+    });
+    b3.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia3 }] } });
+    await flush();
+    ok(b3.store.wp_favorite === favBueno,
+      "la vuelta atrás reventó por cuota y dejó wp_favorite machacado: " + b3.store.wp_favorite);
+    ok(b3.spy.reloads === 0, "la app recargó con la restauración deshecha: " + b3.spy.reloads);
+
+    // el fallo de IndexedDB llega cuando ya se escribió todo Y se borraron las claves sobrantes.
+    // Sin vuelta atrás la copia ajena se queda puesta, y el aviso sigue diciendo que no pasó nada.
+    const b4 = await boot({}, { csv: CSV, timers: true });
+    b4.q("#kw").value = "ford";
+    await b4.q("#scrape").click();
+    await flush();
+    ev(b4, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    const foto = (s) => JSON.stringify(Object.entries(s).sort());
+    const antes = foto(b4.store);
+    ev(b4, 'idb.set = async () => { throw new Error("IndexedDB llena") }');
+    const copia4 = JSON.stringify({
+      app: "rebusca", v: 1,
+      datos: { wp_favorite: '{"x.csv":["z9"]}' },
+      filas: { z9: { id: "z9", titulo: "ajeno" } },
+    });
+    b4.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia4 }] } });
+    await flush();
+    await flush();
+    ok(foto(b4.store) === antes, "el fallo de IndexedDB dejó puesta la copia ajena: " + foto(b4.store));
+    ok(b4.spy.reloads === 0, "la app recargó tras fallar IndexedDB: " + b4.spy.reloads);
+    // …y el aviso no puede culpar al fichero. La copia es buena y el triaje quedó entero: quien
+    // falló es este navegador. Si el usuario lee "Copia no válida" tira su única copia.
+    ok(!/no válida/i.test(b4.q("#snackmsg").textContent),
+      "el aviso culpa al fichero de un fallo del almacén: " + b4.q("#snackmsg").textContent);
+
+    // el fallo de IndexedDB de verdad no es un `set` que lanza: es la transacción que ABORTA al
+    // commitear, después de que la petición haya dicho que sí. Así revienta la cuota real.
+    const opts5 = { csv: CSV, timers: true };
+    const b5 = await boot({}, opts5);
+    b5.q("#kw").value = "ford";
+    await b5.q("#scrape").click();
+    await flush();
+    ev(b5, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    const antes5 = foto(b5.store);
+    opts5.idbFalla = "commit";
+    b5.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia4 }] } });
+    await flush();
+    await flush();
+    ok(foto(b5.store) === antes5, "el commit abortado dejó puesta la copia ajena: " + foto(b5.store));
+    ok(b5.spy.reloads === 0, "la app recargó con el commit de IndexedDB abortado: " + b5.spy.reloads);
+
+    // con la LECTURA rota (el arranque no pudo leer), `idb.set` resuelve sin escribir. El
+    // importador no puede dar por buena una restauración que deja las filas sin poner.
+    const b6 = await boot({}, { csv: CSV, timers: true });
+    b6.q("#kw").value = "ford";
+    await b6.q("#scrape").click();
+    await flush();
+    ev(b6, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    const antes6 = foto(b6.store);
+    ev(b6, "lecturaRota = true");
+    b6.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia4 }] } });
+    await flush();
+    await flush();
+    ok(foto(b6.store) === antes6, "el almacén roto dejó puesta la copia ajena: " + foto(b6.store));
+    ok(b6.spy.reloads === 0, "la app recargó con el almacén roto: " + b6.spy.reloads);
+
+    // una copia que no trae una clave que sí está en el almacén la borra. Sin esta línea el
+    // triaje viejo se mezcla con el importado, y hasta hoy ningún check lo miraba.
+    const b7 = await boot({}, { csv: CSV, timers: true });
+    b7.q("#kw").value = "ford";
+    await b7.q("#scrape").click();
+    await flush();
+    ev(b7, 'favorite.add("a1"); save("wp_favorite", favorite); pushEstado()');
+    ok(b7.store.wp_favorite, "el arranque no dejó una clave sobrante que borrar");
+    const copia7 = JSON.stringify({ app: "rebusca", v: 1, datos: { wp_estado: "{}" } });
+    b7.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia7 }] } });
+    await flush();
+    await flush();
+    ok(!("wp_favorite" in b7.store),
+      "la restauración dejó una clave que la copia no traía: " + Object.keys(b7.store).join());
 
     // una copia manipulada no escribe claves ajenas a la app
     const b2 = await boot({}, { csv: CSV });
@@ -1053,6 +1199,528 @@ async function main() {
     const msg = b.q("#snackmsg").textContent;
     ok(!/0 de 3/.test(msg), "el aviso inventa ramas caídas que no hubo: " + msg);
     ok(/2 de 3/.test(msg) && /cupo/.test(msg), "el aviso no dice que las ramas llenaron su cupo: " + msg);
+  }
+
+  // ── 46. una escritura que aborta avisa UNA vez, no pisa los «Deshacer» y se reintenta ──
+  //     El triaje escribe fire-and-forget (`saveRows` en `src/app.js:251`). Un rechazo suelto por
+  //     carta llegaba al `unhandledrejection` global, que pintaba "Fallo interno" encima del
+  //     «Deshacer». Pero cerrar el grifo era pasarse: los CSVs (cientos de KB) y el triaje (unos
+  //     KB) lo comparten, así que una cuota llena al commitear un texto grande dejaba la sesión
+  //     entera sin guardar, aunque el almacén se recuperase un segundo después.
+  {
+    const opts = { csv: CSV, timers: true, idbFalla: "commit" };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    ok(/No se pudo guardar/i.test(b.q("#snackmsg").textContent),
+      "el fallo de escritura no avisa: " + b.q("#snackmsg").textContent);
+    ok(!/NO guardará cambios/.test(b.q("#snackmsg").textContent),
+      "el aviso da por muerta la sesión entera por un fallo de escritura: " + b.q("#snackmsg").textContent);
+    ok(ev(b, "lecturaRota") === false, "un fallo de ESCRIBIR encendió la bandera de LEER");
+
+    // …y una vez avisado, se calla: las cartas siguientes conservan su «Deshacer».
+    ev(b, 'reject("a1", "Ford Focus")');
+    await flush();
+    await flush();
+    ok(/Rechazado/.test(b.q("#snackmsg").textContent),
+      "el fallo de escritura volvió a pisar el aviso del rechazo: " + b.q("#snackmsg").textContent);
+    ok(typeof b.q("#undo").onclick === "function", "el aviso del almacén se llevó por delante el Deshacer");
+    ok(bucket(b, "rejected").length === 1, "el rechazo se perdió con el almacén sin commitear");
+
+    // el almacén se recupera y la escritura siguiente ENTRA. Un fallo pasajero no puede dejar la
+    // sesión en solo lectura: IndexedDB vuelve en sí en cuanto baja la presión sobre la cuota.
+    opts.idbFalla = undefined;
+    ok((await ev(b, 'idb.set("rows", { a1: { titulo: "Ford Focus" } })')) === true,
+      "el almacén sano sigue sin aceptar escrituras tras un fallo pasajero");
+    ok((await ev(b, 'idb.get("rows")')).a1, "la escritura de después del fallo no entró");
+  }
+
+  // ── 46b. el aviso de una escritura fallida sale UNA vez, también con varias en vuelo ──
+  //     `loadCSV` dispara `saveRows` y `cacheCsv` a la vez (`src/app.js:1600`), así que la guarda
+  //     tiene que aguantar el camino concurrente, no solo el secuencial.
+  {
+    const b = await boot({}, { csv: CSV, timers: true, idbFalla: "commit" });
+    let avisos = 0;
+    ev(b, "window.__snackReal = snack; snack = (m, u) => { window.__cuenta(m); return window.__snackReal(m, u) }");
+    b.sandbox.__cuenta = (m) => { if (/No se pudo guardar/i.test(m)) avisos++; };
+    await Promise.all([
+      ev(b, 'idb.set("rows", {})'), ev(b, 'idb.set("csv:a", "x")'), ev(b, 'idb.set("csvIndex", {})'),
+    ]);
+    ok(avisos === 1, "tres escrituras fallidas en vuelo dieron " + avisos + " avisos, no 1");
+  }
+
+  // ── 46c. con la LECTURA rota, el triaje no machaca las filas buenas ──
+  //     Es la razón de ser del grifo: si el arranque no pudo leer, `rowCache` está vacío por el
+  //     fallo y no porque no haya fichas. `saveRows` repuebla solo con lo que hay en `data`
+  //     (`src/app.js:283-288`), así que al abrir otra búsqueda escribiría ese vacío encima.
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    await flush();
+    ok((await ev(b, 'idb.get("rows")')).a1, "el escenario no dejó una ficha buena que perder");
+
+    ev(b, "lecturaRota = true; rowCache = {}"); // como queda un arranque que no pudo leer
+    ev(b, 'favorite.add("a2"); save("wp_favorite", favorite)');
+    await flush();
+    await flush();
+    ok((await ev(b, 'idb.get("rows")')).a1,
+      "con la lectura rota, el triaje machacó la ficha buena: " + JSON.stringify(await ev(b, 'idb.get("rows")')));
+  }
+
+  // ── 46d. borrar una búsqueda con el almacén sin commitear no deja un rechazo suelto ──
+  //     `removeSearch` → `dropCsvCache` (`src/app.js:1797-1801`) es el único camino que emite un
+  //     `idb.del`. Sin `.catch`, ese rechazo llega al `unhandledrejection` de `src/app.js:7-15` y
+  //     pinta "Fallo interno" encima del aviso honesto. Ningún check hacía fallar nunca un `del`.
+  {
+    const opts = { csv: CSV, timers: true };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    ok(Object.keys(await ev(b, 'idb.get("csvIndex")')).length === 1, "no hay cache que borrar");
+    opts.idbFalla = "commit";
+    ok((await ev(b, 'idb.del("csv:ford.csv")')) === false, "un `del` que aborta dijo que sí entró");
+    await flush();
+    ok(/No se pudo guardar/i.test(b.q("#snackmsg").textContent),
+      "el `del` que aborta no avisa: " + b.q("#snackmsg").textContent);
+  }
+
+  // ── 47. el aviso de una restauración que falla reparte bien la culpa ──
+  //     Decirle al usuario "Copia no válida" cuando quien falla es su navegador le hace tirar la
+  //     única copia que tiene. Y al revés: un fichero que no es una copia tiene que decirlo.
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    b.q("#importState").dispatch("change", { target: { files: [{ text: async () => "esto no es json" }] } });
+    await flush();
+    await flush();
+    // `err instanceof SyntaxError` era falso aquí y verdadero en el navegador: `makeContext`
+    // inyecta el `JSON` del host, así que el error viene de otro realm. `err.name` sí cruza.
+    ok(/Copia no válida/.test(b.q("#snackmsg").textContent),
+      "un fichero que no es JSON no se dice culpa del fichero: " + b.q("#snackmsg").textContent);
+
+    // una transacción anulada propaga `error === null` (así lo deja `abort()` en la spec). El
+    // aviso no puede reventar al mirarlo: el usuario pulsa importar y se queda sin nada.
+    const opts = { csv: CSV, timers: true };
+    const b2 = await boot({}, opts);
+    const copia = JSON.stringify({
+      app: "rebusca", v: 1, datos: { wp_favorite: '{"x.csv":["z9"]}' }, filas: { z9: { titulo: "X" } },
+    });
+    opts.idbFalla = "anular";
+    b2.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    await flush();
+    ok(b2.q("#snackmsg").textContent === "Este navegador no pudo guardar la copia: no se ha restaurado nada, tu triaje sigue intacto",
+      "el aviso del fallo del almacén no dice lo que dice: " + b2.q("#snackmsg").textContent);
+    ok(b2.spy.reloads === 0, "la app recargó con la transacción anulada: " + b2.spy.reloads);
+  }
+
+  // ── 48. un commit abortado no deja escrito lo que la petición ya había aceptado ──
+  //     Una transacción de IndexedDB es atómica. El importador se apoya en eso para no reponer
+  //     las filas al deshacer, así que el arnés tiene que modelarlo o la premisa no está probada.
+  {
+    const opts = { csv: CSV, timers: true };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)'); // solo se cachea lo que está en un cajón
+    await flush();
+    const antes = JSON.stringify(await ev(b, 'idb.get("rows")'));
+    ok(/Ford Focus/.test(antes), "el scrape no dejó filas que perder: " + antes);
+    opts.idbFalla = "commit";
+    await ev(b, 'idb.set("rows", { z9: { titulo: "MUTANTE" } })');
+    opts.idbFalla = undefined;
+    ok(JSON.stringify(await ev(b, 'idb.get("rows")')) === antes,
+      "el commit abortado dejó escrita la fila: " + JSON.stringify(await ev(b, 'idb.get("rows")')));
+  }
+
+  // ── 49. la copia sale sin filas cuando no las hay, y CON ellas cuando las hay ──
+  //     Con la LECTURA rota `rowCache` está vacío por el fallo, no porque no haya fichas. Meter
+  //     ese vacío en `filas` hace que restaurar la copia en un móvil sano borre las fichas buenas:
+  //     `{}` es truthy y pasa el `if (copia.filas)`. Pero un fallo al ESCRIBIR no vacía nada, y
+  //     ahí quitar las fichas es tirar lo único que el usuario venía a salvar.
+  {
+    // primero el caso que importa: falló una escritura, `rowCache` está entero, la copia lo lleva.
+    const bw = await loaded();
+    ev(bw, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    await flush();
+    ev(bw, 'idb.set("rows", rowCache)'); // el usuario ya vio el aviso de que una escritura falló
+    ev(bw, "avisadoEscritura = true");
+    bw.q("#exportState").click();
+    const copiaw = JSON.parse(bw.spy.blobs.at(-1).partes.join(""));
+    ok(copiaw.filas && copiaw.filas.a1,
+      "un fallo al ESCRIBIR dejó la copia sin las fichas que están enteras en memoria: " + JSON.stringify(copiaw.filas));
+    ok(bw.q("#snackmsg").textContent === "Copia guardada",
+      "el aviso del export culpa a la lectura de un fallo de escritura: " + bw.q("#snackmsg").textContent);
+
+    const b = await loaded();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    await flush();
+    ev(b, "lecturaRota = true; rowCache = {}");
+    b.q("#exportState").click();
+    const copia = JSON.parse(b.spy.blobs.at(-1).partes.join(""));
+    ok(!("filas" in copia), "la copia se lleva unas filas vacías que borrarán las buenas al restaurar");
+    ok(copia.datos.wp_favorite, "la copia del triaje se perdió: el almacén roto no impide guardarlo");
+    ok(/sin las fichas/.test(b.q("#snackmsg").textContent),
+      "el aviso no dice que la copia va sin las fichas: " + b.q("#snackmsg").textContent);
+
+    // y esa copia sin `filas` la sigue aceptando el importador (las copias viejas tampoco la traen)
+    const b2 = await boot({}, { csv: CSV, timers: true });
+    b2.q("#importState").dispatch("change", {
+      target: { files: [{ text: async () => JSON.stringify(copia) }] },
+    });
+    await flush();
+    await flush();
+    ok(b2.spy.reloads === 1, "una copia sin filas ya no se restaura: " + b2.spy.reloads);
+  }
+
+  // ── 50. el almacén que no responde se dice al arrancar, y no se lleva por delante las filas ──
+  //     Sin `q.onerror` en el wrapper, un fallo de lectura deja la promesa colgada para siempre:
+  //     `hydrateStores` no termina, el grifo no se cierra y el usuario no ve nada. Y la migración
+  //     de `wp_rows` a IndexedDB borra la copia de localStorage DESPUÉS de escribir: si la
+  //     escritura no entró, ese borrado es la pérdida de todas las fichas del triaje.
+  {
+    const filas = JSON.stringify({ a1: { titulo: "Ford Focus", id: "a1" } });
+    const b = await boot({ wp_rows: filas }, { csv: CSV, timers: true, idbFalla: "peticion" });
+    await flush();
+    await flush();
+    ok(ev(b, "lecturaRota") === true, "el almacén que no responde no cerró el grifo");
+    ok(/NO guardará cambios/.test(b.q("#snackmsg").textContent),
+      "el almacén que no responde no avisa: " + b.q("#snackmsg").textContent);
+    ok(b.store.wp_rows === filas,
+      "la migración borró las filas de localStorage sin haberlas escrito: " + b.store.wp_rows);
+  }
+
+  // ── 50b. la migración de los CSVs viejos tampoco se da por buena sin mirar ──
+  //     Es la hermana de la de `wp_rows`. `localStorage.removeItem("wp_csv")` ya corrió, así que
+  //     si los textos no entran en IndexedDB se han perdido. Devolver OK deja `csvIndex` lleno de
+  //     entradas cuyo texto no existe, y el badge de «sin ver» cuenta anuncios que no se abren.
+  {
+    const viejo = JSON.stringify({ "ford.csv": { ts: 1, text: CSV } });
+    const b = await boot({ wp_csv: viejo }, { csv: CSV, timers: true, idbFalla: "commit" });
+    await flush();
+    await flush();
+    ok(ev(b, "lecturaRota") === true, "la migración de los CSVs se dio por buena sin entrar");
+    ok(/NO guardará cambios/.test(b.q("#snackmsg").textContent),
+      "la migración perdida no avisa: " + b.q("#snackmsg").textContent);
+  }
+
+  // ── 50c. y mira CADA texto, no solo el último apunte ──
+  //     Aquí el almacén solo rechaza las claves `csv:`: los textos no entran, pero el apunte
+  //     `csvIndex` sí. Sin acumular el booleano de cada vuelta del bucle, la migración mira solo
+  //     la última escritura, la ve buena y da OK con los textos perdidos.
+  //     DOS búsquedas, y solo la primera falla: con una sola vuelta del bucle `ok = X` y
+  //     `ok = X && ok` son la misma cosa, y el check pasaba por construcción.
+  {
+    const viejo = JSON.stringify({ "ford.csv": { ts: 1, text: CSV }, "vespa.csv": { ts: 1, text: CSV } });
+    const b = await boot({ wp_csv: viejo },
+      { csv: CSV, timers: true, idbFalla: "commit", idbFallaClave: "csv:ford" });
+    await flush();
+    await flush();
+    ok(ev(b, "lecturaRota") === true, "un texto perdido en el bucle no cerró el grifo");
+    ok(await ev(b, 'idb.get("csv:vespa.csv")'),
+      "el texto que no falla tampoco entró: el fallo no es parcial y el check no prueba lo suyo");
+  }
+
+  // ── 51. el sufijo de frescura de un nombre de búsqueda no mira la cadena de prototipos ──
+  //     `SINCE_LABEL[x]` sin `Object.hasOwn` acepta "constructor" o "toString" como frescura.
+  //     La etiqueta salía como `ps4 (function Object() { [native code] })`, y ese `since` se va
+  //     al scraper, que compone `SINCE_TF["constructor"]` en la petición a la API.
+  //     `src/app.js:2411` ya se guarda de esto, con un comentario que nombra el peligro.
+  {
+    const b = await loaded();
+    const parts = ev(b, 'queryParts("ps4--constructor.csv")');
+    ok(parts.since === "", "un nombre heredado del prototipo pasa por frescura: " + parts.since);
+    ok(parts.kw === "ps4  constructor", "la palabra clave se comió el sufijo falso: " + parts.kw);
+    ok(!/native code/.test(ev(b, 'queryLabel("ps4--constructor.csv")')),
+      "la etiqueta enseña una función del prototipo: " + ev(b, 'queryLabel("ps4--constructor.csv")'));
+    ok(ev(b, 'queryParts("ps4--semana.csv")').since === "semana", "una frescura de verdad dejó de valer");
+  }
+
+  // ── 52. restaurar una copia no deja el cache de anuncios del ocupante anterior ──
+  //     El importador reponía `rows` pero no tocaba `csvIndex` ni las claves `csv:<nombre>`. Tras
+  //     restaurar la copia de otro móvil, abrir esa búsqueda pintaba los anuncios cacheados de
+  //     antes en vez de scrapear, con los precios y las fotos de otra persona.
+  //     El vaciado no lo hace el importador: deja una marca y lo hace el arranque de después de la
+  //     recarga, que es lo que corre de verdad en el navegador. Así que este check arranca dos
+  //     veces sobre el mismo almacén, como haría el móvil.
+  {
+    const mem = new Map();
+    const b = await boot({}, { csv: CSV, timers: true, idbMem: mem });
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    ok(Object.keys(await ev(b, 'idb.get("csvIndex")')).length > 0, "el scrape no dejó cache que heredar");
+
+    const copia = JSON.stringify({ app: "rebusca", v: 1, datos: { wp_estado: "{}" }, filas: {} });
+    b.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    await flush();
+    ok(b.spy.reloads === 1, "la restauración no llegó a recargar: " + b.spy.reloads);
+    ok(b.store.wp_cacheajena === "1", "la restauración no marcó el cache como ajeno: " + b.store.wp_cacheajena);
+
+    const b2 = await boot({ ...b.store }, { csv: CSV, timers: true, idbMem: mem }); // la recarga
+    await flush();
+    await flush();
+    const idx = await ev(b2, 'idb.get("csvIndex")');
+    ok(!idx || Object.keys(idx).length === 0,
+      "el arranque dejó el índice de anuncios del ocupante anterior: " + JSON.stringify(idx));
+    // La clave que el scrape crea de verdad. `ford--semana.csv` no existe nunca en este bloque
+    // (el scrape va sin sufijo de frescura), así que la aserción pasaba por construcción.
+    ok((await ev(b2, 'idb.get("csv:ford.csv")')) === undefined,
+      "el arranque dejó cacheado el texto de una búsqueda ajena");
+    ok(b2.store.wp_cacheajena === undefined, "la marca se quedó puesta con el cache ya vaciado");
+  }
+
+  // ── 52b. con el almacén mudo, una copia sin filas se restaura ENTERA igual ──
+  //     Los favoritos, los rechazados, las búsquedas, los alias y las exclusiones viven en
+  //     localStorage: se restauran sin tocar IndexedDB. Lanzar porque el almacén no acepta el
+  //     vaciado del cache los deshace todos, y eso es perder funcionalidad por un cache.
+  //     El cache ajeno no se queda sin vaciar: la marca lo reintenta en cada arranque.
+  {
+    const opts = { csv: CSV, timers: true };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+
+    opts.idbFalla = "commit";
+    const copia = JSON.stringify({
+      app: "rebusca", v: 1,
+      datos: { wp_favorite: '{"moto.csv":["z9"]}', wp_alias: '{"moto.csv":"mi vespa"}' },
+    });
+    b.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    await flush();
+    ok(b.spy.reloads === 1, "una copia sin filas no se restauró por un cache que no se pudo vaciar: " + b.spy.reloads);
+    ok(b.store.wp_favorite === '{"moto.csv":["z9"]}', "el triaje restaurado se deshizo: " + b.store.wp_favorite);
+    ok(b.store.wp_alias === '{"moto.csv":"mi vespa"}', "los alias restaurados se deshicieron: " + b.store.wp_alias);
+    ok(b.store.wp_cacheajena === "1", "el cache ajeno se quedó sin marcar: " + b.store.wp_cacheajena);
+  }
+
+  // ── 52c. la marca del cache ajeno sobrevive a un arranque que no puede vaciarlo ──
+  //     Si el almacén sigue sin escribir, el índice se vacía en memoria igual — sin índice nadie
+  //     pinta un texto suelto — y la marca se queda para que el arranque siguiente lo reintente.
+  {
+    const mem = new Map();
+    const opts = { csv: CSV, timers: true, idbMem: mem };
+    const b = await boot({}, opts);
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    const store = { ...b.store, wp_cacheajena: "1" };
+
+    const b2 = await boot({ ...store }, { csv: CSV, timers: true, idbMem: mem, idbFalla: "commit" });
+    await flush();
+    await flush();
+    ok(Object.keys(ev(b2, "csvIndex")).length === 0,
+      "el índice ajeno sigue en memoria con el almacén mudo: " + JSON.stringify(ev(b2, "csvIndex")));
+    ok(b2.store.wp_cacheajena === "1", "la marca se borró sin haber vaciado nada: " + b2.store.wp_cacheajena);
+
+    const b3 = await boot({ ...store }, { csv: CSV, timers: true, idbMem: mem }); // el almacén se cura
+    await flush();
+    await flush();
+    ok(Object.keys((await ev(b3, 'idb.get("csvIndex")')) || {}).length === 0,
+      "el almacén ya sano no vació el cache ajeno que la marca reclamaba");
+    ok(b3.store.wp_cacheajena === undefined, "la marca se quedó puesta con el cache ya vaciado");
+  }
+
+  // ── 52d. el vaciado del cache ajeno no depende de que la lectura fuera bien ──
+  //     Con la llamada DENTRO del `try` de hydrateStores, un `throw` de la migración se la saltaba
+  //     entera, y el arranque de después de restaurar pintaba los anuncios del ocupante anterior con
+  //     el badge ⚙ contándolos como novedades del usuario. El disparador es un fallo PARCIAL: uno de
+  //     los textos del ocupante anterior no cabe, la migración lanza y `csvIndex` ya está poblado.
+  {
+    const viejo = JSON.stringify({ "grande.csv": { ts: 1, text: CSV }, "ps5.csv": { ts: 1, text: CSV } });
+    const b = await boot({ wp_csv: viejo, wp_cacheajena: "1" },
+      { csv: CSV, timers: true, idbFalla: "commit", idbFallaClave: "csv:grande" });
+    await flush();
+    await flush();
+    ok(ev(b, "lecturaRota") === true, "el escenario no reproduce: la migración no lanzó");
+    ok(Object.keys(ev(b, "csvIndex")).length === 0,
+      "el cache del ocupante anterior sigue en el índice: " + JSON.stringify(Object.keys(ev(b, "csvIndex"))));
+  }
+
+  // ── 52e. la marca caduca en cuanto una escritura del índice entra ──
+  //     La marca decía «el índice del disco puede ser del ocupante anterior». Guardar el índice es la
+  //     prueba de que ya no lo es. Sin esto, una marca que no se pudo consumir no caduca nunca y el
+  //     arranque de dentro de dos días borra el cache que el usuario construyó DESPUÉS de restaurar.
+  {
+    const mem = new Map();
+    const opts = { csv: CSV, timers: true, idbMem: mem, idbFalla: "commit" };
+    const b = await boot({ wp_cacheajena: "1" }, opts);
+    await flush();
+    await flush();
+    ok(b.store.wp_cacheajena === "1", "el escenario no reproduce: la marca se consumió con el almacén mudo");
+
+    opts.idbFalla = undefined; // el almacén se cura y el usuario scrapea lo suyo
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    ok(b.store.wp_cacheajena === undefined,
+      "la marca sigue puesta con el índice del usuario ya escrito: " + b.store.wp_cacheajena);
+
+    const b2 = await boot({ ...b.store }, { csv: CSV, timers: true, idbMem: mem });
+    await flush();
+    await flush();
+    ok(ev(b2, "csvIndex")["ford.csv"], "el arranque siguiente se comió el cache propio del usuario");
+  }
+
+  // ── 52f. …pero NO caduca si el almacén se cura solo A MEDIAS ──
+  //     El apunte del índice son unos KB y entra; el texto del CSV son cientos y no cabe. Con la
+  //     marca retirada ahí, el nombre del índice del usuario apunta al texto que dejó el ocupante
+  //     anterior, y ningún arranque futuro lo reintenta: sus anuncios salen como resultados del
+  //     usuario. Guardar el índice prueba lo que hay en MEMORIA, no que el cache ajeno se fuera.
+  {
+    const mem = new Map();  // el disco tal como lo dejó el ocupante anterior
+    mem.set("csv:ford.csv", "id,titulo,precio\r\nz1,Ford del ocupante anterior,300\r\n");
+    mem.set("csvIndex", { "ford.csv": { ts: 1, ids: ["z1"] } });
+    const opts = { csv: CSV, timers: true, idbMem: mem, idbFalla: "commit" };
+    const b = await boot({ wp_cacheajena: "1" }, opts);
+    await flush();
+    await flush();
+    ok(b.store.wp_cacheajena === "1", "el escenario no reproduce: la marca se consumió con el almacén mudo");
+
+    opts.idbFalla = "commit";
+    opts.idbFallaClave = "csv:";   // el almacén se cura a medias: el índice sí, los textos no
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    await flush();
+    ok(b.store.wp_cacheajena === "1",
+      "la marca se retiró con el texto del ocupante todavía en el disco: " + b.store.wp_cacheajena);
+    ok((await ev(b, 'idb.get("csv:ford.csv")')).includes("del ocupante anterior"),
+      "el escenario no reproduce: el texto del ocupante no sobrevivió");
+  }
+
+  // ── 53. una copia sin ninguna ficha no borra las del móvil de destino ──
+  //     `if (copia.filas)` da por bueno un `{}`, que es lo que exporta quien aún no ha clasificado
+  //     nada. Escribirlo reemplaza el registro entero: `put` no fusiona.
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    await flush();
+    ok((await ev(b, 'idb.get("rows")')).a1, "el escenario no dejó una ficha que perder");
+
+    const copia = JSON.stringify({ app: "rebusca", v: 1, datos: { wp_estado: "{}" }, filas: {} });
+    b.q("#importState").dispatch("change", { target: { files: [{ text: async () => copia }] } });
+    await flush();
+    await flush();
+    ok((await ev(b, 'idb.get("rows")')).a1,
+      "una copia sin fichas borró las del destino: " + JSON.stringify(await ev(b, 'idb.get("rows")')));
+  }
+
+  // ── 54. entre dos pestañas, una no machaca las fichas que la otra acaba de escribir ──
+  //     El evento `storage` trae los cubos, que viven en localStorage, pero no las fichas, que
+  //     viven en IndexedDB. Sin re-leerlas, la pestaña vieja escribe su `rowCache` de antes encima
+  //     y el favorito de la otra se queda sin ficha para siempre.
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'favorite.add("a1"); save("wp_favorite", favorite)');
+    await flush();
+
+    // la otra pestaña clasifica un anuncio de una búsqueda que esta no tiene cargada
+    ev(b, 'idb.set("rows", { ...rowCache, a9: { id: "a9", titulo: "De la otra pestaña", _csv: "moto.csv" } })');
+    await flush();
+    b.store.wp_favorite = '{"ford.csv":["a1"],"moto.csv":["a9"]}';
+    b.fireWin("storage", { key: "wp_favorite" });
+    await flush();
+    await flush();
+    ok(ev(b, 'bucketed("a9")'), "el evento storage no trajo el favorito de la otra pestaña");
+
+    ev(b, 'reject("a2", "Otro")'); // esta pestaña clasifica lo suyo: saveRows escribe rowCache entero
+    await flush();
+    await flush();
+    const filas = await ev(b, 'idb.get("rows")');
+    ok(filas.a9, "esta pestaña machacó la ficha de la otra: " + JSON.stringify(Object.keys(filas)));
+    ok(filas.a1, "esta pestaña perdió su propia ficha al fusionar: " + JSON.stringify(Object.keys(filas)));
+  }
+
+  // ── 54b. …y al fusionar manda la memoria, no el disco ──
+  //     La fusión trae las fichas de la otra pestaña, pero esta pestaña puede tener cambios propios
+  //     que aún no ha volcado. Si el disco pisa la memoria, el trabajo sin guardar de esta pestaña
+  //     desaparece de la pantalla en cuanto la otra toca cualquier cubo.
+  {
+    const b = await boot({}, { csv: CSV, timers: true });
+    b.q("#kw").value = "ford";
+    await b.q("#scrape").click();
+    await flush();
+    ev(b, 'reject("a1", "Otro")'); // solo lo clasificado tiene ficha en `rowCache`
+    await flush();
+    await flush();
+    const titulo = ev(b, "rowCache.a1.titulo");
+
+    ev(b, 'idb.set("rows", { a1: { id: "a1", titulo: "Versión vieja del disco" } })');
+    await flush();
+    b.fireWin("storage", { key: "wp_favorite" });
+    await flush();
+    await flush();
+    ok(ev(b, "rowCache.a1.titulo") === titulo,
+      "el disco pisó la ficha que esta pestaña tenía en memoria: " + ev(b, "rowCache.a1.titulo"));
+  }
+
+  // ── 54c. el evento de la otra pestaña no pinta "Fallo interno" encima del aviso honesto ──
+  //     `idb.get` SÍ relanza — a diferencia de `set` y `del`, que se tragan el rechazo a propósito
+  //     para el triaje —, así que el handler de `storage` necesita su propio `.catch`. Sin él, cada
+  //     evento de la otra pestaña con el almacén parado llega al `unhandledrejection` de
+  //     `src/app.js:7-15`, pinta "Fallo interno: …" y se lleva por delante el botón «Deshacer».
+  //     Node no enruta sus rechazos al `window` de mentira: hay que pasárselos a mano.
+  {
+    const sueltos = [];
+    const recoge = (razon) => sueltos.push(razon);
+    process.on("unhandledRejection", recoge);
+    try {
+      // (a) el almacén se cae A MITAD de sesión: `lecturaRota` sigue false y solo salva el `.catch`
+      const opts = { csv: CSV, timers: true };
+      const b = await boot({}, opts);
+      b.q("#kw").value = "ford";
+      await b.q("#scrape").click();
+      await flush();
+      ev(b, 'reject("a1", "Otro")');
+      await flush();
+      await flush();
+      ok(/Rechazado/.test(b.q("#snackmsg").textContent), "el escenario no reproduce: no hay aviso que pisar");
+      opts.idbFalla = "peticion";
+      b.fireWin("storage", { key: "wp_favorite" });
+      await flush();
+      await flush();
+      for (const r of sueltos.splice(0)) b.fireWin("unhandledrejection", { reason: r });
+      await flush();
+      ok(/Rechazado/.test(b.q("#snackmsg").textContent),
+        "el evento de la otra pestaña pisó el aviso honesto: " + b.q("#snackmsg").textContent);
+      ok(!b.q("#snackundo").hidden === true, "el evento de la otra pestaña escondió el botón «Deshacer»");
+
+      // (b) con la lectura rota ni se pide: no hay nada que fusionar, y el aviso del arranque manda
+      const b2 = await boot({}, { csv: CSV, timers: true, idbFalla: "peticion" });
+      await flush();
+      await flush();
+      ok(ev(b2, "lecturaRota") === true, "el escenario no reproduce: la lectura no está rota");
+      b2.fireWin("storage", { key: "wp_favorite" });
+      await flush();
+      await flush();
+      for (const r of sueltos.splice(0)) b2.fireWin("unhandledrejection", { reason: r });
+      await flush();
+      ok(/NO guardará cambios/.test(b2.q("#snackmsg").textContent),
+        "con la lectura rota, el evento pisó el aviso del arranque: " + b2.q("#snackmsg").textContent);
+    } finally {
+      process.off("unhandledRejection", recoge);
+    }
   }
 
   console.log("ok (" + n + " comprobaciones)");

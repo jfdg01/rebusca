@@ -48,6 +48,11 @@ for (const k of nuevas) localStorage.setItem(k, datos[k]);
 for (const k of backupKeys()) if (!nuevas.includes(k)) localStorage.removeItem(k);
 ```
 
+> Este arreglo se quedó corto y las iteraciones 1 y 2 lo profundizaron: el bucle no era
+> atómico y la escritura de IndexedDB caía fuera. El código de hoy envuelve las tres
+> operaciones y las deshace. Ver `iteraciones/01-robustez.md` (hallazgo 1) y
+> `iteraciones/02-import-atomico.md` (hallazgos 1 y 2).
+
 ## 2. El tope de 1500 filas deja ramas del `OR` sin pedir
 
 - [x] Gravedad **media** · `83d12ae` → `9a01fbb`
@@ -135,9 +140,14 @@ sin que nadie lo viera, porque el fichero no estaba en la lista de comandos de `
 
 ## Pendiente
 
-- **No hay runner ni CI.** El bucle de siete comandos de `CLAUDE.md` hay que acordarse de
-  ejecutarlo. Es exactamente el fallo del defecto 6 con otra cara. Un `check.sh` o un hook
-  de pre-commit lo cerraría; hoy depende de la disciplina.
+Nada. El último punto abierto se cerró el 10/08/2026.
+
+- [x] **No hay runner ni CI.** Era el defecto 6 con otra cara: el bucle de siete comandos
+  dependía de que alguien se acordara. Ahora `./check.sh` los corre de una (~5 s, sale 1
+  si alguno falla) y `.githooks/pre-commit` lo dispara en cada commit. `check.sh` avisa
+  si el hook no está activado en el clon, que es el único paso que queda a mano.
+  Validado rompiendo `src/scrape.js` a propósito: 4 de 7 en rojo, exit 1, y revertido.
+  Sin GitHub Actions: el repo no tiene remoto de CI y sería otra pieza que mantener.
 
 ## Verificado y limpio
 

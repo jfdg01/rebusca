@@ -72,6 +72,7 @@ Todo se ejecuta **desde la raíz del repo**. El servidor solo sirve estáticos d
 python3 src/servidor.py
 
 # 2) Self-checks sin red (los siete; ninguno toca la red)
+./check.sh                            # los siete de una, ~5s. Silencio = verde.
 python3 src/servidor.py demo          # servidor
 python3 src/test_servidor.py          # suite del servidor: rutas, MIME, anti-traversal
 python3 src/wallapop.py demo          # scraper Python (referencia)

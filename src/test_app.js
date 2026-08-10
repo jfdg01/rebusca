@@ -44,11 +44,12 @@ function htmlChildren(id, tag) {
 const HTML_INIT = (() => {
   const html = HTML;
   const init = {};
-  for (const [, attrs] of html.matchAll(/<[a-zA-Z][a-zA-Z0-9]*\s([^>]*)>/g)) {
+  for (const [, tag, attrs] of html.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)\s([^>]*)>/g)) {
     const id = /\bid="([^"]+)"/.exec(attrs);
     if (!id) continue;
     const val = /\bvalue="([^"]*)"/.exec(attrs);
     init["#" + id[1]] = {
+      tagName: tag.toUpperCase(), // como el DOM real. Lo usa `closest` para casar "a,button,input"
       hidden: /\bhidden(?=[\s/>]|$)/.test(attrs),
       disabled: /\bdisabled(?=[\s/>]|$)/.test(attrs),
       checked: /\bchecked(?=[\s/>]|$)/.test(attrs),
@@ -153,7 +154,18 @@ function makeEl(sel, any) {
     // contiene = es él mismo o cuelga de él. Solo se recorren elementos falsos (ELS): el stub
     // universal `any` responde truthy a todo y daría un "sí" a cualquier nodo.
     contains: (n) => n === el || st.children.some((c) => ELS.has(c) && c.contains(n)),
-    closest: () => null,
+    // `closest` solo se mira a sí mismo. En el único uso de app.js (la guarda anti-arrastre del
+    // mazo) el target ES el elemento a excluir, así que no hace falta subir el árbol. Antes
+    // devolvía siempre null: la guarda era inalcanzable y borrarla dejaba los siete en verde.
+    closest: (q) =>
+      String(q)
+        .split(",")
+        .some((s) => {
+          s = s.trim();
+          return s.startsWith(".") ? cls().includes(s.slice(1)) : st.tagName === s.toUpperCase();
+        })
+        ? el
+        : null,
     remove() {},
     appendChild(c) {
       st.children.push(c);
@@ -201,6 +213,70 @@ function makeEl(sel, any) {
   });
   ELS.add(el);
   return el;
+}
+
+// IndexedDB de mentira. Sin esto el arnés no definía `indexedDB`, así que el `idb` de app.js
+// caía siempre al Map de memoria (`src/app.js:115-118`) y ningún check tocaba el wrapper de
+// verdad: ni las transacciones, ni `almacenRoto`, ni el commit. Y el commit es justo donde la
+// cuota de IndexedDB revienta una escritura que la petición ya había dado por buena.
+// `opts.idbFalla`: "commit" = la petición dice que sí y la transacción aborta después (la cuota
+// real); "peticion" = falla ya la petición; "anular" = aborta como lo hace `abort()`, que según la
+// spec deja `transaction.error` a null. Se lee en cada operación, así que un test puede romper el
+// almacén a mitad mutando el `opts` con el que arrancó.
+// `opts.idbFallaClave`: limita el fallo a las claves que empiezan por ese texto. Un fallo PARCIAL
+// —una escritura del bucle aborta y la de después entra— es lo que distingue mirar cada booleano
+// de mirar solo el último.
+function makeIndexedDB(opts, mem) {
+  const luego = (fn) => Promise.resolve().then(fn);
+  const fallo = (n) => Object.assign(new Error("almacén de mentira: " + n), { name: n });
+  const db = {
+    createObjectStore: () => {},
+    transaction: (_n, mode) => {
+      const t = { error: null };
+      let mia = !opts.idbFallaClave; // ¿esta transacción toca una clave de las que fallan?
+      // Las escrituras esperan al commit. Una transacción de IndexedDB es atómica: la que aborta
+      // no deja nada escrito. Es la premisa con la que el importador se ahorra reponer las filas.
+      const pend = [];
+      const op = (fn) => {
+        const q = { result: undefined, error: null };
+        luego(() => {
+          if (opts.idbFalla === "peticion" && mia) {
+            q.error = fallo("QuotaExceededError");
+            q.onerror && q.onerror(q);
+          } else {
+            q.result = fn();
+            q.onsuccess && q.onsuccess(q);
+          }
+          // el commit va un microtask DESPUÉS de la petición: así es como una escritura que ya
+          // dijo que sí se pierde igual.
+          luego(() => {
+            if (opts.idbFalla && mia && mode === "readwrite") {
+              if (opts.idbFalla !== "anular") t.error = fallo("AbortError");
+              t.onabort && t.onabort(t);
+            } else {
+              for (const f of pend) f();
+              t.oncomplete && t.oncomplete(t);
+            }
+          });
+        });
+        return q;
+      };
+      const marca = (k) => (mia = mia || String(k).startsWith(opts.idbFallaClave || "\u0000"));
+      t.objectStore = () => ({
+        get: (k) => (marca(k), op(() => (mem.has(k) ? mem.get(k) : undefined))),
+        put: (v, k) => (marca(k), op(() => void pend.push(() => mem.set(k, v)))),
+        delete: (k) => (marca(k), op(() => void pend.push(() => mem.delete(k)))),
+      });
+      return t;
+    },
+  };
+  return {
+    open: () => {
+      const r = { result: db, error: null };
+      luego(() => r.onsuccess && r.onsuccess(r));
+      return r;
+    },
+  };
 }
 
 function makeContext(store, opts = {}) {
@@ -302,6 +378,9 @@ function makeContext(store, opts = {}) {
   const sandbox = {
     document,
     localStorage,
+    // `opts.idbMem`: un Map propio del test, para arrancar DOS veces sobre el mismo almacén y ver
+    // qué se lleva una sesión a la siguiente (una restauración marca trabajo para el arranque).
+    indexedDB: makeIndexedDB(opts, opts.idbMem || new Map()),
     AbortController,
     performance: { now: () => 0 },
     // scrape.js no se carga aquí: el scraper del browser se falsea y devuelve el CSV que pida el test

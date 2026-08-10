@@ -38,18 +38,26 @@ const item = (id, o = {}) => ({
   images: [],
 });
 
-// carga scrape.js con su propio fetch y sin esperas reales
-function load(fetchFake) {
+// carga scrape.js con su propio fetch y sin esperas reales.
+// `reloj: "congelado"` hace lo contrario: los sleep NO vuelven solos. Es la única forma de
+// probar que abortar corta una espera en curso; con el setTimeout instantáneo de siempre, un
+// sleep que ignora el signal se ve idéntico a uno que lo respeta.
+function load(fetchFake, reloj) {
   const calls = [];
+  const timers = [];
+  const esperas = [];   // ms de cada sleep: el reloj es instantáneo, pero el tiempo se apunta
   const sandbox = {
     fetch: (url, init) => (calls.push(String(url)), fetchFake(String(url), init, calls.length - 1)),
-    setTimeout: (cb) => (cb(), 0), // los sleep de backoff/jitter no cuestan tiempo en el test
+    setTimeout: reloj === "congelado"
+      ? (cb) => timers.push(cb)                 // se guarda y no se llama nunca
+      : (cb, ms) => (esperas.push(ms), cb(), 0), // los sleep de backoff/jitter no cuestan tiempo
+    clearTimeout: () => {},
     URLSearchParams, Math, Date, JSON, Promise, Error, console,
     module: { exports: {} },
     require: { main: null },
   };
   vm.runInNewContext(SRC, sandbox, { filename: "scrape.js" });
-  return { api: sandbox.module.exports, calls };
+  return { api: sandbox.module.exports, calls, esperas };
 }
 const filas = (csv) => csv.trim().split("\r\n").slice(1); // sin la cabecera
 const col = (linea, i) => linea.split(",")[i];
@@ -133,7 +141,7 @@ async function main() {
   }
 
   // ── 9. una rama que se cae corta ESA rama, no la búsqueda entera. Con la rama mala en
-  //     medio se ve: las de detrás se tienen que pedir igual, como hace el 403 (test 10).
+  //     medio se ve: las de detrás se tienen que pedir igual. (El 403 no: ese corta todo, test 15.)
   {
     const { api, calls } = load(async (url) =>
       url.includes("mala") ? resp(500, {}) : resp(200, page([item(url.includes("tercera") ? "c" : "a")])));
@@ -150,7 +158,7 @@ async function main() {
     ok(err, "una búsqueda que falla entera debe avisar, no devolver un CSV vacío");
   }
 
-  // ── 10. 403 (DataDome): corta la rama y conserva lo recogido ──
+  // ── 10. 403 (DataDome): conserva lo recogido (que corte el scrape entero, en el test 15) ──
   {
     const { api } = load(async (url) => (url.includes("mala") ? resp(403, {}) : resp(200, page([item("a")]))));
     const csv = await api.scrape({ keywords: "buena OR mala" });
@@ -163,6 +171,33 @@ async function main() {
     const { api } = load(async () => (ctrl.aborted = true, resp(200, page([item("a")], "CUR"))));
     const csv = await api.scrape({ keywords: "ford", signal: ctrl });
     ok(filas(csv).length === 1, "al parar se perdió lo ya recogido");
+  }
+
+  // ── 11b. parar DURANTE una espera: el sleep tiene que cortarse, no cumplirse ──
+  //      El check 11 aborta antes de un sleep; este aborta con el sleep ya en marcha, que es
+  //      lo que pasa de verdad: el usuario pulsa parar mientras corre el jitter entre páginas
+  //      (medio segundo) o un backoff por 429 (hasta 17s, o lo que mande un Retry-After).
+  {
+    const ac = new AbortController();
+    const { api } = load(async () => resp(200, page([item("a")], "CUR")), "congelado");
+    const p = api.scrape({ keywords: "ford", signal: ac.signal });
+    await new Promise((r) => setImmediate(r));   // deja que la primera página llegue al sleep
+    ac.abort();
+    const tarde = new Promise((_, rej) =>
+      setTimeout(() => rej(new Error("FAIL: scrape() sigue esperando 300ms después de abortar")), 300));
+    const csv = await Promise.race([p, tarde]);
+    ok(filas(csv).length === 1, "al parar durante la espera se perdió lo ya recogido");
+  }
+
+  // ── 11c. la espera que se cumple no deja su listener pegado al signal ──
+  //      El listener de abort se arma con {once:true}, que solo lo retira si el abort llega.
+  //      En una búsqueda normal el abort no llega nunca, así que cada página dejaba uno detrás.
+  {
+    const ac = new AbortController();
+    const { api } = load(async (_u, _i, i) => resp(200, page([item("a" + i)], i < 9 ? "CUR" + i : null)));
+    await api.scrape({ keywords: "ford", signal: ac.signal });
+    const pegados = require("events").getEventListeners(ac.signal, "abort").length;
+    ok(pegados === 0, "una búsqueda de 10 páginas dejó " + pegados + " listeners de abort pegados");
   }
 
   // ── 12. onProgress: un aviso al entrar en cada rama y otro por anuncio nuevo ──
@@ -201,6 +236,89 @@ async function main() {
     });
     const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc", maxRows: 9 });
     ok(filas(csv).length === 9, "el cupo de la rama vacía se perdió: " + filas(csv).length + " de 9");
+  }
+
+  // ── 14. una API que nunca deja de dar cursor no puede hacer un bucle sin fin ──
+  //     Sin filtro de frescura `old` no se pone nunca, y `lleno` mira las filas: si las filas
+  //     no crecen, las dos condiciones locales no llegan jamás. Tres formas de que no crezcan,
+  //     y la tercera no necesita una API rota.
+  {
+    // El cursor se apaga a las 400 páginas: sin ese freno el test no falla, se queda sin
+    // memoria. Que 400 sea el número que salva al test, y no el scraper, es justo el defecto.
+    // El límite de abajo es 31 y no 200: el freno cuenta páginas SECAS —sin una fila nueva— y en
+    // los tres escenarios ninguna página trae nada, así que la racha nunca se rompe.
+    const fin = (i, pag) => (i >= 400 ? resp(200, page([], null)) : pag);
+    const escenarios = [
+      ["páginas vacías", async (u, _init, i) => fin(i, resp(200, page([], "CUR" + i))), {}],
+      ["el mismo item una y otra vez", async (u, _init, i) => fin(i, resp(200, page([item("a")], "CUR"))), {}],
+      ["titleOnly y nada que case", async (u, _init, i) => fin(i, resp(200, page([item("x" + i, { title: "otra cosa" })], "CUR" + i))),
+        { titleOnly: true }],
+    ];
+    for (const [nombre, f, extra] of escenarios) {
+      const { api, calls } = load(f);
+      const csv = await api.scrape({ keywords: "ford", ...extra });
+      ok(calls.length <= 31, `sin freno por no avanzar: "${nombre}" pidió ${calls.length} veces`);
+      // `ramasSecas`, no `parcial`: el corte es determinista —re-scrapear da las mismas páginas
+      // secas—, así que sí se cachea. Lo que se exige es que el corte quede contado, porque de ese
+      // contador salen el aviso al usuario y este mismo check.
+      ok(api.lastScrape.ramasSecas === 1, `el recorte de "${nombre}" no quedó contado: ${api.lastScrape.ramasSecas}`);
+      ok(!api.lastScrape.parcial, `"${nombre}" se marcó parcial: pierde el cache y se re-scrapea entero en cada apertura`);
+      ok(csv.startsWith(api.FIELDS.join(",")), `"${nombre}" no devolvió un CSV`);
+    }
+  }
+
+  // ── 14b. …y el freno NO puede tocar una búsqueda que avanza despacio ──
+  //     Este es el check que la iteración 8 no tuvo, y por eso su tope de páginas totales pasó
+  //     verde recortando búsquedas sanas. API perfecta, catálogo finito de 250 páginas, "solo en
+  //     el título" y 4 aciertos de cada 40: avanza despacio, pero avanza y termina sola.
+  {
+    // Tres páginas seguidas sin un solo acierto de cada 25: un tramo del catálogo donde no hay
+    // nada que case. Es lo que hace que un freno demasiado impaciente muera aquí y no en prod.
+    const aciertos = (i) => (i % 25 >= 22 ? 0 : 4);
+    const pagina = (i) => page(
+      Array.from({ length: 40 }, (_, j) => item(`i${i}_${j}`, { title: j < aciertos(i) ? "sofa gris" : "otra cosa" })),
+      i >= 249 ? null : "CUR" + i);
+    const { api, calls } = load(async (u, _init, i) => resp(200, pagina(i)));
+    const csv = await api.scrape({ keywords: "sofa", titleOnly: true });
+    ok(calls.length === 250, "el freno recortó una búsqueda que avanza: " + calls.length + " páginas de 250");
+    ok(filas(csv).length === 880, "faltan anuncios de un catálogo que se agota solo: " + filas(csv).length + " de 880");
+    ok(!api.lastScrape.parcial, "una búsqueda completa se marcó parcial: no se cachea y se re-scrapea en cada apertura");
+  }
+
+  // ── 15. el 403 corta el scrape ENTERO: insistir con el bloqueo puesto lo alarga ──
+  {
+    const { api, calls } = load(async (url) => (url.includes("aaa") ? resp(403, {}) : resp(200, page([item("a")]))));
+    const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc" });
+    ok(calls.length === 1, "tras el 403 se siguió pidiendo: " + calls.length + " peticiones");
+    ok(api.lastScrape.bloqueado, "el bloqueo no sale por el diagnóstico y el usuario no sabe qué le pasa");
+    ok(api.lastScrape.parcial, "un scrape cortado por bloqueo no puede cachearse como definitivo");
+    ok(csv.startsWith(api.FIELDS.join(",")), "el 403 no debe lanzar: devuelve lo que llevara");
+  }
+
+  // ── 15b. …y lo ya recogido se conserva (el 403 llega con la rama buena ya hecha) ──
+  {
+    const { api } = load(async (url) => (url.includes("mala") ? resp(403, {}) : resp(200, page([item("a")]))));
+    const csv = await api.scrape({ keywords: "buena OR mala" });
+    ok(filas(csv).length === 1, "el 403 se llevó por delante lo que ya había recogido");
+  }
+
+  // ── 16. el quinto reintento no duerme: esperar 16 s y rendirse igual es espera regalada ──
+  {
+    const { api, esperas } = load(async () => resp(503, {}));
+    await api.scrape({ keywords: "ford" }).catch(() => {});
+    ok(esperas.length === 4, "el intento que no existe también durmió: " + esperas.length + " esperas para 5 intentos");
+    ok(Math.max(...esperas) < 9000, "la espera más larga es la del intento que se rinde: " + Math.max(...esperas));
+  }
+
+  // ── 16b. …pero el `Retry-After` del quinto SÍ se respeta ──
+  //     No precede a un reintento que no existe; precede a la primera petición de la rama
+  //     siguiente. Es una instrucción del servidor, y tirarla es perder funcionalidad.
+  {
+    const { api, esperas } = load(async () => resp(429, {}, { "retry-after": "30" }));
+    await api.scrape({ keywords: "ford OR sofa" }).catch(() => {});
+    ok(esperas.length >= 5, "el Retry-After del último intento se tiró: " + esperas.length + " esperas");
+    ok(esperas[4] >= 30000, "el último 429 pidió 30 s y se esperó " + esperas[4]);
+    ok(esperas.slice(0, 4).every((ms) => ms >= 30000), "el backoff con Retry-After cambió: " + esperas.slice(0, 4));
   }
 
   console.log("ok (" + n + " comprobaciones)");

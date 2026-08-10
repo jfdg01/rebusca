@@ -45,11 +45,22 @@ comando calle es la señal de que van bien: solo habla cuando algo sale con cód
 27 commits sin que nadie lo notara (ver `MEJORAS.md`, defecto 6).
 
 ```bash
-for c in "python3 src/servidor.py demo" "python3 src/test_servidor.py" "python3 src/wallapop.py demo" \
-         "node src/scrape.js demo" "node src/test_app.js" "node src/test_buttons.js" "node src/test_scrape.js"; do
-  $c >/dev/null 2>&1 || echo "FALLA: $c"
-done
+./check.sh    # los siete, ~5s. Silencio = verde. Sale 1 si alguno falla.
 ```
+
+Ya no depende de que alguien se acuerde: `.githooks/pre-commit` lo corre en cada commit.
+Se activa una vez por clon, y `check.sh` avisa si te lo saltas:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Saltarlo en un commit suelto: `git commit --no-verify`.
+
+**Límite conocido:** el hook mide el árbol de trabajo, no el índice. Con un `git add` de un
+fichero roto y el fichero bueno de vuelta en el disco, el hook aprueba un `HEAD` en rojo. No
+se arregla con `git stash --keep-index`: un stash dentro de un hook pierde trabajo cuando el
+`pop` choca, y aquí nadie usa `git add -p`.
 
 > **Servidor de pruebas: SIEMPRE el puerto 8123.** Para verificar cambios, comprueba
 > si ya está abierto y reúsalo; si no, ábrelo tú y déjalo estar:
