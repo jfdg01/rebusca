@@ -539,7 +539,7 @@ document
 
 // "hace X" a partir de los días (float) del CSV: una sola unidad (min→h→día), <1 minuto por debajo
 function humanAge(dias) {
-  const min = Math.max(0, Math.floor(dias * 1440));
+  const min = Math.floor(dias * 1440); // negativo cae en la rama de abajo: no hay Math.max que valga
   if (min < 1) return "hace <1 minuto";
   if (min < 60) return `hace ${min} ${min === 1 ? "minuto" : "minutos"}`;
   const h = Math.floor(min / 60);
@@ -2123,7 +2123,7 @@ function paintSearches() {
     const alias = aliasMap[s.csv]; // apodo opcional; si existe manda como título y el kw real va debajo
     const card = document.createElement("div");
     card.className = "search-card";
-    const age = humanAge(Math.max(0, nowDays - s.mtime / 86400));
+    const age = humanAge(nowDays - s.mtime / 86400); // humanAge ya corta las edades negativas
     card.innerHTML =
       `<div class="sc-top"><span class="sc-kw"></span>` +
       (since

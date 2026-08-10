@@ -175,6 +175,77 @@ async function main() {
     ok(b.spy.copied[0].endsWith("teclado mecánico"), "#copyAskPrompt no metió la intención tecleada");
   }
 
+  // ── 4b. la edad que sale en cada tarjeta ──
+  // Los `console.assert` de app.js prueban un valor por rama; aquí van las fronteras. La rama la
+  // mata un valor cualquiera, la frontera solo la mata el valor de al lado.
+  {
+    const b = await loaded();
+    const ha = (d) => ev(b, `humanAge(${d})`);
+
+    // una sola unidad, truncada hacia abajo. 90 minutos son "hace 1 hora", nunca "hace 2 horas":
+    // con el redondeo el anuncio se lee más viejo de lo que es, y la app existe para llegar antes.
+    ok(ha(1.9 / 1440) === "hace 1 minuto", "los minutos se redondean: " + ha(1.9 / 1440));
+    ok(ha(90 / 1440) === "hace 1 hora", "las horas se redondean: " + ha(90 / 1440));
+    ok(ha(36 / 24) === "hace 1 día", "los días se redondean: " + ha(36 / 24));
+
+    // cada frontera por su valor de al lado: un `<` corrido una unidad no cambia el resto
+    ok(ha(60 / 1440) === "hace 1 hora", "a los 60 minutos sigue contando minutos: " + ha(60 / 1440));
+    ok(ha(1) === "hace 1 día", "a las 24 horas sigue contando horas: " + ha(1));
+
+    // el singular y el plural son los dos lados de un ternario: hay que visitar los dos
+    ok(ha(1 / 1440) === "hace 1 minuto" && ha(2 / 1440) === "hace 2 minutos",
+      "el minuto no distingue singular de plural: " + ha(1 / 1440) + " / " + ha(2 / 1440));
+    ok(ha(1 / 24) === "hace 1 hora" && ha(2 / 24) === "hace 2 horas",
+      "la hora no distingue singular de plural: " + ha(1 / 24) + " / " + ha(2 / 24));
+    ok(ha(1) === "hace 1 día" && ha(2) === "hace 2 días",
+      "el día no distingue singular de plural: " + ha(1) + " / " + ha(2));
+
+    // no hay edades negativas para el usuario. Este corte es el único: por eso el `Math.max` de
+    // fuera, en la tarjeta de una búsqueda guardada, sobraba.
+    ok(ha(-5) === "hace <1 minuto", "una edad negativa se pinta tal cual: " + ha(-5));
+
+    // adAge = la edad congelada en el CSV + lo transcurrido desde el scrape. Sin la suma, un CSV
+    // cacheado y reabierto tres días después pinta cada anuncio tres días más joven.
+    // El argumento va como texto porque eso es lo que trae la columna del CSV.
+    const aa = (d) => ev(b, `adAge(${JSON.stringify(String(d))})`);
+    const scrape = (ms) => ev(b, `curCsvScrape = ${ms}`);
+    scrape(Date.now() - 2 * 86400000);
+    ok(aa(1) === "hace 3 días", "adAge no suma los 2 días desde el scrape: " + aa(1));
+    scrape(Date.now()); // el mismo adAge(1) con otra marca da otro texto: el check distingue
+    ok(aa(1) === "hace 1 día", "con el CSV recién scrapeado adAge no da la edad congelada: " + aa(1));
+    scrape(0);
+    ok(aa(1) === "hace 1 día", "sin marca de scrape adAge cuenta desde el epoch: " + aa(1));
+    scrape(Date.now() + 86400000); // reloj del móvil atrasado: el anuncio no rejuvenece
+    ok(aa(1) === "hace 1 día", "una marca de scrape en el futuro rejuvenece el anuncio: " + aa(1));
+
+    // y hasta el DOM: la tarjeta pinta adAge, no la edad congelada. Un check sobre la función
+    // sola deja vivo el `adAge(dias)` → `humanAge(dias)` de la tarjeta.
+    scrape(Date.now() - 2 * 86400000);
+    const chip = () =>
+      ev(b, '(() => { const e = document.createElement("div"); fillCard(e, data[0]);' +
+        ' return e.querySelectorAll(".li-age")[0].textContent; })()');
+    ok(chip() === "hace 3 días", "el chip de frescura de la tarjeta ignora lo transcurrido: " + chip());
+
+    // ago(): la misma escalera desde un epochMs, con sus propias fronteras
+    const ag = (ms) => ev(b, `ago(Date.now() - ${ms})`);
+    ok(ag(60 * 60000) === "hace 1 h", "a los 60 minutos ago sigue contando minutos: " + ag(60 * 60000));
+    ok(ag(24 * 3600000) === "hace 1 día" && ag(48 * 3600000) === "hace 2 días",
+      "ago no distingue el día del plural: " + ag(24 * 3600000) + " / " + ag(48 * 3600000));
+
+    // la tarjeta de una búsqueda guardada pinta la edad de su último scrape. `mtime` va en
+    // SEGUNDOS, así que la división es por 86400. Sin este check la línea podía decir
+    // "hace <1 minuto" para cualquier búsqueda y los siete checks seguían verdes.
+    // Aquí `boot` y no `loaded`: buscar guarda la búsqueda otra vez y le pisa el mtime sembrado.
+    const b2 = await boot(
+      { wp_searches: JSON.stringify([{ csv: "ford.csv", rows: 3, mtime: Math.floor(Date.now() / 1000) - 3 * 86400 }]) },
+      { csv: CSV, timers: true },
+    );
+    b2.q("#manageSearches").click();
+    const meta = String(b2.q("#searchesList").children[0].innerHTML);
+    ok(/· hace 3 días/.test(meta),
+      "la tarjeta de la búsqueda guardada no pinta la edad de su scrape: " + meta);
+  }
+
   // ── 5. COPIAR PARA IA (#copyDeck): manda el mazo sin clasificar y deja el lote pendiente ──
   {
     const b = await loaded();
