@@ -127,8 +127,12 @@ Se leen antes de escribir un check, no después.
 - El arnés puede más de lo que parece. La it43 dejó un mutante abierto diciendo «el arnés no
   sabe fallar al escribir»; `makeContext` tenía `opts.limit` desde hacía 30 iteraciones (it44).
   Antes de declarar que falta arnés, léelo.
-- Lo que el arnés no imita se nota tarde. `tbody.innerHTML = ""` no vacía `children` en el DOM
-  falso, así que contar `children.length` mide el arnés (it45, abandonada por reloj).
+- Antes de acusar al arnés, mira si el código pinta más de lo que crees. La lista vacía pinta
+  su propia fila de aviso, así que el conteo «correcto» de una papelera vacía es 1, no 0. Yo
+  culpé al DOM falso de no vaciar `children`; lo vaciaba desde el principio (it45).
+- La medida que te falta suele estar ya escrita en otro bloque del mismo fichero de pruebas.
+- Un motivo escrito para dejar algo abierto se revisa antes de darlo por bueno. Dos iteraciones
+  seguidas cerraron un abierto cuyo motivo era «el arnés no puede» (it44, it45).
 
 **Sobre el alcance**
 
