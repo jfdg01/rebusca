@@ -321,6 +321,17 @@ async function main() {
     ok(esperas.slice(0, 4).every((ms) => ms >= 30000), "el backoff con Retry-After cambió: " + esperas.slice(0, 4));
   }
 
+  // ── 16c. …y con un techo, porque el número lo elige el servidor ──
+  //     El backoff propio está acotado por construcción: `2 ** a` con cuatro intentos da 16 s.
+  //     El `Retry-After` no lo acotaba nada, y sustituye a ese backoff. Medido con el scrape de
+  //     entonces: un `Retry-After: 3600` colgaba UNA rama 300 minutos con la barra girando.
+  {
+    const { api, esperas } = load(async () => resp(429, {}, { "retry-after": "3600" }));
+    await api.scrape({ keywords: "ford" }).catch(() => {});
+    ok(Math.max(...esperas) <= 61000, "una espera pasó del minuto: " + Math.max(...esperas) + " ms");
+    ok(esperas.length === 5, "el número de intentos cambió: " + esperas.length);
+  }
+
   console.log("ok (" + n + " comprobaciones)");
 }
 

@@ -202,8 +202,13 @@
       // El `Retry-After` sí se respeta en el último intento. No precede a un reintento que no
       // existe, pero sí a la primera petición de la rama siguiente, y es una instrucción del
       // servidor: tirarla es perder funcionalidad. Lo que sobra es la espera exponencial a ciegas.
+      // Con techo: el número lo elige el servidor y entraba entero en el `sleep`. Medido, con una
+      // rama y cinco intentos: un `Retry-After: 3600` colgaba la barra 300 minutos. 60 s son casi
+      // cuatro veces la espera más larga que el backoff propio se permite (`2 ** 4` = 16 s), así
+      // que la instrucción se respeta donde es razonable. Por encima, la rama cae en cinco minutos
+      // con «agotados los reintentos», el usuario ve el aviso de parcial y busca cuando quiera.
       const ra = parseFloat(res.headers.get("Retry-After"));
-      if (ra) await sleep(ra * 1000 + Math.random() * 1000, signal);
+      if (ra) await sleep(Math.min(ra, 60) * 1000 + Math.random() * 1000, signal);
       else await esperar(2 ** a * 1000 + Math.random() * 1000);
     }
     throw new Error("agotados los reintentos");
