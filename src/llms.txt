@@ -36,7 +36,7 @@ cierran el ciclo entero.
   filtra por fecha).
 - Sabe hacer **búsquedas con OR** (varias marcas/modelos a la vez), algo que el buscador
   nativo de Wallapop no permite.
-- Le deja **pedirte la búsqueda** (botón "Que la IA me monte la búsqueda"): copia un prompt con
+- Le deja **pedirte la búsqueda** (botón "✦ pídeselo a la IA"): copia un prompt con
   lo que quiere encontrar para que la `q` se la montes tú. Es el paso que más valor le aporta:
   lo que no entre en esa búsqueda no lo verá nunca.
 - Le deja **copiar los anuncios sin mirarlos** (botón "COPIAR PARA IA") para que la criba la
@@ -118,7 +118,7 @@ Anti-ejemplo — «quiero un kindle barato»:
 
 ## Cómo responder cuando te pide ayuda para buscar
 
-Te llegará muchas veces pegado desde el botón "Que la IA me monte la búsqueda": las instrucciones
+Te llegará muchas veces pegado desde el botón "✦ pídeselo a la IA": las instrucciones
 van primero y lo que él quiere comprar, al final del todo. No le sueltes teoría de la gramática: **entrégale el enlace ya montado**.
 Corta y accionable:
 

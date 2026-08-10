@@ -1434,11 +1434,16 @@ async function main() {
     if (diag.tope !== 5 || !diag.parcial) fail("el tope no marca el resultado como parcial: " + JSON.stringify(diag));
   }
 
-  // 12n. el buscador enseña la gramática OR en su placeholder: el icono de ayuda está en otra fila
-  //      y quien busca una palabra suelta nunca descubre que existen OR, comillas y paréntesis
+  // 12n. la gramática OR vive en el popover de la "i": el placeholder rota ejemplos de andar por
+  //      casa (microondas, ps5...), así que ese popover es el único sitio donde descubrir OR,
+  //      comillas y paréntesis. Si se cae, buscar una palabra suelta se vuelve el techo de la app
   {
     const tag = (HTML.match(/<input[^>]*id="kw"[^>]*>/) || [])[0] || ""; // el tag ocupa varias líneas; [^>] las cruza
-    if (!/placeholder="[^"]*\bOR\b[^"]*"/.test(tag)) fail("el buscador no enseña la gramática OR: " + tag);
+    // el ejemplo es un span encima del campo; el placeholder nativo se queda en blanco a propósito,
+    // solo para que `:placeholder-shown` siga escondiendo el span cuando el usuario escribe
+    if (!/placeholder=" "/.test(tag)) fail("sin placeholder en blanco el ejemplo tapa lo escrito: " + tag);
+    if (!/id="kwph"[^>]*>\s*\S/.test(HTML)) fail("el buscador se quedó sin ejemplo que enseñar");
+    if (!/<code>corsair OR seasonic<\/code>/.test(HTML)) fail("la ayuda ya no explica la gramática OR");
     if (!/aria-label="/.test(tag)) fail("el buscador se quedó sin nombre accesible: " + tag);
   }
 

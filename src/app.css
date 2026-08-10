@@ -105,13 +105,15 @@
   /* misma tinta y grosor que el texto del lado (hereda de .hint); pegada al texto y desplazada para apuntar al centro del botón */
   .panel-label .hint-arrow { display: inline-block; font-size: .95rem; margin-left: -.15em; margin-right: 1rem;
     vertical-align: -.12em; }
-  /* badge del "desde" a la derecha del selector, en pino oscuro */
-  .pick-since { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%);
-    font: 600 .74rem var(--sans); color: var(--pine-ink); pointer-events: none;
-    /* opaco con fade a la izquierda: Firefox recorta el texto del input en el padding-box y lo cuela
-       por debajo del badge; este fondo lo tapa sin corte en seco. */
-    padding: .25rem 0 .25rem .8rem;
-    background: linear-gradient(90deg, #FFF0, var(--field) .8rem); }
+  /* dos pisos: el nombre arriba a todo el ancho, el periodo debajo. El marco y el fondo pasan
+     al .qbox y el input se queda desnudo, así que hover y foco también suben al .qbox. */
+  .qbox.has-since { border: 1px solid var(--line); border-radius: 6px; background: var(--field); }
+  .qbox.has-since:hover { border-color: var(--pine); }
+  .qbox.has-since:focus-within { outline: 2px solid var(--pine); outline-offset: 2px; }
+  .qbox.has-since .query { border: none; background: none; min-height: 1.75rem; }
+  .qbox.has-since .query:focus-visible { outline: none; }
+  .pick-since { display: block; padding: 0 .6rem .32rem; font: 600 .6rem/1 var(--mono);
+    letter-spacing: .04em; text-transform: uppercase; color: var(--pine-ink); pointer-events: none; }
   .opts { position: relative; flex: 0 0 auto; }
   .icon { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -.15em; flex: 0 0 auto; }
   .opts summary .icon { width: 1.25rem; height: 1.25rem; }
@@ -166,7 +168,6 @@
   /* combobox de query activa: input que muestra la búsqueda en curso + lista filtrable debajo */
   .qbox { position: relative; flex: 1 1 auto; min-width: 0; }
   .qbox .query { width: 100%; max-width: none; min-height: 2.15rem; font-weight: 600; color: var(--ink); }
-  .qbox.has-since .query { padding-right: 7rem; }
   .qbox .query:hover { border-color: var(--pine); }
   .qlist { position: absolute; top: calc(100% + .3rem); left: 0; right: 0; z-index: 30;
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
@@ -184,13 +185,28 @@
   .menu-row .chip { flex: 0 0 auto; min-height: 2.15rem; }
   /* barra de búsqueda: es lo que dispara el scraper */
   .search { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .7rem; }
+  .search .kwrap { position: relative; display: flex; flex: 1 1 100%; }
   .search #kw { flex: 1 1 100%; max-width: none; }
+  /* el ejemplo rotativo, pintado encima del campo vacío (ver index.html) */
+  .kwph { position: absolute; left: .6rem; top: 50%; translate: 0 -50%; pointer-events: none;
+    font: 14px var(--sans); color: var(--ink-soft); white-space: nowrap; }
+  #kw:not(:placeholder-shown) ~ .kwph { opacity: 0; }
+  .kwph.rota { animation: kwrota .45s ease-in-out; }
+  /* sale por arriba y el siguiente entra por abajo: el relevo ocurre en el 50%, sin nadie en
+     pantalla. El fade va por delante del viaje (0 al 28%) para que el texto se apague dentro del
+     campo: sin `overflow:hidden` se vería cruzar el borde, y recortar ahí se comería el foco */
+  @keyframes kwrota {
+    28% { opacity: 0; }
+    45% { translate: 0 -170%; opacity: 0; }
+    55% { translate: 0 80%; opacity: 0; }
+    72% { opacity: 0; }
+  }
   .search #since { flex: 1 1 auto; }
   .search button { flex: 0 0 auto; }
   /* misma altura que las barras del picker (query activa / excluir) para que todas las barras sean iguales */
   .search #kw, .search #since, .search button { min-height: 2.15rem; }
   /* controles a 16px SIEMPRE: dedo-friendly y sin auto-zoom en iOS (no depende del ancho) */
-  select, input[type=search], button, input[type=file] { font: 16px var(--sans); }
+  select, input[type=search], button, input[type=file] { font: 14px var(--sans); }
   select, input[type=search], input[type=number] {
     padding: .38rem .55rem; border: 1px solid var(--line); border-radius: 6px;
     background: var(--field); color: var(--ink);
@@ -215,7 +231,7 @@
   /* resumen: contadores en su propia zona con caja separadora */
   .stat {
     font: 11.5px/1.3 var(--mono); color: var(--ink-soft);
-    display: flex; flex-direction: column; gap: .5rem;
+    display: flex; flex-direction: column; gap: .7rem; /* entre grupos; dentro del grupo, menos */
     /* sangre completa: laterales anulan el padding del body, como las tarjetas de la lista */
     margin: .7rem calc(-1 * var(--bleed)) 0;
     padding: .75rem calc(var(--bleed) + .9rem);
@@ -233,10 +249,38 @@
     background: var(--surface-2); border-bottom: none;
     box-shadow: inset 0 5px 7px -5px rgba(27,33,30,.28);
   }
-  .stat > span { display: flex; align-items: baseline; gap: .45rem; }
-  .stat > span b:first-child { min-width: 2.1rem; text-align: right; }
+  /* Una línea del resumen es un párrafo, no un flex. Con flex, el texto y el enlace eran dos
+     ítems distintos: en 320 px el `·` se quedaba solo en una línea y "mandar a rechazados"
+     se partía en dos. El número conserva su columna con un inline-block, y la sangría
+     colgante alinea la continuación bajo el texto, no bajo el número. */
+  .stat span:not(.link) { display: block; padding-left: 2.55rem; text-indent: -2.55rem; }
+  .stat span:not(.link) b:first-child { display: inline-block; min-width: 2.1rem; margin-right: .45rem; text-align: right; }
+  /* los tres descartes en su propia franja, a sangre completa como el bloque que los contiene:
+     así se separan del mazo y de los guardados sin meter una caja dentro de otra caja. */
+  .stat .grp { display: flex; flex-direction: column; gap: .35rem; }
+  .stat .grp.rej {
+    background: var(--surface); border-block: 1px solid var(--line);
+    margin: 0 calc(-1 * (var(--bleed) + .8rem));
+    padding: .6rem calc(var(--bleed) + .8rem);
+  }
+  /* excluidos y lejos cuelgan de "rechazados": la L los ata a su cifra, no al margen */
+  .stat .grp.rej .sub { position: relative; margin-left: 2.1rem; font-size: .95em; }
+  /* la reserva de la cifra es lo que separaba la L del número: aquí basta con un dígito, y si
+     hay más la caja crece sola hacia la derecha sin despegar la L. */
+  .stat .grp.rej .sub b:first-child { min-width: .95rem; }
+  .stat .grp.rej .sub::before {
+    content: ""; position: absolute; left: -.5rem; top: -.3em; bottom: .5em; width: .35rem;
+    border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    border-bottom-left-radius: 3px;
+  }
   .stat b { color: var(--ink); font-weight: 700; font-size: 1.15em; }
-  .stat .link, .loading .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; }
+  .stat .link, .loading .link, .deck-sort .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; }
+
+  /* rótulo del orden, pegado encima del mazo que ordena */
+  .deck-sort { display: flex; align-items: baseline; gap: .5rem; margin: 0 0 .6rem;
+    font: 400 11.5px/1.3 var(--mono); color: var(--ink-soft); }
+  .deck-sort b { color: var(--ink); font-weight: 700; }
+  .deck-sort .link { margin-left: auto; }
 
   /* banner de auto-rechazo por vendedor: sangre completa como .stat, tinte ámbar (es una oferta).
      Base genérica: el único del DOM vive en .swipe-menu, así que gana la regla de abajo. */
@@ -265,27 +309,40 @@
   .stat .link[hidden] { display: none; }
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título) */
-  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
   /* mismo resumen que .cats: los dos desplegables de la cabecera se leen igual */
   .excl > summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-soft); }
-  .excl .panel-label { margin-bottom: 0; }
+  .excl > summary { padding: .1rem 0 .45rem; }
   .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
   .excl .chips:empty { display: none; }
-  .excl-chip { font: 600 11px var(--mono); padding: .28rem .6rem; min-height: 0;
+  /* `.chips .excl-chip`, no `.excl-chip`: la regla genérica `.chip` está más abajo en el fichero
+     y con la misma especificidad gana, así que el padding de aquí no llegaba a aplicarse. */
+  .chips .excl-chip { font: 600 11px var(--mono); padding: .5rem .75rem; min-height: 0;
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
   /* flex/max-width: mismo caso que #listFilter — en la columna flex .excl, el flex:1 1 180px de
      input[type=search] se volvía ALTURA y el max-width:320px capaba el ancho (caja alta y estrecha) */
   /* placeholder/texto en sans, igual que #kw y #pick — no mono (era la barra distinta) */
-  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.15rem; font-size: 14px; }
+  .excl #exclAdd { flex: none; width: 100%; max-width: none; min-height: 2.6rem; font-size: 12px;
+    padding: .55rem .75rem; }
 
-  /* topes numéricos del cajón: tres cajas iguales en una fila */
-  .lims { display: flex; gap: .4rem; }
+  /* topes numéricos del cajón: tres cajas iguales en una fila. Sin etiqueta fuera: la unidad
+     va en el placeholder («€ máx»), que en 320 px devuelve a cada caja el ancho del rótulo. */
+  /* margin-top: se suma al gap de .excl. Separa la fila de números del campo de palabras,
+     que son dos filtros distintos, sin separar los chips de su propio campo. */
+  .lims { display: flex; gap: .45rem; margin-top: .4rem; }
   .lims label { flex: 1; display: flex; align-items: center; gap: .3rem;
     font: 600 11px var(--mono); color: var(--ink-soft); }
-  .lims input { width: 100%; min-width: 0; min-height: 2.15rem; font-size: 14px; }
+  .lims input { width: 100%; min-width: 0; min-height: 2.6rem; font-size: 12px;
+    padding: .55rem .7rem; }
+  /* Chrome reserva sitio para las flechitas del input number aunque no se vean, y en 320 px
+     eso recortaba el placeholder («días má»). Sin flechas, el teclado numérico del móvil sigue. */
+  .lims input { appearance: textfield; -moz-appearance: textfield; }
+  .lims input::-webkit-outer-spin-button,
+  .lims input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-  .cats { margin-top: .8rem; }
+  /* sin regla ni hueco grande: con AFINAR plegado, los dos rótulos son dos líneas seguidas */
+  .cats { margin-top: .45rem; }
   .cats summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-soft); }
   .cats .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
@@ -293,8 +350,11 @@
     background: var(--field); border: 1px solid var(--line); color: var(--ink-soft); }
   .cat-chip.off { background: transparent; border-style: dashed; color: var(--ink-soft);
     text-decoration: line-through; opacity: .6; }   /* categoría vetada: tachada */
+  /* nowrap: en 320 px "cambiar a modo incluir" se partía y "incluir" caía pegado al borde
+     izquierdo. El enlace baja entero a la línea de abajo. */
   .cats summary .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline;
-    text-transform: none; letter-spacing: 0; margin-left: .5rem; font-weight: 400; }
+    text-transform: none; letter-spacing: 0; margin-left: .5rem; font-weight: 400;
+    white-space: nowrap; }
   .cats summary .link[hidden] { display: none; }
 
   /* barra de la pantalla de lista (Destacados / Papelera): volver + título + filtro */
@@ -439,7 +499,10 @@
     color: var(--ink-soft); opacity: .65; user-select: all;
     cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 
-  .empty { color: var(--ink-soft); font: 13px var(--sans); padding: 3rem 0; text-align: center; }
+  /* pre-line: el texto entra por textContent (nada de innerHTML), así que los saltos de la
+     bienvenida son "\n" de verdad; los demás mensajes no llevan ninguno y no se enteran */
+  .empty { color: var(--ink-soft); font: 13px var(--sans); padding: 3rem 0; text-align: center;
+    white-space: pre-line; }
 
   /* ── overlay de carga: spinner + contador de encontrados ── */
   .loading { display: flex; flex-direction: column; align-items: center; gap: .5rem;
@@ -476,10 +539,11 @@
     font: 600 11px var(--sans); color: var(--ink-soft); cursor: pointer; line-height: 1.15; }
   .titleonly input { width: 1rem; height: 1rem; accent-color: var(--pine); }
   /* puerta de entrada del flujo IA: la query es lo que más valor aporta cuando no conoces el producto. */
-  .ai-ask { flex: 1; min-width: 0; padding: .4rem .45rem; border-radius: 999px;
-    background: var(--surface); border: 1px solid var(--pine); color: var(--pine);
-    font: 700 11px/1.2 var(--sans); }
-  .ai-ask:hover { background: var(--surface-2); }
+  .ai-ask { flex: none; margin-left: auto; padding: .3rem .55rem; border: 0; border-radius: 8px;
+    background: color-mix(in srgb, var(--pine) 13%, transparent); cursor: pointer;
+    color: var(--pine-ink); font: 700 11px/1.4 var(--sans);
+    text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  .ai-ask:hover { background: color-mix(in srgb, var(--pine) 21%, transparent); }
   .ai-ask:disabled { opacity: .6; cursor: progress; }
 
   /* ayuda de búsqueda: "i" al final de la fila -> popover (nativo <details>) */

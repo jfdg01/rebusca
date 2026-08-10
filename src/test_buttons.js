@@ -767,17 +767,6 @@ async function main() {
     ok(b.q("#searchesView").hidden === true, "#searchesX no cerró el gestor");
   }
 
-  // ── 16. refrescar (#refreshSearch): re-scrapea la búsqueda activa, no otra ──
-  {
-    const b = await loaded();
-    const calls = [];
-    b.sandbox.Rebusca.scrape = async (o) => (calls.push(o), CSV);
-    b.q("#refreshSearch").click();
-    await flush();
-    ok(calls.length === 1 && calls[0].keywords === "ford",
-      "#refreshSearch no relanzó la búsqueda activa: " + JSON.stringify(calls));
-  }
-
   // ── 17. ordenar el mazo (#swipeSort) y la lista (#listSort): reclic invierte ──
   {
     const b = await loaded();
@@ -855,16 +844,13 @@ async function main() {
     b.q("#undo").click(); // el snack ofrece deshacer: debe devolverlo al mazo
     ok(bucket(b, "rejected").length === 0, "deshacer no sacó de la papelera lo que rechazó #rejectedLejos");
     b.q("#exclAdd").dispatch("keydown", { key: "Enter", target: { value: "roto" } });
-    // el desglose: un número solo no dice qué filtro te quitó qué
-    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(b.q("#stat").innerHTML),
-      "el contador no dice que el veto fue por palabra: " + b.q("#stat").innerHTML);
+    // los motivos van juntos: la línea cuenta todo lo que los filtros dejaron fuera del mazo
+    ok(/<b>1<\/b> excluidos por filtros/.test(b.q("#stat").innerHTML),
+      "el contador no cuenta el veto por palabra: " + b.q("#stat").innerHTML);
     b.q("#lim_precio").dispatch("change", { target: { value: "300" } }); // a1 (1000 €) cae por tope
-    ok(/<b>2<\/b> excluidos ·/.test(b.q("#stat").innerHTML) &&
-      /<b>1<\/b> por palabra o categoría, 1 por tope/.test(b.q("#stat").innerHTML),
-      "con dos motivos el contador no los separa: " + b.q("#stat").innerHTML);
-    b.q("#lim_precio").dispatch("change", { target: { value: "" } }); // sin tope: vuelve a un motivo
-    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(b.q("#stat").innerHTML),
-      "al quitar el tope el contador no vuelve a un motivo: " + b.q("#stat").innerHTML);
+    ok(/<b>2<\/b> excluidos por filtros/.test(b.q("#stat").innerHTML),
+      "el tope no suma al mismo contador que la palabra: " + b.q("#stat").innerHTML);
+    b.q("#lim_precio").dispatch("change", { target: { value: "" } }); // sin tope: solo queda la palabra
     b.q("#rejectedExcl").click();
     ok(bucket(b, "rejected").join() === "a3", "#rejectedExcl no mandó a la papelera lo vetado");
   }
@@ -915,12 +901,12 @@ async function main() {
     ok(!/excluidos/.test(stat()), "el rechazado se sigue contando como vetado: " + stat());
     ok(/<b>2<\/b> sin ver/.test(stat()), "el rechazado se descontó dos veces del sin ver: " + stat());
     ok(/<b>1<\/b> rechazados/.test(stat()), "el rechazado no aparece en su propia línea: " + stat());
-    // y el desglose por motivo cuenta lo mismo: a1 pasa del tope pero ya está rechazado, así que
-    // el único veto vivo es el de la palabra. Si el desglose cuenta a1, la línea miente el motivo.
+    // vale para cualquier filtro, no solo para la palabra: a1 pasa del tope pero ya está
+    // rechazado, así que el único veto vivo es el de a3.
     ev(b, 'reject("a1", "Ford Focus"); restore("a3")');
     b.q("#lim_precio").dispatch("change", { target: { value: "300" } });
-    ok(/<b>1<\/b> excluidos por palabra o categoría/.test(stat()),
-      "el desglose cuenta como tope un anuncio ya rechazado: " + stat());
+    ok(/<b>1<\/b> excluidos por filtros/.test(stat()),
+      "el contador cuenta como vetado un anuncio ya rechazado: " + stat());
   }
 
   // ── 21. gestor de búsquedas: los 5 botones de cada tarjeta ──
@@ -2866,6 +2852,36 @@ async function main() {
     const conVeto = JSON.parse(b.store.wp_estado || "{}");
     ok(((conVeto.excl || {})["ford.csv"] || []).includes("roto"),
       "vetar una palabra no llega al blob de estado: al recargar vuelve el veto, " + b.store.wp_estado);
+  }
+
+  // ── 77. el placeholder rota, pero no debajo de lo que el usuario está escribiendo ──
+  {
+    const b = await loaded();
+    const texto = () => String(b.q("#kwph").textContent);
+    const rota = async () => {
+      ev(b, "rotaPlaceholder()");
+      await new Promise((r) => setTimeout(r, 300)); // el relevo va a mitad de la animación
+    };
+    ev(b, "$('#kw').value = ''"); // loaded() deja escrito lo que se buscó
+    const p1 = texto();
+    await rota();
+    ok(b.q("#kwph").classList.contains("rota"), "el ejemplo cambia de golpe, sin animación");
+    ok(p1 !== texto(), "el ejemplo no cambia al rotar: " + p1);
+    ev(b, "$('#kw').value = 'ps5'");
+    const puesto = texto();
+    await rota();
+    ok(puesto === texto(), "con algo escrito el ejemplo sigue rotando: " + puesto);
+    // 50 sugerencias sin repetidas, y el salto nunca cae en la que ya está puesta
+    ok(ev(b, "new Set(EJEMPLOS).size") === 50, "los ejemplos no son 50 distintos: " + ev(b, "new Set(EJEMPLOS).size"));
+    ok(
+      ev(b, "Array.from({ length: 500 }, (_, i) => i % EJEMPLOS.length).every((i) => otroEjemplo(i) !== i)"),
+      "el ejemplo puede repetirse dos veces seguidas",
+    );
+    // y la cadencia se va abriendo hasta pararse: seis esperas en Fibonacci, no un tic eterno
+    ok(
+      ev(b, "ritmoFib(1, 6).join()") === "1,1,2,3,5,8",
+      "la cadencia dejó de seguir Fibonacci: " + ev(b, "ritmoFib(1, 6).join()"),
+    );
   }
 
   console.log("ok (" + n + " comprobaciones)");

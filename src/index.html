@@ -119,13 +119,20 @@
     </div>
     <div class="panel">
         <div class="search">
-            <input
-                type="search"
-                id="kw"
-                placeholder="p. ej. corsair OR seasonic"
-                aria-label="Buscar en Wallapop"
-                autocomplete="off"
-            />
+            <!-- el ejemplo va en un span encima del campo, no en el placeholder nativo: rota
+                 (app.js) y ::placeholder solo admite color/opacity, ni transform ni line-height
+                 lo mueven. El placeholder de un espacio deja vivo :placeholder-shown, que es
+                 quien esconde el span en cuanto el usuario escribe. -->
+            <div class="kwrap">
+                <input
+                    type="search"
+                    id="kw"
+                    placeholder=" "
+                    aria-label="Buscar en Wallapop"
+                    autocomplete="off"
+                />
+                <span class="kwph" id="kwph" aria-hidden="true">Prueba con "microondas"</span>
+            </div>
             <select id="since" title="frescura del anuncio">
                 <option value="">cualquiera</option>
                 <option value="hora">última hora</option>
@@ -140,7 +147,7 @@
                 ><input type="checkbox" id="titleOnly" /> solo en el título</label
             >
             <button id="copyAskPrompt" class="ai-ask">
-                Que la IA me monte la búsqueda
+                ✦ pídeselo a la IA
             </button>
             <details class="help">
                 <summary class="help-i" title="cómo buscar" aria-label="cómo buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary>
@@ -180,13 +187,6 @@
                 <div id="qlist" class="qlist" hidden></div>
             </div>
             <button
-                id="refreshSearch"
-                class="icon-btn"
-                title="volver a buscar: trae los anuncios nuevos"
-                data-icon="refresh"
-                hidden
-            ></button>
-            <button
                 id="manageSearches"
                 class="icon-btn"
                 title="gestionar búsquedas"
@@ -199,7 +199,6 @@
             <summary>
                 <span>Afinar</span><span id="exclCount"></span>
             </summary>
-            <span class="panel-label">Excluir items que contengan...</span>
             <div class="chips" id="exclChips"></div>
             <input
                 id="exclAdd"
@@ -208,16 +207,15 @@
                 placeholder="Palabra a excluir"
                 title="las cartas con esa palabra en el título se descartan solas (solo en esta búsqueda)"
             />
-            <span class="panel-label">…o si pasa de</span>
             <div class="lims">
                 <label
-                    ><input type="number" id="lim_precio" min="0" step="1" placeholder="—" />€</label
+                    ><input type="number" id="lim_precio" min="0" step="1" placeholder="€ máx" /></label
                 >
                 <label
-                    ><input type="number" id="lim_dias" min="0" step="1" placeholder="—" />días</label
+                    ><input type="number" id="lim_dias" min="0" step="1" placeholder="días máx" /></label
                 >
                 <label
-                    ><input type="number" id="lim_km" min="0" step="1" placeholder="—" />km</label
+                    ><input type="number" id="lim_km" min="0" step="1" placeholder="km máx" /></label
                 >
             </div>
         </details>
@@ -291,11 +289,14 @@
 </header>
 
 <main>
+<!-- el orden manda sobre las tarjetas: se anuncia pegado encima de ellas, no en los contadores -->
+<div class="deck-sort" id="deckSort" hidden></div>
 <table hidden>
     <thead></thead>
     <tbody></tbody>
 </table>
-<div class="empty" id="empty">Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar. ¿No sabes qué modelos buscar? Dale a "Que la IA me monte la búsqueda".</div>
+<div class="empty" id="empty">Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar.
+¿No sabes qué modelos buscar? Dale a "✦ pídeselo a la IA".</div>
 
 <!-- role="status" + aria-live: el lector de pantalla canta "Buscando…" y el contador. La región
      viva es SOLO el contador: con la caja entera dentro, el cronómetro de al lado (que se reescribe

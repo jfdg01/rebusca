@@ -481,8 +481,8 @@ let headers = DEFAULT_HEADERS.slice(),
 // veía "Nada que revisar." y cuatro contadores a 0 en vez de la bienvenida.
 let loadedCsv = null;
 const WELCOME =
-  "Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar. " +
-  '¿No sabes qué modelos buscar? Dale a "Que la IA me monte la búsqueda".';
+  "Bienvenid@ a Rebusca. Escribe arriba qué quieres cazar y pulsa Buscar.\n" +
+  '¿No sabes qué modelos buscar? Dale a "✦ pídeselo a la IA".';
 let fabAction = () => openSwipe(); // el botón grande cambia de destino según el paso del embudo
 const rejectedSel = new Set(); // selección en masa de la papelera (keys); solo viva en view==='rejected'
 let iId = headers.indexOf("id"),
@@ -543,7 +543,6 @@ const ICON = {
   favorite: '<path d="M11.5 2.3 8.9 8.6 2.2 9.2c-.9.1-1.2 1.2-.5 1.8l5 4.4-1.5 6.5c-.2.9.7 1.6 1.5 1.1l5.8-3.5 5.8 3.5c.8.5 1.7-.2 1.5-1.1l-1.5-6.5 5-4.4c.7-.6.4-1.7-.5-1.8l-6.7-.6L13 2.3c-.3-.8-1.4-.8-1.7 0Z"/>',
   list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
   rejected:
     '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   external:
@@ -858,13 +857,11 @@ const isLejos = (r) => {
   return km !== "" && +km > lejosKm && col(r, "envio") !== "True";
 };
 let autoExclLejos = localStorage.getItem("wp_autoexcllejos") === "1"; // si activo, los lejos-sin-envío quedan excluidos del mazo (Ajustes)
-// El veto se parte en dos motivos porque el contador enseña los dos por separado: un número solo
-// no decía qué filtro te quitó qué. Números (topes y km) por un lado, texto (palabra y categoría)
-// por otro. Los cuatro motivos exactos no caben en 320 px.
-const exclPorTope = (r) =>
-  (autoExclLejos && isLejos(r)) || // ajuste "excluir lejos sin envío": fuera del mazo, no a la papelera
-  overLimit(r); // pasa de precio/antigüedad/distancia máximos del cajón
-const exclPorTexto = (r) => {
+// fuera del mazo por algún filtro de AFINAR: el contador los cuenta juntos, así que el motivo
+// exacto no hace falta aquí (desglosarlo pedía una línea por motivo y en 320 px no la valía)
+const isExcluded = (r) => {
+  if (autoExclLejos && isLejos(r)) return true; // ajuste "excluir lejos sin envío": fuera del mazo, no a la papelera
+  if (overLimit(r)) return true; // pasa de precio/antigüedad/distancia máximos del cajón
   // vetada por la query activa: categoría exacta o palabra en el título
   const cats = catExclTerms();
   if (cats.length) {
@@ -875,7 +872,6 @@ const exclPorTexto = (r) => {
   const t = norm(r[iTitulo] || "");
   return exclTerms().some((w) => t.includes(w));
 };
-const isExcluded = (r) => exclPorTope(r) || exclPorTexto(r);
 // compara dos celdas: numérica si ambas lo son (vacío = -∞), si no alfabética con acentos
 function cmpCell(x, y) {
   if ((x === "" || isNum(x)) && (y === "" || isNum(y))) {
@@ -1069,7 +1065,6 @@ function finishRender(rows, listView) {
             : !data.length
               ? "Esta búsqueda no ha devuelto ningún anuncio. Prueba con menos palabras o amplía la ventana de tiempo."
               : "Ya has revisado todos los anuncios de esta búsqueda. Vuelve a buscar para ver los nuevos.";
-  $("#refreshSearch").hidden = !curCsv; // sin búsqueda activa no hay nada que refrescar
   paintStat();
   paintSellerBanner();
   paintListSort();
@@ -1113,10 +1108,10 @@ function renderCats() {
     };
     chips.append(b);
   }
-  $("#catLabel").textContent = inc ? "Incluir solo categorías" : "Excluir por categoría";
+  $("#catLabel").textContent = inc ? "Incluir categorías" : "Excluir categorías";
   $("#catCount").textContent = excl.length ? ` (${excl.length})` : ""; // nº de categorías marcadas, nada si 0
   const mode = $("#catMode"); // alterna excluir/incluir para esta búsqueda
-  mode.textContent = inc ? "cambiar a modo excluir" : "cambiar a modo incluir";
+  mode.textContent = inc ? "modo excluir" : "modo incluir";
   mode.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1197,6 +1192,7 @@ for (const [c] of LIMITS)
 function paintStat() {
   if (!loadedCsv) {
     $("#stat").innerHTML = "";
+    $("#deckSort").hidden = true;
     return;
   }
   const clasif = (r) => rejected.has(key(r)) || favorite.has(key(r)); // ya en algún cubo
@@ -1206,41 +1202,40 @@ function paintStat() {
   const vetados = hasExcl
     ? data.filter((r) => !clasif(r) && isExcluded(r)).length
     : 0;
-  // Con un solo motivo, la misma línea lo nombra. Con los dos, el desglose baja a su propia línea:
-  // en 320 px el enlace de acción ya se come media fila. Una fila vetada por los dos motivos cuenta
-  // como tope, que es el filtro que el usuario puso con un número.
-  const porTope = hasExcl ? data.filter((r) => !clasif(r) && exclPorTope(r)).length : 0;
-  const porTexto = vetados - porTope;
-  const dosMotivos = porTope && porTexto;
-  const motivo = dosMotivos ? "" : porTope ? " por tope" : " por palabra o categoría";
-  const desglose = dosMotivos
-    ? `<span><b>${porTexto}</b> por palabra o categoría, ${porTope} por tope</span>`
-    : "";
   const lejos = data.filter(
     (r) => !clasif(r) && !isExcluded(r) && isLejos(r),
   ).length;
   const sinVer = data.length - favoriteCount - disc - vetados; // "vistos" = favoriteCount + disc; vetados salen aparte. Los lejos SÍ cuentan (están en el mazo); su línea es solo atajo para rechazarlos en bloque
+  // Tres semánticas: el mazo (sin ver), los descartes y los guardados. Los descartes van en su
+  // propio bloque con la papelera a la cabeza, porque excluidos y lejos no son cubos aparte: son
+  // los dos atajos que mandan ahí. Colgados de ella, el enlace no tiene que repetir el destino.
   $("#stat").innerHTML =
     `<span><b>${sinVer}</b> sin ver</span>` +
+    `<div class="grp rej">` +
+    `<span><b>${disc}</b> rechazados` +
+    (disc || view === "rejected"
+      ? `&nbsp;· <span class="link" id="toggleTrash">${view === "rejected" ? "volver" : "ver rechazados"}</span>`
+      : "") +
+    `</span>` +
     (vetados
-      ? `<span><b>${vetados}</b> excluidos${motivo} · <span class="link" id="rejectedExcl">mandar a rechazados</span></span>` + desglose
+      ? `<span class="sub"><b>${vetados}</b> excluidos por filtros&nbsp;· <span class="link" id="rejectedExcl">rechazar</span></span>`
       : "") +
     (lejos
-      ? `<span><b>${lejos}</b> de ellos lejos y sin envío · <span class="link" id="rejectedLejos">rechazar</span></span>`
+      ? `<span class="sub"><b>${lejos}</b> lejos y sin envío&nbsp;· <span class="link" id="rejectedLejos">rechazar</span></span>`
       : "") +
-    `<span><b>${disc}</b> rechazados ` +
-    (disc || view === "rejected"
-      ? `· <span class="link" id="toggleTrash">${view === "rejected" ? "volver" : "ver rechazados"}</span>`
-      : "") +
-    `</span>` +
-    `<span><b>${favoriteCount}</b> favoritos ` +
+    `</div>` +
+    `<span class="g-fav"><b>${favoriteCount}</b> favoritos` +
     (favoriteCount || view === "favorite"
-      ? `· <span class="link" id="toggleFavorite">${view === "favorite" ? "volver" : "ver favoritos"}</span>`
+      ? `&nbsp;· <span class="link" id="toggleFavorite">${view === "favorite" ? "volver" : "ver favoritos"}</span>`
       : "") +
-    `</span>` +
-    (sortKeys.length
-      ? `<span>orden: <b>${sortKeys.map((s) => headers[s.col]).join(" › ")}</b> · <span class="link" id="clearSort">limpiar</span></span>`
-      : "");
+    `</span>`;
+  // el orden no es un contador: vive encima del mazo, que es lo que ordena
+  const ds = $("#deckSort");
+  ds.hidden = !sortKeys.length;
+  if (sortKeys.length)
+    ds.innerHTML =
+      `Ordenado por <b>${sortKeys.map((s) => headers[s.col] + (s.dir > 0 ? " ▲" : " ▼")).join(" › ")}</b>` +
+      `<span class="link" id="clearSort">quitar orden</span>`;
   const toggle = (v) => () => {
     view = view === v ? "" : v;
     listSeller = "";
@@ -1627,13 +1622,12 @@ function stampSeen(csv) {
   m[csv] = Date.now();
   setLS(lastSeenKey(), JSON.stringify(m));
 }
-// muestra/oculta el badge "desde" y reserva a su medida: el texto (y su marquee) scrollea
-// justo hasta donde empieza el badge, sea "última hora" o "última semana" o lo que sea.
+// muestra/oculta la línea del "desde". La clase has-since es lo que parte la caja en dos pisos:
+// sin ella el input vuelve a llevar su propio marco y ocupa la caja entero.
 function setSince(since) {
   pickSince.textContent = since ? SINCE_LABEL[since] : "";
   pickSince.hidden = !since;
   qbox.classList.toggle("has-since", !!since);
-  pick.style.paddingRight = since ? pickSince.offsetWidth + 6 + "px" : ""; // justo el ancho del badge + un pelín; el fade del badge tapa lo que roce
 }
 function selectQueryUI(csv) {
   // sincroniza el combobox con la query SIN cargar datos: input = kw, badge = "desde"
@@ -2055,6 +2049,46 @@ $("#scrape").onclick = async () => {
 $("#kw").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("#scrape").click();
 });
+// El campo vacío no dice qué cabe pedirle, y un ejemplo fijo con OR deja pensando que esto va de
+// fuentes de alimentación. Cosas de andar por casa: la sintaxis la explica la "i" de al lado.
+// Los 50 son lo que se mueve en Wallapop de segunda mano (electrónica, hogar, bebé, deporte,
+// motor...), a ojo y no de ningún ranking oficial; cambiarlos no rompe nada. En minúscula y
+// cortos: el campo mide 320 px menos los márgenes y no hay ellipsis que valga.
+const EJEMPLOS = [
+  "iphone", "ps5", "nintendo switch", "xbox series", "airpods", "macbook", "portátil gaming",
+  "monitor 27", "teclado mecánico", "silla gaming", "tv 55", "barra de sonido", "altavoz jbl",
+  "disco duro", "impresora", "router wifi", "drone", "cámara réflex", "objetivo canon", "gopro",
+  "microondas", "lavadora", "nevera", "aire acondicionado", "deshumidificador", "thermomix",
+  "freidora de aire", "cafetera nespresso", "aspiradora", "sofá", "mesa de comedor", "armario",
+  "colchón", "estantería", "espejo", "bicicleta", "bici de montaña", "patinete eléctrico",
+  "cinta de correr", "mancuernas", "tabla de surf", "esquís", "carrito de bebé", "trona",
+  "silla de coche", "lego", "guitarra", "vinilos", "moto 125", "taladro",
+];
+let iEjemplo = Math.floor(Math.random() * EJEMPLOS.length);
+// nunca dos veces el mismo seguido: salta entre 1 y n-1 posiciones hacia delante
+const otroEjemplo = (i) => (i + 1 + Math.floor(Math.random() * (EJEMPLOS.length - 1))) % EJEMPLOS.length;
+const frase = () => `Prueba con "${EJEMPLOS[iEjemplo]}"`;
+$("#kwph").textContent = frase(); // el del HTML es solo el que se ve mientras carga el JS
+$("#kwph").addEventListener("animationend", (e) => e.target.classList.remove("rota"));
+function rotaPlaceholder() {
+  const kw = $("#kw"),
+    ph = $("#kwph");
+  // escribiendo o con algo escrito, el ejemplo no se ve o salta bajo el cursor: mejor quieto
+  if (document.activeElement === kw || kw.value) return;
+  iEjemplo = otroEjemplo(iEjemplo);
+  ph.classList.add("rota"); // el viejo sube y sale; el nuevo entra por abajo
+  setTimeout(() => (ph.textContent = frase()), 225); // a mitad, con el hueco vacío
+}
+// La rotación es una bienvenida, no un tic para toda la sesión: las esperas crecen en Fibonacci
+// (x, x, 2x, 3x…) y se corta en la de 22,4 s — seis rotaciones, algo menos de un minuto. Al
+// principio enseña la variedad; luego se queda quieto y no se mueve nada al lado del cursor.
+const ritmoFib = (x, n) => {
+  const r = [];
+  for (let a = 1, b = 1; r.length < n; [a, b] = [b, a + b]) r.push(a * x);
+  return r;
+};
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+  ritmoFib(2800, 6).reduce((t, ms) => (setTimeout(rotaPlaceholder, t + ms), t + ms), 0);
 // auto-scroll horizontal del texto que desborda: ping-pong para poder leerlo entero.
 // Se autodetiene si el elemento sale del DOM (las filas del dropdown se recrean al filtrar).
 const MQ_HOLD = 3500; // ms parado en cada extremo (por tiempo real, no por frames: igual a 60 y 120Hz)
@@ -2203,12 +2237,6 @@ function relaunch(kw, since) {
   closeManager();
   $("#scrape").click();
 }
-// refrescar la búsqueda activa desde la pantalla principal (mismo gesto que "Repetir", sin abrir ☰)
-$("#refreshSearch").onclick = () => {
-  if (!curCsv) return;
-  const { kw, since } = queryParts(curCsv);
-  relaunch(kw, since);
-};
 function renameSearch(csv, actual) {
   // apodo local; no toca el CSV ni los keywords. Vacío = quitar el apodo
   const nombre = prompt(
@@ -3235,3 +3263,4 @@ document.addEventListener("keydown", (e) => {
     e.target.click();
   }
 });
+
