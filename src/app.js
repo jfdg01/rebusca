@@ -2508,34 +2508,48 @@ $("#importState").onchange = (e) => {
 //            &maxp=<€>&maxd=<días>&keep=<ids>&fav=<ids>&no=<ids>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:
 // booleana (OR/grupos/comillas van tal cual en q) + exclusiones. Devuelve true si disparó.
-// ?keep=<letras> es el VEREDICTO de la IA sobre el último lote copiado (wp_aisent): esos anuncios
-// quedan como favoritos y el RESTO del lote se rechaza de una vez. ?fav=/?no= reparten sueltos en
-// los cubos (alias legado de ?keep: solo ascienden, no rechazan el resto del lote). Las letras son
-// las de las fichas del lote; un id entero de Wallapop también vale (enlaces viejos).
+// ?keep=<ids> es el VEREDICTO de la IA sobre el último lote copiado (wp_aisent): esos ids quedan
+// como favoritos y el RESTO del lote se rechaza de una vez. ?fav=/?no= reparten ids sueltos en los
+// cubos (alias legado de ?keep: solo ascienden, no rechazan el resto del lote). Los ids llegan
+// recortados como en las fichas (ver shortIds); el id entero también vale.
 const TRIAGE = [["no", "rejected"], ["fav", "favorite"]]; // orden = prioridad ascendente
-// Las fichas que se le pegan a la IA no llevan el id de Wallapop, llevan una LETRA (a, b, … Z, aa):
-// un id opaco de 12 caracteres son ~6 tokens por anuncio y el lote no pasa de 50. La letra es la
-// POSICIÓN en el lote enviado (wp_aisent), así que solo se traduce con el lote delante; sin él, o
-// con un token que no sea una letra suelta, pasa tal cual (los ?fav=/?no= con ids reales siguen valiendo).
-// Un enlace viejo abierto tras copiar OTRO lote traduce contra el lote nuevo: sale la criba cambiada.
-// Es el mismo riesgo que ya tenía el ?keep= (rechazaba el resto del lote nuevo), y el flujo real es
-// copiar → pegar → pulsar.
-const A52 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const code = (i) => (i < 52 ? "" : A52[Math.floor(i / 52) - 1]) + A52[i % 52];
-const unCode = (t, lote) => {
-  if (!lote || !/^[a-zA-Z]{1,2}$/.test(t)) return t;
-  const i = t.length === 1 ? A52.indexOf(t) : (A52.indexOf(t[0]) + 1) * 52 + A52.indexOf(t[1]);
-  return lote.ids[i] || t;
+// Las fichas que se le pegan a la IA llevan el id de Wallapop RECORTADO a su cola: 3 caracteres
+// distinguen de sobra un lote de 50 (y el mazo entero no pasa de ~1500), y el id entero son ~6
+// tokens por ficha. Sigue siendo el id, no una posición: un enlace viejo no se puede resolver
+// contra otro lote. Si en el lote dos colas de 3 coinciden, TODAS crecen a 4 (o lo que haga falta).
+const shortIds = (ids) => {
+  for (let n = 3; n < 12; n++) {
+    const c = ids.map((id) => id.slice(-n));
+    if (new Set(c).size === c.length) return c;
+  }
+  return ids;
 };
+// del recorte al id entero: el único del lote (o del cache) que acaba así. Un id entero acaba en
+// sí mismo, así que los enlaces viejos y los ?fav=/?no= escritos a mano siguen valiendo. Si no
+// casa nada, o casan dos, pasa tal cual: mejor un id ignorado y dicho que una criba en el vecino.
+function fullId(t, lote) {
+  if (!t || rowCache[t]) return t;
+  const cola = t.toLowerCase();
+  for (const pool of [(lote && lote.ids) || [], Object.keys(rowCache)]) {
+    const m = pool.filter((id) => id.toLowerCase().endsWith(cola));
+    if (m.length) return m.length === 1 ? m[0] : t;
+  }
+  return t;
+}
 console.assert(
   (() => {
-    const ids = Array.from({ length: 104 }, (_, i) => "id" + i);
-    return code(0) === "a" && code(25) === "z" && code(51) === "Z" && code(52) === "aa" && code(103) === "aZ" &&
-      ids.every((id, i) => unCode(code(i), { ids }) === id) &&
-      unCode("m8g0jr4zdxpv", { ids }) === "m8g0jr4zdxpv" && // id real de Wallapop: intacto
-      unCode("a", null) === "a" && unCode("zz", { ids: ["x"] }) === "zz"; // sin lote / fuera de rango
+    const lote = { ids: ["m9zw5jkvxdpv", "k3pq7x0zab3"] };
+    return (
+      shortIds(["m9zw5jkvxdpv", "k3pq7x0zab3", "x7abzz9wq0f"]).join() === "dpv,ab3,q0f" &&
+      shortIds(["aaa111", "bbb111"]).join() === "a111,b111" && // colas repetidas: crecen todas
+      fullId("dpv", lote) === "m9zw5jkvxdpv" &&
+      fullId("DPV", lote) === "m9zw5jkvxdpv" && // la IA a veces cambia la caja
+      fullId("m9zw5jkvxdpv", { ids: [] }) === "m9zw5jkvxdpv" && // id entero: intacto
+      fullId("111", { ids: ["aaa111", "bbb111"] }) === "111" && // ambiguo: no se resuelve
+      fullId("zzz", null) === "zzz" // sin lote y sin cache: tal cual
+    );
   })(),
-  "code/unCode roto",
+  "shortIds/fullId roto",
 );
 const BUCKET_LABEL = { rejected: "rechazados", favorite: "favoritos" };
 // "3 a favoritos y 40 a rechazados" — resumen de lo que aplicó el enlace de la IA
@@ -2550,9 +2564,9 @@ console.assert(
 );
 function fromURL() {
   const p = new URLSearchParams(location.search);
-  const lote = aisent(); // hace falta ANTES de leer los ids: traduce las letras de las fichas
+  const lote = aisent(); // hace falta ANTES de leer los ids: resuelve los recortes de las fichas
   const idsOf = (k) =>
-    [...new Set((p.get(k) || "").split(",").map((s) => unCode(s.trim().replace(/^#/, ""), lote)).filter(Boolean))];
+    [...new Set((p.get(k) || "").split(",").map((s) => fullId(s.trim().replace(/^#/, ""), lote)).filter(Boolean))];
   const isKeep = p.has("keep");
   const keepIds = uni(idsOf("keep"), idsOf("fav")); // ambos ascienden a favoritos; solo ?keep juzga el lote
   const picks = [["rejected", idsOf("no")], ["favorite", keepIds]].filter(([, ids]) => ids.length);
@@ -3133,20 +3147,21 @@ console.assert(
   "stripEmoji roto",
 );
 
-// Reglas del enlace de vuelta: lo único que la IA hace mal por defecto (letras inventadas, cubos a
+// Reglas del enlace de vuelta: lo único que la IA hace mal por defecto (ids inventados, cubos a
 // medias, enlace olvidado). Van inline en los dos prompts porque llms.txt puede no leerse.
 const LINK_RULES = (n) =>
   "EMPIEZA la respuesta, antes de cualquier análisis, con esta línea y nada más:\n\n" +
-  "**[Aplicar tu criba en Rebusca](https://rebusca.dibogomez.com/?keep=<letras que conservarías>)** " +
+  "**[Aplicar tu criba en Rebusca](https://rebusca.dibogomez.com/?keep=<ids que conservarías>)** " +
   "— más una frase de qué hace al pulsarlo.\n\n" +
-  "Las letras son las que abren cada ficha de abajo, separadas por comas y sin espacios. Solo letras de " +
-  `esa lista, ninguna inventada. Al abrirlo esos anuncios pasan a favoritos y el resto de los ${n} se ` +
-  "descarta, así que incluye solo los que de verdad recomendarías comprar. A ese enlace no le añadas ?q=.\n\n" +
+  "Los ids son los [#...] de las fichas de abajo, copiados literales, separados por comas, sin espacios y " +
+  `sin la almohadilla. Ninguno que no esté abajo y ninguno inventado. Al abrirlo esos anuncios pasan a ` +
+  `favoritos y el resto de los ${n} se descarta, así que incluye solo los que de verdad recomendarías ` +
+  "comprar. A ese enlace no le añadas ?q=.\n\n" +
   "Cada anuncio que nombres va como enlace markdown pulsable a su URL, con título y precio dentro del texto: " +
-  "[Roomba 981 — 195€ (215€ para mí)](https://es.wallapop.com/item/...). Nunca una URL suelta, nunca una letra " +
+  "[Roomba 981 — 195€ (215€ para mí)](https://es.wallapop.com/item/...). Nunca una URL suelta, nunca un id " +
   "en la prosa, nunca un enlace dentro de un bloque de código: estoy en el móvil y ahí no se puede pulsar.";
 console.assert(
-  LINK_RULES(7).includes("?keep=<letras que conservarías>") && LINK_RULES(7).includes("resto de los 7"),
+  LINK_RULES(7).includes("?keep=<ids que conservarías>") && LINK_RULES(7).includes("resto de los 7"),
   "LINK_RULES roto",
 );
 // instrucción de cabecera para la IA (la misma para el texto de "copiar" y para el PDF dossier)
@@ -3206,10 +3221,10 @@ const promptIntro = (n, total) => {
     (queryURL() ? REFINE_RULES(queryURL(), catExclTerms()) : "")
   );
 };
-// ficha de un anuncio para la IA: letra + título + precios + señales de decisión + enlace + descripción.
-// El enlace es lo que la IA convierte en link pulsable para el usuario; la letra es solo de máquina
-// (vuelve en ?keep=) y hace de numeración, así que la lista no lleva número aparte.
-function ficha(r, i) {
+// ficha de un anuncio para la IA: id corto + título + precios + señales de decisión + enlace + descripción.
+// El enlace es lo que la IA convierte en link pulsable para el usuario; el [#id] es solo de máquina
+// (vuelve en ?keep=) y va recortado a la cola del id de Wallapop (ver shortIds).
+function ficha(r, i, id) {
   const km = col(r, "km"),
     dias = col(r, "dias");
   const meta = [];
@@ -3220,14 +3235,17 @@ function ficha(r, i) {
   const url = col(r, "url");
   if (url) meta.push(url);
   const lines = [
-    `${code(i)}) ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
+    `${i + 1}. [#${id}] ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
     "   " + meta.join(" · "),
   ];
   const desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
   if (desc) lines.push("   " + desc);
   return lines.join("\n");
 }
-const fichas = (rows) => rows.map(ficha).join("\n\n");
+const fichas = (rows) => {
+  const cortos = shortIds(rows.map((r) => col(r, "id")));
+  return rows.map((r, i) => ficha(r, i, cortos[i])).join("\n\n");
+};
 // mensaje listo para pegar en Claude/Gemini: cabecera + ficha de cada anuncio (precio final estimado)
 const aiPrompt = (rows, total) => promptIntro(rows.length, total) + "\n\n" + fichas(rows);
 // Manda el texto adonde el usuario lo quiere. En el móvil, "copiado" obliga a cambiar de app a
@@ -3282,8 +3300,8 @@ console.assert(
   "sample roto",
 );
 function copyForAI(btn, all, vacio) {
-  // sin id no hay letra que devolver: fuera antes de muestrear, o setAisent lo salta y las
-  // letras de las fichas dejan de casar con las posiciones del lote
+  // sin id no hay nada que devolver en el ?keep=: fuera antes de muestrear (setAisent ya lo salta,
+  // así que iría a la IA una ficha que su veredicto no puede nombrar)
   const rows = sample(all.filter((r) => col(r, "id")), UNSEEN_CAP);
   if (!rows.length) return snack(vacio, null);
   const prev = btn.textContent;
@@ -3381,6 +3399,7 @@ function ordenLabel() {
 const esc = (s) =>
   (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function dossierHTML(rows) {
+  const cortos = shortIds(rows.map((r) => col(r, "id"))); // mismos ids recortados que en el texto
   const cards = rows
     .map((r, i) => {
       // todas las fotos del anuncio (col "imagenes", separadas por espacio); si no hay, la única "imagen"
@@ -3389,7 +3408,7 @@ function dossierHTML(rows) {
         desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
       const photos = imgs.map((u) => `<img src="${esc(u)}" alt="">`).join("");
       return `<div class="dsr-card"><div class="dsr-body">` +
-        `<div class="dsr-t">${code(i)}) ${esc(stripEmoji(col(r, "titulo")))}</div>` +
+        `<div class="dsr-t">${i + 1}. [#${esc(cortos[i])}] ${esc(stripEmoji(col(r, "titulo")))}</div>` +
         `<div class="dsr-p">${esc(pricePair(r))}</div>` +
         (desc ? `<div class="dsr-d">${esc(desc)}</div>` : "") +
         (url ? `<a class="dsr-u" href="${esc(url)}">${esc(url)}</a>` : "") +
@@ -3400,7 +3419,7 @@ function dossierHTML(rows) {
   return `<pre class="dsr-intro">${esc(promptIntro(rows.length))}</pre>${cards}`;
 }
 async function dossierFav(btn) {
-  const rows = bucketRows(favorite).filter((r) => col(r, "id")); // igual que copyForAI: la letra es la posición en el lote
+  const rows = bucketRows(favorite).filter((r) => col(r, "id")); // igual que copyForAI: sin id no hay ?keep= posible
   if (!rows.length) return snack("No tienes favoritos", null);
   const prev = btn.textContent;
   const originCsv = curDrawer(); // igual que en copyForAI: se espera a las fotos antes de registrar

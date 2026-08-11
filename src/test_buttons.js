@@ -320,28 +320,38 @@ async function main() {
     ok(t.includes("Afinar la búsqueda"), "el prompt no pide el enlace de la búsqueda afinada");
   }
 
-  // ── 5bis. el viaje de ida y vuelta: las letras de las fichas vuelven en el ?keep= ──
-  // El texto copiado y el enlace de respuesta están atados por el formato "a) ...". La letra es
-  // la POSICIÓN en el lote anotado: si la ficha cambia de formato o el lote se anota en otro
-  // orden, el veredicto de la IA aterriza en el anuncio equivocado. Aquí se leen las letras del
+  // ── 5bis. el viaje de ida y vuelta: los ids que salen en las fichas vuelven en el ?keep= ──
+  // El texto copiado y el enlace de respuesta están atados por el formato "[#id]", y el id va
+  // RECORTADO a su cola. Si la ficha cambia de formato, o el recorte deja de resolverse, el
+  // veredicto de la IA aterriza en el vacío (o peor, en otro anuncio). Aquí se leen los ids del
   // texto de verdad, con la misma regla que el prompt le da a la IA, y se le devuelven.
   {
-    const b = await loaded();
+    const CSV_LARGO = // ids largos de verdad: los del CSV de juguete ya son más cortos que el recorte
+      [FIELDS.join(",")]
+        .concat(["m9zw5jkvxdpv", "k3pq7x0zab3", "x7abzz9wq0f"].map((id, i) =>
+          row({ id, titulo: "Ford " + i, precio: "100", categoria: "Coches", ciudad: "Jaen",
+            km: "1", dias: "1", reservado: "False", envio: "False", url: "https://w/" + id,
+            vendedor: "Ana", descripcion: "uno más" })))
+        .join("\r\n") + "\r\n";
+    const b = await loaded({ csv: CSV_LARGO });
     b.q("#copyDeck").click();
     await flush();
     const texto = b.spy.copied[0];
-    const letras = [...texto.matchAll(/^([a-zA-Z]{1,2})\) /gm)].map((m) => m[1]);
-    ok(letras.join() === "a,b,c", "las fichas no van numeradas por letra: " + letras.join());
-    ok(JSON.parse(b.store.wp_aisent).ids.join() === "a1,a2,a3",
-      "el lote anotado no casa con el orden de las fichas: " + b.store.wp_aisent);
+    // "N. [#id] título — precio": el "[#...]" literal de las instrucciones no cuenta como ficha
+    const ids = [...texto.matchAll(/^\d+\. \[#([^\]]+)\]/gm)].map((m) => m[1]);
+    ok(ids.join() === "dpv,ab3,q0f", "las fichas no llevan el id recortado en [#id]: " + ids.join());
+    ok(JSON.parse(b.store.wp_aisent).ids.join() === "m9zw5jkvxdpv,k3pq7x0zab3,x7abzz9wq0f",
+      "el lote anotado no lleva los ids enteros: " + b.store.wp_aisent);
     // la IA responde conservando el primero: el resto del lote se descarta
-    b.sandbox.location.search = "?keep=" + letras[0];
+    b.sandbox.location.search = "?keep=" + ids[0];
     ev(b, "fromURL()");
-    ok(bucket(b, "favorite").join() === "a1", "el ?keep= del texto copiado no dejó el favorito: " + bucket(b, "favorite"));
-    ok(bucket(b, "rejected").join() === "a2,a3", "el resto del lote no se descartó: " + bucket(b, "rejected"));
+    ok(bucket(b, "favorite").join() === "m9zw5jkvxdpv",
+      "el ?keep= recortado del texto copiado no dejó el favorito: " + bucket(b, "favorite"));
+    ok(bucket(b, "rejected").join() === "k3pq7x0zab3,x7abzz9wq0f",
+      "el resto del lote no se descartó: " + bucket(b, "rejected"));
   }
 
-  // ── 5bis-b. el ?keep= con ids de Wallapop enteros sigue valiendo (enlaces viejos y ?fav=/?no=) ──
+  // ── 5bis-b. el ?keep= con el id entero sigue valiendo (enlaces viejos y ?fav=/?no= a mano) ──
   {
     const b = await loaded();
     b.q("#copyDeck").click();
