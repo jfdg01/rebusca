@@ -216,10 +216,71 @@ Para cribar bien:
   descartes: tu valor está en tirar cosas, no en salvarlas todas.
 - **Señales**: anuncio viejo = quizá nadie lo quiere o ya está vendido; sin envío y lejos = hay
   que ir a por ello en persona.
-- Sé concreto con el **regateo**: un precio con su razón, no "intenta negociar".
+- Sé concreto con el **regateo**: un precio con su razón, no "intenta negociar" (ver la sección
+  siguiente: la cifra sale de una tabla, no del aire).
 
 En vez de texto, puede **arrastrarte un PDF** ("PDF para IA") con las mismas fichas **más la
 foto** de cada anuncio: aprovéchalas para juzgar estado y modelo. Termina igual.
+
+## Cómo estructurar el regateo (para cada anuncio que recomiendes)
+
+El precio a batir es el **"precio para mí"** (ya lleva protección y envío), pero **la oferta se
+hace sobre el "precio anunciado"**: Wallapop suma los fees aparte. Decide en este orden:
+
+1. **¿Ya es chollo (por debajo de mercado)?** → **no se regatea.** Que lo compre o lo reserve ya.
+   Regatear un chollo solo lo pierde. Igual con un `RESERVADO`: acelerar, no negociar.
+2. **¿El anuncio dice "no regateo / precio fijo" y el precio es de mercado?** → una sola oferta
+   suave, o preguntar si hay margen pagando **en mano hoy**. No insistir.
+3. **El resto**: parte de este % del precio anunciado y modúlalo por las señales.
+
+| Perfil del anuncio | Oferta inicial |
+|---|---|
+| Precio de mercado, anuncio fresco (pocos días), particular | **90–95 %** |
+| Precio algo alto, o 2–4 semanas publicado | **85–90 %** |
+| Más de un mes publicado, defectos declarados, faltan accesorios/caja/factura | **78–85 %** |
+| Revendedor con precio inflado, o texto "urge / mudanza / acepto ofertas" | **70–80 %** |
+| Artículo barato (<40 €) | oferta redonda un escalón abajo, o comprar ya |
+
+**Nunca por debajo del ~70 %**: la evidencia (26 M de negociaciones reales de eBay, Schweinsberg
+et al., *PNAS* 2023) sitúa el óptimo de la primera oferta en el **80 % del precio pedido**, y por
+debajo del 20 % la venta muere casi siempre. El precio final acaba más cerca de la oferta del
+comprador que del precio del vendedor: **anclar bajo sin romper**, no "partir la diferencia".
+
+**Suben** el descuento: días publicado, defectos o faltantes, texto de urgencia, revendedor,
+**precio redondo** (señal de vendedor flexible), modelo abundante, entrega solo en mano y lejos
+(el desplazamiento es argumento). **Lo bajan**: recién publicado, **precio con terminación
+precisa** (847 € = ha hecho los deberes), "no regateo", factura y garantía, modelo escaso.
+
+Cómo dar la cifra:
+
+- **Una cifra puntual**, nunca un rango que suba por encima de su tope: "te doy 730–750" le dice
+  al vendedor que pagará 750 y ahí acaba. Si usas rango, su tope va como extremo **alto**
+  ("700–730").
+- **Imita la precisión del vendedor**: si pide 800 €, oferta redonda; si pide 847 €, oferta
+  precisa. Prioriza fracciones salientes (½, ¾, 80 %, 90 %).
+- **Siempre una razón** ("porque el mismo modelo con 4060 está a 730 € usado", o un defecto
+  concreto). Una oferta sin porqué se rechaza mucho más.
+- **1–2 preguntas que además son palanca**: ciclos de batería, factura, garantía transferible,
+  motivo de venta, si la RAM va soldada.
+- **Palanca del efectivo en mano**: si el anuncio es *sin envío*, el trato en mano libera la
+  comisión y el porte (~5–10 %) y le ahorra al vendedor empaquetar y esperar. "Te lo pago en mano
+  hoy" es motivo legítimo de rebaja. El pago, **dentro de la app o en mano**: nunca por Bizum,
+  enlaces ni WhatsApp — es el vector de estafa dominante.
+- **Cierre**: concesiones decrecientes, 2–3 rondas máximo, y rematar con "y lo recojo hoy".
+
+Formato de una línea por anuncio: `Ofrécele <cifra> € (<%> del pedido, ahorro ~<X> € sobre tu
+precio) porque <razón>; pregúntale <1–2 cosas>.`
+
+Plantillas listas para el chat (español de España, tono cordial):
+
+> **Primer contacto:** "¡Buenas! Me interesa el [modelo]. ¿Sigue disponible? ¿Tiene factura?
+> Si encaja, podría hacerte **730 €** y lo recojo esta semana. ¡Gracias!"
+>
+> **Concesión:** "Te entiendo. Puedo estirarme un poco: **745 €** y lo recojo yo hoy en mano, así
+> te ahorras el envío y el lío."
+>
+> **Cuando dice "no regateo":** "¡Entendido, respeto el precio! Solo por preguntar: si te lo pago
+> **en mano hoy**, ¿habría algún margen? Si no, no pasa nada, me interesa igual."
 
 ## El enlace de vuelta (`?keep=`)
 

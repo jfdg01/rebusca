@@ -3237,6 +3237,23 @@ console.assert(
     REFINE_RULES("https://r/?q=a", ["Coches", "Motos"]).includes("Coches, Motos"),
   "REFINE_RULES roto",
 );
+// Regateo con cifra en vez de "intenta negociar". Va inline en los dos prompts (llms.txt puede
+// no leerse) porque sin la escala la IA suelta rangos que suben por encima del tope del comprador.
+// Los porcentajes salen de GUIA-REGATEO.md (óptimo empírico ~80 % del pedido; <70 % rompe la venta).
+const HAGGLE_RULES =
+  "\n\nEl regateo, con cifra. La oferta se hace sobre el PRECIO ANUNCIADO (Wallapop suma comisión y envío " +
+  "aparte), pero el ahorro razónalo sobre el «precio para mí».\n" +
+  "- Si ya está por debajo de mercado NO se regatea: que lo compre o lo reserve ya. Con RESERVADO, igual: " +
+  "acelerar, no negociar. Si el anuncio dice \"no regateo/precio fijo\", una sola oferta suave o ninguna.\n" +
+  "- Si no, parte de este % del precio anunciado: 90–95 % si el anuncio es fresco y el precio es de mercado; " +
+  "85–90 % si está algo alto o lleva semanas; 78–85 % si lleva más de un mes, tiene defectos o le faltan " +
+  "accesorios; 70–80 % si es revendedor con precio inflado o el texto dice \"urge/mudanza/acepto ofertas\". " +
+  "Nunca por debajo del 70 %: una oferta así rompe la venta. Por debajo de 40 € casi no compensa regatear.\n" +
+  "- Una cifra puntual, nunca un rango que suba por encima de mi tope (\"730–750\" acaba costando 750). " +
+  "Imita la precisión del vendedor: si pide 800 €, oferta redonda; si pide 847 €, oferta precisa.\n" +
+  "- Siempre con un porqué: un comparable de mercado o un defecto concreto.\n" +
+  "- Si es sin envío (en mano), esa es la palanca: pagar en efectivo hoy le ahorra la comisión y el porte. " +
+  "El pago, dentro de la app o en mano; nunca por Bizum, enlaces ni WhatsApp.";
 const promptIntro = (n, total) => {
   const { kw, since } = queryParts(loadedCsv || "");
   return (
@@ -3252,9 +3269,11 @@ const promptIntro = (n, total) => {
     LINK_RULES(n) +
     "\n\nDespués del enlace, razona la criba:\n" +
     "- CONSERVADOS (máximo 3, de mejor a peor): qué es exactamente (modelo y versión), por qué compensa a ese " +
-    "precio, qué riesgo tiene (reservado, anuncio viejo, sin envío y lejos), a qué precio regatear y qué " +
-    "preguntar al vendedor. Si no hay ninguno decente, dímelo y ya.\n" +
+    "precio, qué riesgo tiene (reservado, anuncio viejo, sin envío y lejos), y una línea de regateo: " +
+    "«Ofrécele X € (Y % del pedido) porque <razón>; pregúntale <1–2 cosas>». Si no hay ninguno decente, " +
+    "dímelo y ya.\n" +
     "- DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno." +
+    HAGGLE_RULES +
     (queryURL() ? REFINE_RULES(queryURL(), catExclTerms()) : "")
   );
 };
@@ -3519,8 +3538,10 @@ function cardText(r) {
     PRICE_NOTE +
     "\n\nIdentifica el modelo o versión exacta, revisa sus especificaciones y su estado, compáralo con su precio " +
     "típico nuevo y de segunda mano, y dime en la primera línea si a este precio es buena compra: sí, no, o de qué " +
-    "depende. Luego, corto: el porqué, a qué precio regatear (contraoferta concreta) y qué preguntarle al vendedor.\n\n" +
-    "Si de lo que averigües sale una búsqueda mejor (otro modelo, otras marcas), dámela como enlace pulsable " +
+    "depende. Luego, corto: el porqué y una línea de regateo: «Ofrécele X € (Y % del pedido) porque <razón>; " +
+    "pregúntale <1–2 cosas>»." +
+    HAGGLE_RULES +
+    "\n\nSi de lo que averigües sale una búsqueda mejor (otro modelo, otras marcas), dámela como enlace pulsable " +
     "a Rebusca siguiendo https://rebusca.dibogomez.com/llms.txt:\n\n" +
     lines.join("\n")
   );
