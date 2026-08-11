@@ -284,6 +284,9 @@
       // parcial le quitaba el cache y costaba un scrape entero por apertura sin ganar un anuncio
       // —medido: 210 páginas en tres aperturas donde los dos predecesores hacían 200, con los
       // mismos 160 anuncios en pantalla—. El usuario sí se entera: `app.js` avisa igual.
+      // `ramasTope` va de más: con el reparto por rondas una rama solo se queda a medias si algo
+      // izó `parar`, y esos tres ya están en la lista. Se queda como red de seguridad barata —lo
+      // que cuesta equivocarse aquí es cachear un recorte para siempre—, no como término medido.
       diag.parcial = diag.ramasRotas > 0 || diag.abortado || diag.tope > 0 || diag.ramasTope > 0;
       api.lastScrape = diag;
       if (diag.parcial) console.warn("Rebusca: scrape incompleto", diag);
@@ -302,18 +305,25 @@
     const aviso = () => onProgress && onProgress(rows.length, hechas, ramas.length);
     // Cupo por rama. El tope se medía solo contra el total, así que la primera rama se lo comía
     // entero y las siguientes no llegaban a pedir ni una página: "iphone OR xiaomi" devolvía
-    // 1500 iPhones y cero Xiaomis. En serie el cupo era acumulativo (lo que una rama no gastaba
-    // quedaba para las de después); en paralelo no hay "las de después", así que es fijo y una
-    // rama vacía deja su parte sin usar. Solo se nota en búsquedas que revientan el tope.
-    const cupo = Math.ceil(maxRows / ramas.length);
+    // 1500 iPhones y cero Xiaomis. Repartirlo de una vez a partes iguales tenía el defecto
+    // contrario: la rama gorda se cortaba en 1500/8 aunque las otras siete dejaran sitio de
+    // sobra —una búsqueda de 548 anuncios salía recortada y, por parcial, sin cachear—. Así que
+    // el reparto va POR RONDAS: la rama que llena su cupo no muere, aparca su cursor y vuelve en
+    // la ronda siguiente con lo que las demás no gastaron. Se recorta cuando se acaba el tope
+    // global, no antes.
+    const paramsDe = (kw) => {
+      const p = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
+      if (orderBy) p.order_by = orderBy;
+      if (tf) p.time_filter = tf;
+      return p;
+    };
 
-    async function rama(kw) {
-      let params = { keywords: kw, latitude: lat, longitude: lon, source: "search_box" };
-      if (orderBy) params.order_by = orderBy;
-      if (tf) params.time_filter = tf;
-      let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo, la deja para otra
+    // Devuelve los params con los que reanudar si paró por cupo; nada si la rama terminó.
+    async function rama(kw, params, cupo) {
+      let old = false, lleno = false;   // `lleno`: esta rama agotó su cupo de la ronda, aparca
       let secas = 0;                    // páginas seguidas de ESTA rama que no trajeron ni una fila
-      let mias = 0;                     // filas que ha puesto ESTA rama (el cupo va contra esto)
+      let mias = 0;                     // filas que ha puesto ESTA rama en ESTA ronda (el cupo va contra esto)
+      let reanudar = null;              // la página donde cortó el cupo: la ronda siguiente la repite
       while (!old && !lleno && !parar) {
         if (signal && signal.aborted) { diag.abortado = true; parar = true; return; }
         // Corta la RAMA, no el scrape: una rama sinónima que solo repite lo que ya trajo otra da
@@ -322,6 +332,7 @@
         if (secas >= MAX_PAGINAS_SECAS) { diag.ramasSecas++; return; }
         diag.paginas++;
         const antes = mias;
+        const actual = params;   // se guarda ANTES de avanzar el cursor: es la página que aparcaría el cupo
         let d;
         try { d = await getJSON(API + "?" + new URLSearchParams(params), signal); }
         catch (e) {
@@ -376,30 +387,49 @@
           // paralelo el CSV puede pasarse por una fila por cada rama que tuviera página en vuelo
           // (tres como mucho): tirar esas filas cuesta más de lo que vale cuadrar el número.
           if (rows.length >= maxRows) { diag.tope = maxRows; parar = true; return; }
-          if (mias >= cupo) { diag.ramasTope++; lleno = true; break; }
+          // El cupo corta a mitad de página, así que la ronda siguiente REPITE esta página en vez
+          // de saltar al cursor: lo ya recogido lo tira `seen` y la cola de la página no se pierde.
+          // Cuesta una petición repetida por rama aparcada; perder anuncios cuesta más.
+          if (mias >= cupo) { reanudar = actual; lleno = true; break; }
         }
         secas = mias > antes ? 0 : secas + 1;   // una sola fila nueva perdona la racha entera
         const np = ((d || {}).meta || {}).next_page;
-        if (!np || old || lleno) return;
+        if (!np || old || lleno) return reanudar;
         params = { next_page: np };                            // el cursor ya lleva keywords/lat/lon
         await sleep(500 + Math.random() * 500, signal);                // jitter anti-patrón
       }
+      return reanudar;
     }
 
     // Cuatro ramas a la vez, el mismo tope que wallapop.py: doce ramas en serie son doce esperas
     // encadenadas (medio segundo de jitter por página, más los backoff), y abrir las 32 de golpe
     // es pedirle a DataDome un 403. Cada obrero coge la siguiente rama libre; el reparto sale
     // solo, sin trocear la lista por adelantado.
-    let siguiente = 0;
-    const obrero = async () => {
-      while (siguiente < ramas.length && !parar) {
-        const kw = ramas[siguiente++];
-        aviso();  // al entrar en la rama: una rama sin resultados también mueve el contador
-        await rama(kw);
-        hechas++;
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(POOL_RAMAS, ramas.length) }, obrero));
+    // Rondas: la primera lleva todas las ramas; las siguientes, solo las que aparcaron por cupo.
+    // Termina siempre — cada rama de una ronda o acaba (sale de la cola) o pone al menos `cupo`
+    // filas (>= 1), así que o la cola encoge o `rows` crece hasta el tope y `parar` corta.
+    let cola = ramas.map((kw) => ({ kw, params: paramsDe(kw) }));
+    while (cola.length && !parar) {
+      const ronda = cola;
+      cola = [];
+      // Lo que queda del tope, repartido entre las ramas vivas: las que ya terminaron dejan su
+      // parte a las que no, así que el cupo sube en cada ronda.
+      const cupo = Math.max(1, Math.ceil((maxRows - rows.length) / ronda.length));
+      let siguiente = 0;
+      const obrero = async () => {
+        while (siguiente < ronda.length && !parar) {
+          const t = ronda[siguiente++];
+          aviso();  // al entrar en la rama: una rama sin resultados también mueve el contador
+          const reanudar = await rama(t.kw, t.params, cupo);
+          if (reanudar) cola.push({ kw: t.kw, params: reanudar });
+          else hechas++;   // solo cuenta la rama TERMINADA: la que aparca vuelve en la ronda siguiente
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(POOL_RAMAS, ronda.length) }, obrero));
+    }
+    // Ramas que se quedaron a medias. Con el reparto por rondas esto solo pasa si `parar` cortó
+    // la fiesta (tope global, 403 o botón parar), y los tres marcan parcial por su cuenta.
+    diag.ramasTope = cola.length;
     // Todas las ramas caídas y ni una fila: eso no es "no hay anuncios", es que no se pudo
     // buscar, y el llamador tiene que verlo como error. Con una sola rama en pie se devuelve
     // lo que haya, marcado parcial.

@@ -289,18 +289,18 @@ async function main() {
     ok(api.lastScrape.parcial, "un resultado recortado por el tope no se marca como parcial");
   }
 
-  // ── 13b. el cupo es fijo: lo que una rama vacía no gasta se pierde ──
-  //      Con las ramas en serie el cupo era acumulativo y aquí salían las 9 filas. En paralelo
-  //      las tres piden a la vez, así que no hay "las de después" a quienes pasarles el sobrante:
-  //      la rama vacía se lleva su tercio a la tumba y el CSV se queda en 6. Es el precio del
-  //      paralelismo, y solo se paga en búsquedas que ya revientan el tope.
+  // ── 13b. lo que una rama vacía no gasta se lo llevan las demás ──
+  //      El cupo de la ronda es fijo, pero no es el final: la rama que lo llena aparca y vuelve en
+  //      la ronda siguiente con la parte que dejó la vacía. Con el reparto de una sola vez esto se
+  //      quedaba en 6 de 9 y encima salía marcado parcial (sin cachear) teniendo sitio de sobra.
   {
     const { api } = load(async (url) => {
       const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
       return resp(200, page(kw === "bbb" ? [] : Array.from({ length: 10 }, (_, i) => item(kw + i))));
     });
     const csv = await api.scrape({ keywords: "aaa OR bbb OR ccc", maxRows: 9 });
-    ok(filas(csv).length === 6, "el cupo por rama no es 9/3: " + filas(csv).length + " de 6");
+    ok(filas(csv).length === 9, "el sobrante de la rama vacía se perdió: " + filas(csv).length + " de 9");
+    ok(api.lastScrape.tope === 9, "recortar con el tope global sin gastarlo: " + api.lastScrape.tope);
   }
 
   // ── 13d. las ramas OR se piden EN PARALELO, no una detrás de otra ──
@@ -321,20 +321,42 @@ async function main() {
     ok(filas(csv).length === 4, "se perdieron filas al juntar las ramas: " + filas(csv).length);
   }
 
-  // ── 13c. el cupo de UNA rama basta para marcar parcial, sin tocar el tope total ──
-  //      El check 13 llega al tope global; este no. La rama "aaa" llena su cupo de 5 y "bbb" viene
-  //      vacía, así que el total se queda en 5 de 10 y `diag.tope` nunca se pone. Si `ramasTope` se
-  //      cayera de `diag.parcial`, ese recorte se cachearía como el resultado definitivo.
+  // ── 13c. una rama solo se corta cuando se ha gastado el tope global ──
+  //      "aaa" tiene 20 anuncios y "bbb" ninguno. Antes la rama se paraba en su cupo de 5, y ese
+  //      recorte —con la mitad del tope sin tocar— se anunciaba y no se cacheaba. Ahora la ronda
+  //      siguiente le da lo que sobra y el corte llega donde debe: en las 10 del tope.
   {
     const { api } = load(async (url) => {
       const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
       return resp(200, page(kw === "bbb" ? [] : Array.from({ length: 20 }, (_, i) => item(kw + i))));
     });
     const csv = await api.scrape({ keywords: "aaa OR bbb", maxRows: 10 });
-    ok(filas(csv).length === 5, "el cupo de la rama no recortó: " + filas(csv).length + " de 5");
-    ok(api.lastScrape.tope === 0, "este escenario no debe llegar al tope total: " + api.lastScrape.tope);
-    ok(api.lastScrape.ramasTope === 1, "el cupo de la rama no quedó contado: " + api.lastScrape.ramasTope);
-    ok(api.lastScrape.parcial, "una rama que llena su cupo no marca parcial: se cachearía un recorte");
+    ok(filas(csv).length === 10, "la rama se cortó antes del tope: " + filas(csv).length + " de 10");
+    ok(api.lastScrape.tope === 10, "el corte no salió por el tope global: " + api.lastScrape.tope);
+    ok(api.lastScrape.parcial, "un resultado recortado no marca parcial: se cachearía un recorte");
+  }
+
+  // ── 13e. con sitio de sobra no se recorta nada, y eso se puede cachear ──
+  //      El caso que llegó de producción: ocho ramas, 548 anuncios y un tope de 1500. La rama
+  //      gorda llenaba su 1500/8 y marcaba el resultado parcial, así que el aviso salía y el CSV
+  //      no se guardaba nunca. Aquí "aaa" son 60 anuncios en tres páginas, "bbb" tres, tope 100:
+  //      la rama gorda aparca dos veces, la ronda siguiente le pasa el sobrante y no falta ni uno.
+  {
+    const pag = (url) => {
+      const c = (decodeURIComponent(url).match(/next_page=([^&]*)/) || [, ""])[1];
+      return c ? Number(c) : 0;
+    };
+    // idempotente por cursor: repetir una página devuelve LOS MISMOS anuncios, como la API real
+    const { api } = load(async (url) => {
+      const kw = (decodeURIComponent(url).match(/keywords=([^&]*)/) || [, "cursor"])[1];
+      if (kw === "bbb") return resp(200, page([item("b0"), item("b1"), item("b2")]));
+      const p = pag(url);
+      return resp(200, page(Array.from({ length: 20 }, (_, i) => item("a" + (p * 20 + i))),
+                            p < 2 ? String(p + 1) : null));
+    });
+    const csv = await api.scrape({ keywords: "aaa OR bbb", maxRows: 100 });
+    ok(filas(csv).length === 63, "se perdieron anuncios con el tope sin gastar: " + filas(csv).length + " de 63");
+    ok(!api.lastScrape.parcial, "un resultado entero se marca parcial y no se cachea: " + JSON.stringify(api.lastScrape));
   }
 
   // ── 14. una API que nunca deja de dar cursor no puede hacer un bucle sin fin ──
