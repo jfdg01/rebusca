@@ -2614,10 +2614,15 @@ function fromURL() {
     // cubos POR CAJÓN: cada id va al cajón de ?q= o, sin q, al de ORIGEN del propio anuncio
     // (rowCache._csv). OJO: al boot `curCsv` aún es null (fromURL corre ANTES de restoreLastCsv),
     // así que meterlos en el activo los tiraba a un cajón fantasma invisible.
+    // Si el id venía EN EL LOTE, manda el cajón del lote: `_csv` recuerda la PRIMERA búsqueda que
+    // vio el anuncio y no se reescribe nunca, así que un anuncio repetido de una búsqueda vieja se
+    // archivaba allí mientras el resto del lote se rechazaba aquí. El favorito existía, pero en
+    // otro cajón: en el de la búsqueda que acabas de cribar salía como "sin ver".
+    const enLote = new Set(sent?.ids || []);
     for (const [bucket, ids] of picks)
       for (const id of ids) {
         const dest = q ? csvNameOf(q, since)
-          : rowCache[id]?._csv || (isKeep && sentCsv) || curCsv || localStorage.getItem(lastCsvKey()) || "";
+          : (enLote.has(id) ? sentCsv : rowCache[id]?._csv) || sentCsv || curCsv || localStorage.getItem(lastCsvKey()) || "";
         if (!dest) { orphanN++; continue; } // sin cajón conocido: no se archiva bajo "" y se dice
         touched.add(dest);
         pointBuckets(dest);

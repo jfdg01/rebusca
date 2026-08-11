@@ -973,6 +973,22 @@ async function main() {
     fail("?keep: el resto del lote no se rechazó, salió " + kp.wp_rejected);
   if ("wp_aisent" in kp) fail("?keep: no consumió wp_aisent");
 
+  // 9a. un anuncio del lote que YA salió en una búsqueda vieja: su veredicto va al cajón del LOTE,
+  //     no al `_csv` de aquella (que es la primera búsqueda que lo vio y nunca se reescribe). Con
+  //     el `_csv` viejo el favorito se archivaba en el otro cajón y en el que acabas de cribar
+  //     salía como "sin ver": pasó de verdad, 2 de 3 conservados desaparecieron de la vista.
+  const vj = {
+    wp_rows: JSON.stringify({
+      a1: { id: "a1", _csv: "vieja.csv" }, // repetido: lo vio antes otra búsqueda
+      a2: { id: "a2", _csv: "ps4.csv" },
+    }),
+    wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }),
+  };
+  errs = await bootErrs(vj, { search: "?keep=a1" });
+  if (errs.length) fail("?keep con origen viejo lanzó: " + (errs[0].message || errs[0]));
+  if (vj.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep: el conservado no cayó en el cajón del lote, salió " + vj.wp_favorite);
+
   // 9b. ?keep= SIN wp_rows: el id cae en el cajón del propio lote (wp_aisent.csv), no en "".
   //     Es el caso real de responder al enlace desde otro navegador o tras limpiar el cache.
   const kp2 = { wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }) };
