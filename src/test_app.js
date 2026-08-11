@@ -981,6 +981,22 @@ async function main() {
   if (kp2.wp_favorite !== '{"ps4.csv":["a1"]}')
     fail("?keep sin wp_rows: el conservado no cayó en el cajón del lote, salió " + kp2.wp_favorite);
 
+  // 9bis. el ?keep= con cache ABRE los favoritos ya pintados. Antes solo sincronizaba el combobox
+  //     (selectQueryUI no carga filas), así que el enlace de la IA aterrizaba en la bienvenida y
+  //     había que volver atrás y re-seleccionar la búsqueda a mano para ver el veredicto.
+  const kc = { wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2", "a3"] }) };
+  const bk = await boot(kc, {
+    search: "?keep=a1",
+    idbMem: new Map([
+      ["csvIndex", { "ps4.csv": { ts: 1, ids: ["a1", "a2", "a3"] } }],
+      ["csv:ps4.csv", "id,titulo,precio\na1,Una,10\na2,Otra,20\na3,Tres,30"],
+    ]),
+  });
+  if (bk.errs.length) fail("?keep con cache lanzó: " + (bk.errs[0].message || bk.errs[0]));
+  if (bk.q("table").hidden) fail("?keep con cache: la lista de favoritos salió oculta (la bienvenida otra vez)");
+  if (bk.q("#listTitle").textContent !== "Favoritos")
+    fail("?keep con cache: no abrió en favoritos, el título dice " + bk.q("#listTitle").textContent);
+
   // 9c. id irresoluble (sin ?q=, sin origen, sin última búsqueda): NO se archiva bajo "" y se avisa
   const hu = {};
   const bh = await boot(hu, { search: "?fav=zzz" });

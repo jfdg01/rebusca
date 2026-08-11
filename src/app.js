@@ -2622,7 +2622,13 @@ function fromURL() {
       history.replaceState(null, "", location.pathname); // enlace de un solo uso
       // muestra el cubo más alto que haya tocado: se pinta desde el cache, sin re-scrapear
       view = picks.length && picks.at(-1)[0] !== "rejected" ? picks.at(-1)[0] : "";
-      if (dest) selectQueryUI(dest); // fija curCsv al cajón: sin esto la vista sale vacía
+      if (dest) {
+        selectQueryUI(dest); // fija curCsv al cajón: sin esto la vista sale vacía
+        // ...pero selectQueryUI NO carga filas: `loadedCsv` seguía null y la vista salía con la
+        // bienvenida, obligando a volver atrás y re-seleccionar la búsqueda a mano para ver el
+        // veredicto. Con cache se pinta aquí (sin red); loadCSV resetea `view`, de ahí el re-render.
+        if (csvIndex[dest]) { const v = view; loadQuery(dest).then(() => { view = v; render(); }); }
+      }
       render();
       snack(msg() || "Nada que aplicar: el lote ya estaba resuelto", null);
       return true; // ya hay algo en pantalla; no dispares restoreLastCsv()
