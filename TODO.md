@@ -51,6 +51,10 @@ cerraría.
 
 ## 2. Bajada de precio
 
+**Hecho el 11/08/2026: `src/historial.py`.** Una pasada por query guarda el precio de cada
+id y la siguiente lo compara: el informe saca `NUEVO`, `BAJA` (con el % ) y `FIN`. Falta
+solo la mitad de arriba: qué se hace con una bajada (mandarla a la IA, punto 4).
+
 Es la señal más fuerte que hoy no se ve. Un anuncio ya juzgado a 400 € que baja a 330 €
 vale más que cualquier anuncio nuevo, y ahora mismo pasa desapercibido porque cada
 búsqueda empieza de cero.
@@ -66,16 +70,18 @@ no lee, y viene en el 100 % de los anuncios. **No sirve de atajo:** sale distint
 `created_at` hasta en anuncios de 15 segundos, así que no marca "cambió el precio".
 Comparar el importe guardado es exacto y más barato.
 
-**Calculándolo nosotros:** un fichero JSON de la vigilancia (ver 4) con
-`id → {visto_primero, precios: [[fecha, importe]], veredicto, nota}`. Cada pasada
-compara el precio de hoy con el último guardado; si cambió, se apunta y el anuncio
-vuelve a la cola de la IA. Los ids son estables entre pasadas (`it.id` es el de
-Wallapop, no uno nuestro), así que el cruce es una comparación de claves, sin heurística
-de duplicados.
+**Calculándolo nosotros:** eso es `historial.json`, con `id → {visto, ultimo, qs, precios}`.
+Los ids son estables entre pasadas (`it.id` es el de Wallapop, no uno nuestro), así que el
+cruce es una comparación de claves, sin heurística de duplicados. `veredicto` y `nota` aún no
+existen en el registro: los añadirá el punto 4, cuando haya IA que los escriba.
 
 ---
 
 ## 3. Desapariciones = precios de venta
+
+**El registro ya está (11/08/2026).** `historial.py` marca `fin: <sello>` cuando ninguna query
+trae ya el id, y el precio de venta es la última entrada de sus `precios`. Falta lo de siempre:
+semanas de pasadas, y luego dárselo a la IA.
 
 Un id que deja de aparecer se vendió o se retiró. Vale para dos cosas: sacarlo del
 ranking, y **guardar a qué precio desapareció**. En unas semanas eso es un histórico de
@@ -88,7 +94,12 @@ registro pronto aunque el ranking tarde.
 
 Cuidado con un falso positivo: desaparecer del lote también puede ser que la búsqueda
 cambió o que el anuncio se cayó de las 1500 filas del tope. Solo contar como
-desaparición si la misma query lo trajo ayer y hoy no.
+desaparición si la misma query lo trajo ayer y hoy no. Eso ya lo hace `merge()`: la fecha
+de "visto" se guarda **por query** (`qs`), y una pasada cortada por un 403 no cuenta ninguna
+desaparición, que si no media pasada hace desaparecer medio catálogo. Queda un falso positivo
+vivo: el orden de la API baila y un anuncio se cae de una pasada y vuelve en la siguiente. Se
+ve solo (el `fin` se borra al volver), pero si ensucia, el arreglo es exigirle dos pasadas
+seguidas sin aparecer.
 
 ---
 
@@ -103,12 +114,13 @@ el riesgo de ban compartido para todos los que usan el dominio. Un `systemd` tim
 relámpago sin que la cosa se vuelva un scraper agresivo: son dos búsquedas al día, menos
 tráfico que abrir la web un rato.
 
-**La forma: podar y luego juzgar.**
+**La forma: cribar poco y que juzgue la IA.**
 
-1. **Poda determinista, gratis.** Teléfono o WhatsApp en la descripción, "para piezas",
-   palabras de accesorio (batería, funda, dock, caja, trackpad), duplicados de mismo
-   vendedor y mismo título, precios absurdos. En las ocho rondas esto se llevaba ~18 %
-   del lote, y es una expresión regular, no tokens.
+1. ~~**Poda determinista, gratis.**~~ **Descartada el 11/08/2026, por decisión del dueño:
+   la criba la hace la IA.** El motivo aguanta solo: esas reglas (accesorios, recambios,
+   piezas sueltas) ya están escritas en la prompt de la app (`app.js:3236`), y ponerlas otra
+   vez en una expresión regular de Python es una segunda copia que se desincroniza. El ahorro
+   era ~18 % de tokens; el precio, dos sitios donde arreglar cada falso descarte.
 2. **A la IA van solo dos cosas:** ids nunca vistos, e ids cuyo precio bajó. El resto
    conserva su veredicto guardado. Así una pasada de 1500 anuncios se queda en ~20 de
    trabajo real, que es lo que hace que esto quepa en una suscripción.
@@ -128,5 +140,10 @@ un proceso de fondo no ha mandado ningún lote (`app.js:2602`).
 **Memoria: un JSON del script, no la memoria del agente.** Son miles de filas
 estructuradas; la memoria del agente es para hechos sueltos en prosa.
 
-**Orden de ataque:** el registro y la poda determinista primero. Sirven solos, sin que
-haya ningún modelo de por medio, y son la mitad del valor.
+**Orden de ataque:** el registro primero, y ya está hecho (`src/historial.py`, 11/08/2026).
+Sirve solo, sin ningún modelo de por medio, y es la mitad del valor.
+
+**Lo siguiente NO es el timer.** Antes de automatizar nada hay que correr la pasada a mano
+unos días, sobre las queries de verdad, y mirar si el informe dice algo que sirva. Un timer
+sobre un informe que no se lee es un cron que nadie mira. El punto 1 (el harness a ciegas) y
+el resto de este punto 4 esperan a esa prueba.

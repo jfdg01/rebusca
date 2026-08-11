@@ -20,6 +20,9 @@ Piezas:
 - `src/servidor.py` — servidor stdlib **solo-estáticos**: sirve `index.html` (con `stamp_versions`)
   + `app.css`/`app.js`/`scrape.js`/imágenes, header `no-cache`. No escribe nada.
 - `src/index.html` + `src/app.css` + `src/app.js` — frontend (markup / estilos / lógica; sin build).
+- `src/historial.py` — histórico de precios **en tu máquina**, no en el VPS ni en el browser.
+  Una pasada por query sobre `wallapop.py` → `historial.json` con lo que cambió (nuevos,
+  bajadas, desapariciones). No se sirve, no toca la app: su salida es texto en la terminal.
 - `deploy.sh` — rsync a `oracle` + reinicia el servicio.
 
 ## Comandos
@@ -36,16 +39,18 @@ node src/test_scrape.js                       # suite del scraper: paginación, 
 python3 src/test_servidor.py                  # suite del server: rutas, MIME, anti-traversal, stamp
 python3 src/wallapop.py "deshumidificador"    # scrape CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py demo                  # self-check del scraper Python (sin red)
+python3 src/historial.py "thinkpad e14" "sofá"  # pasada del histórico -> ./historial.json + informe
+python3 src/historial.py demo                 # self-check del histórico (sin red)
 ./deploy.sh                                   # rsync a oracle + systemctl restart rebusca
 ```
 
-**Los siete checks de una, antes de cerrar sobre `main`.** Ninguno pide red. Que el
+**Todos los checks de una, antes de cerrar sobre `main`.** Ninguno pide red. Que el
 comando calle es la señal de que van bien: solo habla cuando algo sale con código != 0.
 `test_scrape.js` y `test_servidor.py` se quedaron fuera de esta lista y estuvieron rotos
 27 commits sin que nadie lo notara (ver `MEJORAS.md`, defecto 6).
 
 ```bash
-./check.sh    # los siete, ~5s. Silencio = verde. Sale 1 si alguno falla.
+./check.sh    # todos, ~5s. Silencio = verde. Sale 1 si alguno falla.
 ```
 
 Ya no depende de que alguien se acuerde: `.githooks/pre-commit` lo corre en cada commit.

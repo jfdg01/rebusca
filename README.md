@@ -71,11 +71,12 @@ Todo se ejecuta **desde la raíz del repo**. El servidor solo sirve estáticos d
 # 1) Levantar la app (sirve estáticos) -> http://0.0.0.0:8000  (override con PORT)
 python3 src/servidor.py
 
-# 2) Self-checks sin red (los siete; ninguno toca la red)
-./check.sh                            # los siete de una, ~5s. Silencio = verde.
+# 2) Self-checks sin red (ninguno toca la red)
+./check.sh                            # todos de una, ~5s. Silencio = verde.
 python3 src/servidor.py demo          # servidor
 python3 src/test_servidor.py          # suite del servidor: rutas, MIME, anti-traversal
 python3 src/wallapop.py demo          # scraper Python (referencia)
+python3 src/historial.py demo         # histórico de precios
 node src/scrape.js demo               # scraper del browser
 node src/test_scrape.js               # suite del scraper: paginación, OR, reintentos, abortar
 node src/test_app.js                  # app.js: evalúa el módulo + boot, sin navegador
@@ -83,6 +84,9 @@ node src/test_buttons.js              # cada botón hace lo suyo (DOM falso sobr
 
 # 3) Scrapear desde la CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py "deshumidificador"
+
+# 3b) Histórico de precios en tu máquina -> ./historial.json + informe en la terminal
+python3 src/historial.py "thinkpad e14"
 python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
 ```
 
