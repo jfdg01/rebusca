@@ -2513,10 +2513,13 @@ $("#importState").onchange = (e) => {
 // cubos (alias legado de ?keep: solo ascienden, no rechazan el resto del lote). Los ids llegan
 // recortados como en las fichas (ver shortIds); el id entero también vale.
 const TRIAGE = [["no", "rejected"], ["fav", "favorite"]]; // orden = prioridad ascendente
-// Las fichas que se le pegan a la IA llevan el id de Wallapop RECORTADO a su cola: 3 caracteres
-// distinguen de sobra un lote de 50 (y el mazo entero no pasa de ~1500), y el id entero son ~6
-// tokens por ficha. Sigue siendo el id, no una posición: un enlace viejo no se puede resolver
-// contra otro lote. Si en el lote dos colas de 3 coinciden, TODAS crecen a 4 (o lo que haga falta).
+// Las fichas que se le pegan a la IA llevan el id de Wallapop RECORTADO a su cola: el id entero
+// son 12 caracteres opacos (~6 tokens) por ficha. Sigue siendo el id, no una posición: un enlace
+// viejo no se puede resolver contra otro lote.
+// La cola no es aleatoria y 3 caracteres NO bastan: medido sobre 472 ids reales, la cola de 3
+// solo da 131 valores distintos (la penúltima letra sale 6, z o j y poco más). Por eso esto
+// empieza en 3 y crece hasta que los del lote son únicos: en un lote de 50 sale 4 el 67 % de las
+// veces y 5 el 30 %. La CABEZA es mucho peor (472 ids dan 24 cabezas de 3): no la uses.
 const shortIds = (ids) => {
   for (let n = 3; n < 12; n++) {
     const c = ids.map((id) => id.slice(-n));

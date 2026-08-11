@@ -235,9 +235,10 @@ Tu criba se aplica con **un solo enlace**, y va **antes de cualquier análisis**
 - No hace falta que enumeres los descartados: van implícitos.
 
 Sobre los ids: son los `[#…]` que abren cada ficha del lote pegado. Son la **cola del id de
-Wallapop**, recortada a 3 caracteres para no gastar tokens: códigos opacos, sin patrón y sin
-significado. **Cópialos literales y enteros, sin la almohadilla**, separados por comas y sin
-espacios. No los "corrijas", no uses ninguno que no esté en el lote y **no te inventes ninguno**.
+Wallapop**, recortada a los pocos caracteres que hacen falta para que no se repitan dentro del
+lote: códigos opacos, sin patrón y sin significado. **Cópialos literales y enteros, sin la
+almohadilla**, separados por comas y sin espacios. No los "corrijas", no uses ninguno que no esté
+en el lote y **no te inventes ninguno**.
 
 **Para la vuelta NO metas `q`.** Sin `q` el enlace se aplica al instante sobre la búsqueda que
 el usuario acaba de hacer; con `q` la app re-scrapea Wallapop entera antes de aplicar nada.
