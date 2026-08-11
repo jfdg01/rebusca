@@ -273,6 +273,16 @@
     border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
     border-bottom-left-radius: 3px;
   }
+  /* "resultado parcial": una banda, no un contador. Va a sangre completa como .grp.rej y anula la
+     sangría colgante de .stat span, que reserva sitio para una cifra que aquí no existe. */
+  /* `span.parcial` y no `.parcial`: `.stat span:not(.link)` de arriba puntúa un tipo más y se
+     quedaba con su padding y su sangría colgante, que aquí descolocan la segunda línea. */
+  .stat span.parcial {
+    padding: .5rem calc(var(--bleed) + .8rem); text-indent: 0;
+    margin: 0 calc(-1 * (var(--bleed) + .8rem)) .55rem;
+    background: var(--amber-soft); border-bottom: 1px solid var(--line);
+  }
+  .stat .parcial .link { color: var(--amber-ink); }
   .stat b { color: var(--ink); font-weight: 700; font-size: 1.15em; }
   .stat .link, .loading .link, .deck-sort .link { color: var(--pine-ink); cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; }
 
@@ -748,6 +758,7 @@
   .sc-realkw { font: 12px var(--mono); color: var(--ink-soft); overflow-wrap: anywhere; margin-top: .2rem; }
   .sc-meta { font: 11.5px var(--mono); color: var(--ink-soft); margin-top: .2rem; }
   .sc-new { color: var(--pine); }  /* lo único accionable de la ficha: anuncios sin triar */
+  .sc-parcial { color: var(--amber-ink); }  /* la lista está recortada: "Repetir" la completa */
   .sc-btns { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
   .sc-btns button { flex: 1 1 45%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }   /* 2 por fila en 320px */
   .sc-btns .danger { color: #fff; background: var(--danger); border-color: var(--danger);

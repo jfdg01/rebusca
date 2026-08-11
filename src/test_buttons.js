@@ -1275,10 +1275,11 @@ async function main() {
     ok(b2.q("#scrape").disabled === false, "tras parar, el botón Buscar se quedó bloqueado");
   }
 
-  // ── 31b. un resultado PARCIAL no se cachea ni se da por bueno ──
+  // ── 31b. un resultado PARCIAL se cachea MARCADO, nunca como definitivo ──
   // scrape() resuelve con lo que haya recogido aunque una rama OR se caiga (403 de DataDome) o
-  // aunque el usuario pare. Se cacheaba igual, así que reabrir esa búsqueda servía el recorte
-  // desde cache y no volvía a scrapear nunca: los anuncios que faltaban se perdían para siempre.
+  // aunque el usuario pare. Cachearlo a secas era mentir —reabrir servía el recorte y no volvía a
+  // scrapear nunca—, pero NO cachearlo tiraba anuncios reales y dejaba la búsqueda en blanco al
+  // reabrirla. Se guarda con el motivo dentro: se pinta al instante y nadie lo lee como completo.
   {
     const b = await boot({}, { timers: true, scrape: async () => CSV });
     b.sandbox.Rebusca.lastScrape = { ramas: 2, ramasRotas: 1, sinId: 0, abortado: false, parcial: true };
@@ -1286,13 +1287,30 @@ async function main() {
     await b.q("#scrape").click();
     await flush();
     ok(ev(b, "data.length") === 3, "el resultado parcial ni se pintó");
-    ok(!ev(b, 'csvIndex["ford.csv"]'), "un resultado parcial se guardó en cache como definitivo");
-    ok(/incompleto/i.test(b.q("#snackmsg").textContent), "no avisó de que el resultado es parcial: " + b.q("#snackmsg").textContent);
-    // el completo sí se cachea: el aviso no puede costar el cache de una búsqueda buena
+    ok(ev(b, 'csvIndex["ford.csv"].parcial') === "1 de 2 ramas fallaron",
+      "el parcial no se guardó con su motivo: " + ev(b, 'JSON.stringify(csvIndex["ford.csv"])'));
+    ok(/parcial/i.test(b.q("#snackmsg").textContent), "no avisó de que el resultado es parcial: " + b.q("#snackmsg").textContent);
+    // el aviso sobrevive al snack: sigue en la barra de estado, que es lo que se ve una semana después
+    ok(/Resultado parcial/.test(String(b.q("#stat").innerHTML)),
+      "la barra de estado no dice que la lista va recortada: " + b.q("#stat").innerHTML);
+    // y no se cuenta "sin ver" contra un recorte: ese número ordena el gestor
+    ok(ev(b, 'unseenCount("ford.csv")') === null,
+      "un cache parcial contó sin-ver contra un denominador inventado: " + ev(b, 'unseenCount("ford.csv")'));
+    // reabrirla PINTA lo guardado sin tocar la red: es lo que se ganaba al cachearlo
+    b.sandbox.Rebusca.scrape = async () => { throw new Error("no se puede tocar la red al reabrir un parcial"); };
+    ev(b, 'data = []');
+    await ev(b, 'loadQuery("ford.csv")');
+    await flush();
+    ok(ev(b, "data.length") === 3, "reabrir un parcial no pintó lo cacheado, salió " + ev(b, "data.length"));
+    // el completo sí se cachea, y SIN marca: pisa al parcial que había
+    b.sandbox.Rebusca.scrape = async () => CSV;
     b.sandbox.Rebusca.lastScrape = { ramas: 1, ramasRotas: 0, sinId: 0, abortado: false, parcial: false };
     await b.q("#scrape").click();
     await flush();
     ok(!!ev(b, 'csvIndex["ford.csv"]'), "un resultado completo no se guardó en cache");
+    ok(!ev(b, 'csvIndex["ford.csv"].parcial'),
+      "el completo heredó la marca de parcial del anterior: " + ev(b, 'JSON.stringify(csvIndex["ford.csv"])'));
+    ok(!/Resultado parcial/.test(String(b.q("#stat").innerHTML)), "el aviso de parcial se quedó tras un scrape completo");
 
     // Un corte por no avanzar SÍ se cachea, y aun así se avisa. Los otros motivos son transitorios
     // —un 403, una rama caída, el botón parar—: re-scrapear puede traer más. Este es determinista:

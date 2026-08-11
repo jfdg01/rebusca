@@ -1252,6 +1252,11 @@ function paintStat() {
   // propio bloque con la papelera a la cabeza, porque excluidos y lejos no son cubos aparte: son
   // los dos atajos que mandan ahí. Colgados de ella, el enlace no tiene que repetir el destino.
   $("#stat").innerHTML =
+    // el aviso vive AQUÍ y no solo en el snack del scrape: sin él, abrir esta búsqueda dentro de
+    // una semana enseña un recorte con cara de lista completa, y las cifras de debajo lo respaldan.
+    (curCsvParcial
+      ? `<span class="parcial">Resultado parcial: ${curCsvParcial}&nbsp;· <span class="link" id="statRepetir">Repetir</span></span>`
+      : "") +
     `<span><b>${sinVer}</b> sin ver</span>` +
     `<div class="grp rej">` +
     `<span><b>${disc}</b> rechazados` +
@@ -1295,6 +1300,8 @@ function paintStat() {
   if (te) te.onclick = rejectedExcluded;
   const cs = $("#clearSort");
   if (cs) cs.onclick = clearSort;
+  const rp = $("#statRepetir");
+  if (rp) rp.onclick = () => { const { kw, since } = queryParts(loadedCsv); relaunch(kw, since); };
 }
 
 // los dos "rechazar en bloque" de la barra de estado eran la misma función con otro filtro y otro
@@ -1642,11 +1649,13 @@ const pick = $("#pick"),
 let allQueries = []; // [{csv, label, kw, since}] — fuente del combobox
 let curCsv = null; // csv de la query seleccionada (el input solo muestra el kw)
 let curCsvScrape = 0; // epoch ms del scrape (el `ts` que guardó el cache): base para la edad real
+let curCsvParcial = ""; // por qué el CSV cargado va recortado ("" = completo); lo dice la barra de estado
 const lastCsvKey = () => "wp_lastcsv"; // último dataset cargado
 async function loadQuery(csv) {
   const c = await getCsvCache(csv);
   if (c) { // ya scrapeada antes: pinta lo cacheado, no re-scrapea (usa "Repetir" para refrescar)
     curCsvScrape = c.ts;
+    curCsvParcial = c.parcial || "";
     loadCSV(c.text, csv);
     return;
   }
@@ -1809,16 +1818,40 @@ const removeSearch = (csv) => {
   dropCsvCache(csv);
 };
 
+// por qué un scrape salió recortado, en una frase que se le puede enseñar al usuario tal cual
+// ("" = completo). Va al cache y de ahí a la barra de estado, así que sigue explicándose semanas
+// después: el snack de la búsqueda se lo lleva el viento en tres segundos.
+const motivoParcial = (d) =>
+  !d.parcial ? ""
+  : d.abortado ? "búsqueda parada a medias"
+  : d.bloqueado ? "Wallapop bloqueó esta red"
+  : d.tope ? `tope de ${d.tope} anuncios`
+  : d.ramasRotas ? `${d.ramasRotas} de ${d.ramas} ramas fallaron`
+  // el tope se reparte entre ramas: una rama puede quedarse corta sin que el total llegue
+  : `${d.ramasTope} de ${d.ramas} ramas llenaron su cupo`;
+console.assert(
+  motivoParcial({ parcial: false, tope: 200 }) === "" &&
+    motivoParcial({ parcial: true, abortado: true }) === "búsqueda parada a medias" &&
+    motivoParcial({ parcial: true, tope: 200 }) === "tope de 200 anuncios" &&
+    motivoParcial({ parcial: true, ramasTope: 2, ramas: 3 }) === "2 de 3 ramas llenaron su cupo",
+  "motivoParcial roto",
+);
+
 // cache del CSV scrapeado por búsqueda: seleccionar una búsqueda pinta esto (sin re-scrapear);
 // "Repetir"/Buscar sí re-scrapea y refresca el cache. El TEXTO va a IndexedDB (uno por búsqueda,
-// sin tope: ahí sobra sitio); en memoria solo queda el índice {csv:{ts, ids}}, unos KB, que es lo
-// que permite contar "sin ver" por búsqueda sin abrirlas ni re-scrapear.
+// sin tope: ahí sobra sitio); en memoria solo queda el índice {csv:{ts, ids, parcial?}}, unos KB,
+// que es lo que permite contar "sin ver" por búsqueda sin abrirlas ni re-scrapear.
+// Una entrada NO significa "esto es todo lo que hay": significa "esto es lo que se recogió, y esto
+// es lo que pasó". `parcial` (frase, "" = completo) es lo que distingue las dos cosas. Antes no
+// existía el campo, así que un recorte solo se podía marcar NO guardándolo: el usuario perdía sus
+// anuncios reales y volvía a abrir la búsqueda en blanco. Las entradas viejas no lo llevan, y eso
+// las lee bien: solo se cacheaban las completas.
 let csvIndex = {};
 const getCsvCache = async (csv) => {
   const e = csvIndex[csv];
   if (!e) return null;
   const text = await idb.get("csv:" + csv);
-  return text ? { text, ts: e.ts } : null;
+  return text ? { text, ts: e.ts, parcial: e.parcial || "" } : null;
 };
 // Retira la marca cuando el índice entra. Sin esto, la marca que se queda puesta porque el almacén
 // no commiteó no caduca nunca, y el arranque de dentro de dos días se lleva por delante el cache
@@ -1828,8 +1861,9 @@ const getCsvCache = async (csv) => {
 const guardaIndice = async () => {
   if (await idb.set("csvIndex", csvIndex)) localStorage.removeItem(cacheAjenaKey);
 };
-async function cacheCsv(csv, text, ts) {
-  csvIndex[csv] = { ts, ids: data.map((r) => col(r, "id")).filter(Boolean) }; // `data` = este CSV recién cargado
+async function cacheCsv(csv, text, ts, parcial) {
+  // el campo solo se escribe cuando lo hay: una entrada completa es byte a byte la de siempre
+  csvIndex[csv] = { ts, ids: data.map((r) => col(r, "id")).filter(Boolean), ...(parcial && { parcial }) }; // `data` = este CSV recién cargado
   const saved = new Set(loadSearches().map((s) => s.csv)); // poda: solo búsquedas vivas
   for (const k in csvIndex) if (!saved.has(k) && k !== csv) { delete csvIndex[k]; idb.del("csv:" + k); }
   // El texto se espera: si entra, pisa al homónimo que dejara el ocupante anterior y la marca ya
@@ -1846,9 +1880,11 @@ function dropCsvCache(csv) {
 }
 // anuncios cacheados de esa búsqueda que aún no están en ningún cubo de su cajón. null = sin cache
 // (no se puede saber sin re-scrapear). Es lo que responde "¿qué búsqueda tiene algo nuevo?".
+// Un cache PARCIAL también responde null: contar sin-ver contra un recorte es contar contra un
+// denominador inventado, y esa cifra es la que ordena el gestor.
 function unseenCount(csv) {
   const e = csvIndex[csv];
-  if (!e) return null;
+  if (!e || e.parcial) return null;
   const d = drawerOf(csv);
   const done = new Set();
   for (const n of BUCKET_NAMES) for (const id of buckets[n][d] || []) done.add(id);
@@ -2019,33 +2055,22 @@ async function runScrape(kw, since, titleOnly) {
     // un return dejaría queryParts(undefined) -> TypeError en el onclick de Buscar.
     if (ctrl !== scrapeCtrl) { const e = new Error("scrape superado"); e.name = "AbortError"; throw e; }
     curCsvScrape = Date.now(); // CSV recién generado: base para la edad real de cada anuncio
-    loadCSV(text, csv);
-    // Un CSV parcial (rama caída, 403 de DataDome, botón parar) se guardaba como definitivo: al
-    // volver a abrir la búsqueda se servía el recorte desde cache y no se re-scrapeaba nunca más.
-    // No se cachea Y se dice por qué. El cache anterior, si lo hay, se respeta: es mejor que este.
     const diag = Rebusca.lastScrape || {};
-    // El aviso y el cache van por separado. Atados con un `else`, avisar costaba el cache, y un
-    // corte por no avanzar —determinista: re-scrapear da los mismos bytes— pagaba un scrape entero
-    // por apertura sin ganar un anuncio. Se avisa siempre, se cachea solo lo que no es parcial.
-    const aviso = !diag.parcial
-      ? diag.ramasSecas
-        ? `${diag.ramasSecas} de ${diag.ramas} ramas dejaron de traer anuncios nuevos y se cerraron ahí.`
-        : ""
-      : diag.abortado
-      ? "Búsqueda parada: resultado parcial, no se guarda"
-      : diag.bloqueado
-      ? "Wallapop ha bloqueado esta red: espera un rato o cámbiala. Resultado parcial, no se guarda"
-      : diag.tope
-      ? `Tope de ${diag.tope} anuncios: resultado recortado, no se guarda. Afina la búsqueda.`
-      : diag.ramasRotas
-      ? `Resultado incompleto (${diag.ramasRotas} de ${diag.ramas} ramas fallaron): no se guarda`
-      // el tope se reparte entre ramas: una rama puede quedarse corta sin que el total llegue
-      : `${diag.ramasTope} de ${diag.ramas} ramas llenaron su cupo: resultado recortado, no se guarda. Afina la búsqueda.`;
+    // se lee ANTES de loadCSV: la barra de estado lo pinta en el render que hace loadCSV
+    curCsvParcial = motivoParcial(diag);
+    loadCSV(text, csv);
+    const aviso = curCsvParcial
+      ? `Resultado parcial (${curCsvParcial}): se guarda marcado, dale a Repetir para completarlo`
+      : diag.ramasSecas
+      ? `${diag.ramasSecas} de ${diag.ramas} ramas dejaron de traer anuncios nuevos y se cerraron ahí.`
+      : "";
     if (aviso) snack(aviso, null);
     // guarda resultados: seleccionar esta búsqueda no re-scrapea. El cache no caduca, así que el
     // vacío se queda vacío para siempre: una API que responde 200 sin anuncios dejaría la búsqueda
     // a cero aunque tenga miles. Re-scrapear una búsqueda sin resultados cuesta una página.
-    if (!diag.parcial && data.length) cacheCsv(csv, text, curCsvScrape);
+    // Un recorte SÍ se guarda, marcado: sus anuncios son reales y tirarlos dejaba la búsqueda en
+    // blanco al reabrirla. Lo que no puede pasar es que se lea como completo, y de eso va el campo.
+    if (data.length) cacheCsv(csv, text, curCsvScrape, curCsvParcial);
     saveSearch(csv, data.length); // recuerda la búsqueda (kw+since) para el combobox y el gestor
     return csv;
   } finally {
@@ -2225,6 +2250,9 @@ function paintSearches() {
       // topes, así que el número era mayor que el mazo real. Deuda conocida: el badge sigue
       // apareciendo aunque TODOS los sin-ver estén excluidos y el mazo salga vacío.
       (sinVer[s.csv] ? ` · <b class="sc-new">sin ver</b>` : "") +
+      // el gestor es donde se compara una búsqueda con otra: sin la marca, la que trae 20 de 200
+      // se lee igual que la completa de al lado, y "Repetir" parece un capricho en vez de la cura
+      (csvIndex[s.csv]?.parcial ? ` · <b class="sc-parcial" title="${esc(csvIndex[s.csv].parcial)}">parcial</b>` : "") +
       `</div>` +
       `<div class="sc-btns">` +
       `<button class="ghost sc-run">${ic("search")} Repetir</button>` +
@@ -3598,6 +3626,7 @@ document.addEventListener("keydown", (e) => {
     e.target.click();
   }
 });
+
 
 
 
