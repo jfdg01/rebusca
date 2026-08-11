@@ -320,15 +320,17 @@
 
   /* palabras vetadas: input + chips con ✕ (auto-descartan cartas por título). El .45rem va
      pegado a los topes, que son los que llevan el 1rem de separación con el buscador. */
-  .excl { display: flex; flex-direction: column; gap: .5rem; margin-top: .45rem; }
+  /* bloque y no columna flex: plegado, el contenido de un <details> sigue siendo un item de
+     flex de altura 0, así que el gap se colaba DEBAJO del rótulo y esta fila quedaba medio rem
+     más separada de la de abajo que las otras dos (que no son flex). */
+  .excl { margin-top: .45rem; }
   /* mismo resumen que .cats: los dos desplegables de la cabecera se leen igual */
   .excl > summary { cursor: pointer; font: 700 11px var(--mono); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-soft); }
-  .excl > summary { padding: .1rem 0 .45rem; }
-  /* margin-bottom sobre el gap de .excl: las píldoras son el resultado y el campo la entrada,
-     y con solo .5rem se leían como una misma pila. Con :empty en display:none no sobra hueco
-     cuando no hay ninguna. */
-  .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .4rem; }
+  /* mismo .55rem de separación bajo el rótulo que .cats .chips y .lims-grid. Con :empty en
+     display:none no sobra hueco cuando no hay ninguna píldora. */
+  .excl .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: .55rem 0 .5rem; }
+  .excl .clrwrap { margin-top: .55rem; }
   .excl .chips:empty { display: none; }
   /* `.chips .excl-chip`, no `.excl-chip`: la regla genérica `.chip` está más abajo en el fichero
      y con la misma especificidad gana, así que el padding de aquí no llegaba a aplicarse. */
