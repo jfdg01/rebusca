@@ -3246,6 +3246,11 @@ const SUPERSET_RULES = (url, cats) =>
   "modelos o sinónimos o si una palabra atrae otra familia entera, `title=1` si la palabra ensucia en las " +
   "descripciones, `maxp`/`maxd` si procede, y `excl` con la lista COMPLETA (repite las palabras que ya " +
   "lleva y añade las nuevas: al cambiar la `q` es otra búsqueda y no hereda nada).\n" +
+  // Sin esto la IA se inventa la sintaxis del OR (comas, casi siempre) y el enlace de afinar sale
+  // muerto: la q entera se busca literal y no encuentra nada. La gramática está en llms.txt, pero
+  // un lote pegado en un chat nuevo no lo ha leído.
+  "En la `q`, varias alternativas se separan con `OR` (o `|`), y `( )` agrupa: `(lenovo OR ideapad) " +
+  "slim`. NUNCA con comas: las comas solo valen dentro de `excl`, y en la `q` se buscarían literales.\n" +
   "No me mandes dos veces la misma búsqueda. Y si ya la has corregido por este motivo y el lote vuelve " +
   "parecido, deja de afinar y críbame lo que haya: es lo que hay en Wallapop.\n\n" +
   "**B) Si la mayoría SÍ son de lo que busco**, entonces cribas, y todo lo que viene abajo es para esta " +
@@ -3273,6 +3278,58 @@ console.assert(
     REFINE_TAIL.includes("rama A"),
   "SUPERSET_RULES roto",
 );
+// "Ofrécele 730 €" no me vale: no sé cómo se escribe eso. Lo que de verdad falta es el mensaje tal
+// cual, para pegarlo en el chat de Wallapop sin pensar. El nombre del vendedor NO está en las
+// fichas (la API de búsqueda solo da user_id, y el nombre costaría una petición por anuncio), así
+// que se prohíbe explícitamente: una IA a la que le pides "Hola <nombre>" sin datos se lo inventa,
+// y un "Hola Jesús" a alguien que se llama Marta quema el mensaje antes de empezar.
+// Va aquí arriba y no al lado de su uso: HAGGLE_RULES lo concatena al definirse, y declarado
+// después reventaba por TDZ en plena evaluación del módulo, que deja la app inerte para siempre.
+const MSG_RULES =
+  "\n\nY no me describas el regateo: ESCRÍBEMELO. Cada anuncio que recomiendes termina con el mensaje " +
+  "literal para pegar en el chat de Wallapop, dentro de un bloque de código (los bloques de código son " +
+  // Una ronda juntó los tres regateos en una sección «Ofertas» al final, sueltos. En el móvil eso es
+  // contar bloques hacia abajo para saber cuál va con cuál, y pegarle a un vendedor la oferta de otro.
+  "para esto; para un enlace siguen siendo un fallo). Los dos bloques van pegados DEBAJO de su anuncio, " +
+  "no en una sección de ofertas al final: si los juntas todos ahí, tengo que adivinar cuál va con cuál y " +
+  "acabo pegándole a un vendedor la oferta del otro. 3–5 líneas, tuteo, español de España, todo en UN " +
+  "mensaje, y con saltos de línea de verdad entre los cuatro puntos: un párrafo corrido de cinco frases " +
+  "es un muro de texto en el chat del móvil y no lo lee nadie.\n" +
+  // «¡Buenas! ¿Sigue disponible el ThinkPad E14 Gen 4 con el i5-1235U?» — recitarle su propio título
+  // no demuestra que lo haya leído, demuestra que lo he copiado, y es la apertura que le llega diez
+  // veces al día. Afirmar y tirar de la descripción suena a persona.
+  "1. Saludo llano y una frase afirmativa, no una pregunta ni una exclamación: \"Buenas, me interesa el " +
+  "portátil.\" Nada de \"¡\" ni de \"¿sigue disponible?\" — se ve solo que el anuncio está activo. El detalle " +
+  "que demuestra que lo he leído sale de la DESCRIPCIÓN (\"veo que lleva el cargador y la caja\"), nunca de " +
+  "recitarle el modelo entero de su propio título: eso suena a plantilla. Y NO tienes el nombre del " +
+  "vendedor, no te lo inventes, que si le llamas Jesús y se llama Marta el mensaje está quemado.\n" +
+  "2. Una o dos preguntas que además sean palanca (factura, garantía, batería, defectos, motivo de venta). " +
+  "Nunca \"¿cuál es tu último precio?\": le cedo el ancla y enseño interés sin sacar nada.\n" +
+  // Tres rondas seguidas redondeando contra un precio preciso (599 -> 480, 279 -> 235) pese a
+  // decirlo dos veces. La regla en abstracto no cala; en forma de dígito final, sí.
+  "3. La oferta: una cifra puntual y SOLA en su línea, con punto («Te ofrezco 290 €.»). El porqué va en la " +
+  "línea de después, nunca pegado con dos puntos: así la cifra se lee de un vistazo y el argumento no se le " +
+  "monta encima. Y que TERMINE EN EL MISMO DÍGITO que la suya: pide " +
+  "785 € → ofrezco 735 €, no 700 €; pide 599 € → ofrezco 549 €, no 550 €. Redonda solo si la suya lo es.\n" +
+  "4. Cierre con compromiso: \"lo cierro hoy\", \"pago ya\", \"lo recojo yo\".\n" +
+  "Y un segundo bloque de código con la concesión decreciente ya calculada (que conceda menos de lo que " +
+  "ceda él) y mi tope dentro. El rótulo \"Si contraoferta\" va FUERA del bloque: dentro va solo el mensaje " +
+  "y nada más, que yo copio el bloque entero de un toque y lo pego tal cual. Una oferta también aquí: si " +
+  "meto dos («o si no, 690 en mano»), el vendedor se queda con la que le convenga.\n" +
+  // Dijo "515 € y ya ando en mi tope" y en la contraoferta subió a 510 € (~545 € con envío). El
+  // vendedor tiene los dos mensajes en la misma pantalla: el farol se ve solo.
+  "Y esa concesión tiene que caber en el tope que yo mismo haya dicho en el primer mensaje. Si ahí " +
+  "escribes que 515 € es mi tope, la contraoferta no puede pasar de 515 €: el vendedor tiene los dos " +
+  "mensajes seguidos en la pantalla y el farol se ve solo.\n" +
+  // «530 € es mi tope» (con recargo) y luego «puedo subir hasta 519 €» (sin recargo, o sea 554 €).
+  // Al vendedor le cuadra —él solo ve su moneda— pero al comprador le cuela 24 € de más.
+  "Y ojo con las dos monedas: TODA cifra que escribas dentro de un mensaje es lo que cobra ÉL, tope " +
+  "incluido. El recargo se nombra como recargo («me suma unos 21 € encima»), nunca como el tope. Si " +
+  "declaras un tope con el recargo dentro y luego contraofertas sin él, la contraoferta se pasa de mi " +
+  "tope de verdad y ni tú ni yo lo vemos.\n" +
+  "Una oferta por mensaje, nada de muros de texto ni de seis preguntas. Nada de \"me encanta\" ni \"lo " +
+  "necesito ya\": la urgencia se paga. Si el precio ya está por debajo de mercado o está RESERVADO, no me " +
+  "escribas un regateo: escríbeme el mensaje para reservarlo ya.";
 // Regateo con cifra en vez de "intenta negociar". Va inline en los dos prompts (llms.txt puede
 // no leerse) porque sin la escala la IA suelta rangos que suben por encima del tope del comprador.
 // Los porcentajes salen de GUIA-REGATEO.md (óptimo empírico ~80 % del pedido; <70 % rompe la venta).
@@ -3287,9 +3344,51 @@ const HAGGLE_RULES =
   "Nunca por debajo del 70 %: una oferta así rompe la venta. Por debajo de 40 € casi no compensa regatear.\n" +
   "- Una cifra puntual, nunca un rango que suba por encima de mi tope (\"730–750\" acaba costando 750). " +
   "Imita la precisión del vendedor: si pide 800 €, oferta redonda; si pide 847 €, oferta precisa.\n" +
-  "- Siempre con un porqué: un comparable de mercado o un defecto concreto.\n" +
+  "- Siempre con un porqué, y el más fuerte que tenga ESE anuncio: un defecto declarado, un accesorio que " +
+  "falta, los meses que lleva colgado, o un comparable MÁS BARATO o igual (vale otro de los que te he " +
+  "pegado). Nunca me cites un comparable MÁS CARO: eso es un argumento a favor suyo, le estarías diciendo " +
+  "que su precio ya está bien.\n" +
+  // «Hay otro ThinkPad en el mismo lote», «el E485 de este mismo lote» — tres veces en dos rondas, y
+  // el culpable era mi propia regla, que decía «vale uno del propio lote». El vendedor no sabe qué es
+  // un lote: eso es vocabulario de Rebusca, y colado en el chat delata que el mensaje lo escribió otro.
+  "  Pero dentro del mensaje ese comparable se escribe como algo que él pueda ir a mirar —«he visto otro " +
+  "igual a 320 €»— y NUNCA como «el del mismo lote» ni «los que me has pasado»: «lote» es palabra mía, no " +
+  "de Wallapop, y al vendedor le suena a que el mensaje se lo ha escrito otro. Y no se lo atribuyas a él " +
+  "(«el E14 que tenéis vosotros a 320 €») salvo que el anuncio sea suyo de verdad: te contesta que no es " +
+  "suyo y ahí se acabó la palanca. Y compara lo comparable: uno citó «con la misma RAM y el mismo SSD " +
+  "(16GB/512GB)» contra una máquina de 1TB, y eso el vendedor lo ve de un vistazo.\n" +
+  // Una ronda entera despachó los tres regateos con la misma frase del recargo, palabra por palabra,
+  // teniendo a mano un comparable más barato dentro del propio lote. Tres mensajes idénticos salvo la
+  // cifra son tres mensajes que huelen a plantilla, que es justo lo que el regateo no puede oler.
+  "  El sobrecoste de envío y protección (la diferencia entre el «precio anunciado» y el «precio para mí») " +
+  "es el porqué de reserva, para cuando ese anuncio no da otro. No me lo pongas en los tres seguidos: si " +
+  "los tres mensajes llevan la misma frase cambiando la cifra, se nota la plantilla desde el primero.\n" +
+  // Al quitarle el recargo como muleta, una ronda tiró de «suele pedirse algo menos» y «es lo que se
+  // mueve un E14 Gen 4»: humo que el vendedor tumba con un «pues a mí no me consta». Con cifra es un
+  // dato; sin cifra es una opinión, y en un regateo la opinión del comprador no vale nada.
+  "  Y el porqué tiene que poder señalarse: algo escrito en SU anuncio, otro anuncio del lote, o una cifra " +
+  "de mercado concreta («los mismos están a 280 €»). Nada de «suele pedirse algo menos» ni «es lo que se " +
+  "mueve»: sin número eso no es un dato, es una opinión, y él la tumba con un «a mí no me consta».\n" +
+  // 5 de 6 mensajes escribieron «te ofrezco 290 €, con el envío se me va a 341 €», y 341 € es el
+  // «precio para mí» de la ficha, o sea el de SUS 320 €, no el de mi oferta. El vendedor hace la
+  // resta y la palanca queda en evidencia. El recargo es un delta: citado como delta no se puede
+  // calcular mal.
+  "- El sobrecoste se cita como el recargo, no como un total: «Wallapop me suma unos 21 € de envío y " +
+  "comisión», nunca «con el envío se me va a 341 €». El «precio para mí» de la ficha está calculado " +
+  "sobre lo que pide ÉL, así que no vale para mi oferta; el recargo, en cambio, vale para las dos.\n" +
+  // Citó como comparable un anuncio del propio lote que él mismo había descartado por sospechoso
+  // (foto de catálogo, cero specs). Si el vendedor lo abre y ve que es humo, se acabó la palanca.
+  "- Y el comparable que cites tiene que ser uno que me recomendarías comprar de verdad. Si lo has " +
+  "descartado tú por sospechoso, incompleto o de revendedor, no vale como palanca: el vendedor lo abre, " +
+  "ve que es humo y ahí se acaba tu argumento.\n" +
   "- Si es sin envío (en mano), esa es la palanca: pagar en efectivo hoy le ahorra la comisión y el porte. " +
-  "El pago, dentro de la app o en mano; nunca por Bizum, enlaces ni WhatsApp.";
+  "El pago, dentro de la app o en mano; nunca por Bizum, enlaces ni WhatsApp." +
+  MSG_RULES;
+console.assert(
+  HAGGLE_RULES.includes("bloque de código") && HAGGLE_RULES.includes("no te lo inventes") &&
+    HAGGLE_RULES.includes("MÁS CARO"), // el fallo que más caro sale: reforzar el precio del vendedor
+  "HAGGLE_RULES roto",
+);
 const promptIntro = (n, total) => {
   const { kw, since } = queryParts(loadedCsv || "");
   // Sin URL de la búsqueda no hay query que corregir (CSV cargado a mano, sin `kw`): la puerta no
@@ -3310,10 +3409,18 @@ const promptIntro = (n, total) => {
     LINK_RULES(n) +
     "\n\nDespués del enlace, razona la criba:\n" +
     "- CONSERVADOS (máximo 3, de mejor a peor): qué es exactamente (modelo y versión), por qué compensa a ese " +
-    "precio, qué riesgo tiene (reservado, anuncio viejo, sin envío y lejos), y una línea de regateo: " +
-    "«Ofrécele X € (Y % del pedido) porque <razón>; pregúntale <1–2 cosas>». Si no hay ninguno decente, " +
-    "dímelo y ya.\n" +
-    "- DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno." +
+    "precio, qué riesgo tiene (reservado, anuncio viejo, sin envío y lejos), y sus dos bloques de mensaje " +
+    "(el de abrir y el de \"Si contraoferta\"). Si no hay ninguno decente, dímelo y ya.\n" +
+    // Dos de seis rondas recomendaron un anuncio cuya descripción pedía tu número de teléfono para
+    // «mandarte un vídeo». Sacar la conversación de la app es el primer paso de casi toda estafa de
+    // Wallapop, y es lo único que aquí se paga en dinero y no en un mensaje flojo.
+    "  Y un anuncio que en la descripción saque la conversación fuera de la app —un teléfono, un " +
+    "WhatsApp, «mándame tu número», un enlace de pago— va a DESCARTADOS por bueno que parezca el " +
+    "precio: ahí empieza casi toda la estafa de Wallapop.\n" +
+    // Una ronda contestó los descartes como cuatro párrafos de ids sueltos («#l06e, #5y6y, #xwzk…»),
+    // que en el móvil no dicen nada: no son pulsables y no los puedo cruzar con nada.
+    "- DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno, y sin ids: " +
+    "el id es para el enlace de arriba, en la prosa no significa nada. Dos o tres líneas en total." +
     HAGGLE_RULES +
     (url ? REFINE_TAIL : "")
   );
@@ -3453,6 +3560,16 @@ const askPrompt = (intent) =>
   "sinónimos, ( ) para agrupar, excl con el ruido típico (funda, roto, piezas...), title=1 si la palabra " +
   "ensucia en las descripciones y since si merece la pena vigilar solo lo nuevo. URL-encodea la q y " +
   "mantenla compacta. Uno, no tres: solo voy a pulsar uno y las variantes me sobran.\n" +
+  // `maxp` no llega al scraper —es un filtro de render (app.js:2675)—, así que no acorta la
+  // búsqueda: lo que hace es decidir de qué se sortea la muestra. Sin él, una ronda real sacó 50
+  // anuncios de 1500 y un tercio pasaba del presupuesto que el usuario había dicho en su mensaje.
+  "Y si te he dicho un presupuesto, `maxp` con esa cifra SIEMPRE, no es opcional: la muestra de 50 " +
+  "que te pego sale al azar de todo lo que quede, así que sin tope se me va un tercio en máquinas " +
+  "que no puedo comprar y las que sí puedo ni las llegas a ver.\n" +
+  // maxp corta por el precio anunciado, y lo que yo pago es el «precio para mí». Con maxp=1000 se
+  // coló un anuncio de 1000 € que en la ficha salía a 1055,2 €: dentro del filtro, fuera del bolsillo.
+  "Y ponlo un poco por debajo de mi presupuesto (1000 € → `maxp=950`): corta por el precio " +
+  "anunciado, y encima Wallapop me suma envío y comisión.\n" +
   "2. Una línea de por qué: qué cubre el OR y qué excluye.\n\n" +
   "DESPUÉS viene el bucle, para que sepas dónde acaba esto: abro tu enlace, Rebusca trae los anuncios y te " +
   "los pego con \"COPIAR PARA IA\" sin haber mirado ninguno. Lo primero que harás con ese lote es ver si tu " +
@@ -3596,8 +3713,7 @@ function cardText(r) {
     PRICE_NOTE +
     "\n\nIdentifica el modelo o versión exacta, revisa sus especificaciones y su estado, compáralo con su precio " +
     "típico nuevo y de segunda mano, y dime en la primera línea si a este precio es buena compra: sí, no, o de qué " +
-    "depende. Luego, corto: el porqué y una línea de regateo: «Ofrécele X € (Y % del pedido) porque <razón>; " +
-    "pregúntale <1–2 cosas>»." +
+    "depende. Luego, corto: el porqué y los dos bloques de mensaje (el de abrir y el de \"Si contraoferta\")." +
     HAGGLE_RULES +
     "\n\nSi de lo que averigües sale una búsqueda mejor (otro modelo, otras marcas), dámela como enlace pulsable " +
     "a Rebusca siguiendo https://rebusca.dibogomez.com/llms.txt:\n\n" +

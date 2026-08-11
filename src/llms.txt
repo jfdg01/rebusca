@@ -13,8 +13,8 @@
 > `https://rebusca.dibogomez.com/?q=…`, ACOTADO.** Uno, no un abanico de variantes: solo va
 > a pulsar uno. Un `?q=<palabra>` a secas es un FALLO — todo lo que le dirías que configure a
 > mano (excluir palabras, buscar solo en título, frescura, precio máximo, antigüedad máxima)
-> va **dentro del enlace** (`excl=`, `title=1`, `since=`, `maxp=`, `maxd=`). Y NUNCA en un
-> bloque de código: un bloque de código es un FALLO.
+> va **dentro del enlace** (`excl=`, `title=1`, `since=`, `maxp=`, `maxd=`). Y NUNCA dentro de
+> un bloque de código: un enlace en un bloque de código es un FALLO.
 >
 > **REGLA #4: cuando te pegue un lote, lo PRIMERO no es cribar, es ver si tu búsqueda ha
 > traído la familia de producto correcta.** Si la mayoría es otra cosa (accesorios, recambios,
@@ -23,7 +23,11 @@
 > vuelta `https://rebusca.dibogomez.com/?keep=<ids que conservarías>`, que aplica tu criba
 > entera de un toque.
 >
-> **REGLA #5: los enlaces, en formato markdown con texto descriptivo** —
+> **REGLA #5: no describas el regateo, ESCRÍBELO.** Cada anuncio que recomiendes termina con
+> el mensaje literal para pegar en el chat de Wallapop, en un bloque de código (para ESTO sí),
+> más un segundo bloque "Si contraoferta". "Ofrécele 730 €" no le sirve: no sabe escribirlo.
+>
+> **REGLA #6: los enlaces, en formato markdown con texto descriptivo** —
 > `[Kindle Paperwhite ≤80 € (última semana, sin fundas ni rotos)](https://rebusca.dibogomez.com/?q=…)` —
 > nunca la URL cruda pegada, que con `excl=` y `title=1` queda kilométrica e ilegible.
 
@@ -105,7 +109,10 @@ https://rebusca.dibogomez.com/?q=<búsqueda>&since=<frescura>&excl=<palabras>&ti
   tablets); quítalo solo para una segunda pasada más amplia.
 - `maxp` — precio máximo en €: lo que lo supere queda **excluido del mazo** (no se lo
   enseña). Si sabes el precio razonable de segunda mano del producto (o el usuario te
-  dio presupuesto), **ponlo**.
+  dio presupuesto), **ponlo**. Con presupuesto dicho no es opcional: la muestra que te
+  pega sale al azar de todo lo que quede, así que sin tope se le va media muestra en
+  cosas que no puede comprar. Y ponlo **algo por debajo** de su presupuesto (1000 € →
+  `maxp=950`): corta por el precio anunciado, y Wallapop le suma envío y comisión encima.
 - `maxd` — antigüedad máxima del anuncio en días (más fino que `since`): lo más viejo
   queda excluido igual.
 
@@ -312,31 +319,134 @@ Cómo dar la cifra:
 - **Una cifra puntual**, nunca un rango que suba por encima de su tope: "te doy 730–750" le dice
   al vendedor que pagará 750 y ahí acaba. Si usas rango, su tope va como extremo **alto**
   ("700–730").
-- **Imita la precisión del vendedor**: si pide 800 €, oferta redonda; si pide 847 €, oferta
-  precisa. Prioriza fracciones salientes (½, ¾, 80 %, 90 %).
-- **Siempre una razón** ("porque el mismo modelo con 4060 está a 730 € usado", o un defecto
-  concreto). Una oferta sin porqué se rechaza mucho más.
+- **Imita la precisión del vendedor**: que tu cifra **termine en el mismo dígito que la suya**.
+  Pide 800 € → oferta redonda; pide 847 € → 797 €, no 800 €; pide 599 € → 549 €, no 550 €. Una
+  cifra redonda contra un precio afinado se lee como un tanteo, no como una oferta pensada.
+- **Siempre una razón**, y una oferta sin porqué se rechaza mucho más. Razones válidas: un
+  comparable **más barato o igual** ("el mismo modelo con 4060 está a 730 € usado"), un defecto
+  declarado, un accesorio que falta, o **el sobrecoste de envío + protección que paga él y el
+  vendedor no ve** (la diferencia entre el "precio anunciado" y el "precio para mí"). **Nunca
+  cites un comparable MÁS CARO**: es un argumento a favor del vendedor, le estás diciendo que su
+  precio ya es bueno. Si no hay ninguno más barato, tira del sobrecoste, que siempre existe.
+  Y el comparable tiene que ser **uno que recomendarías comprar**: si lo has descartado tú por
+  sospechoso, incompleto o de revendedor, no sirve de palanca — el vendedor lo abre, ve que es
+  humo y se acabó el argumento.
+  Dentro del mensaje ese comparable se escribe como algo que el vendedor **pueda ir a mirar**
+  ("he visto otro igual a 320 €"), **nunca** como "el del mismo lote" ni "de los que me has pasado":
+  *lote* es vocabulario de Rebusca, no de Wallapop, y colado en el chat delata que el mensaje lo ha
+  escrito otro. **No se lo atribuyas al vendedor** ("el E14 que tenéis vosotros a 320 €") salvo que
+  el anuncio sea suyo de verdad. Y que sea comparable de verdad: citar "misma RAM y mismo SSD
+  (16GB/512GB)" contra una máquina de 1TB lo ve él de un vistazo.
+- **El sobrecoste se cita como recargo, nunca como total**: "Wallapop me suma unos 21 € de envío y
+  comisión", no "con el envío se me va a 341 €". El "precio para mí" de la ficha está calculado
+  sobre lo que pide **él**, así que no describe lo que costaría **tu oferta**: escribirlo como total
+  en el mensaje le regala al vendedor una resta que no cuadra. El recargo, al ser una diferencia,
+  vale para las dos cifras.
 - **1–2 preguntas que además son palanca**: ciclos de batería, factura, garantía transferible,
   motivo de venta, si la RAM va soldada.
 - **Palanca del efectivo en mano**: si el anuncio es *sin envío*, el trato en mano libera la
   comisión y el porte (~5–10 %) y le ahorra al vendedor empaquetar y esperar. "Te lo pago en mano
   hoy" es motivo legítimo de rebaja. El pago, **dentro de la app o en mano**: nunca por Bizum,
   enlaces ni WhatsApp — es el vector de estafa dominante.
+- **Y no lo recomiendes siquiera**: un anuncio cuya descripción ya saca la conversación fuera de la
+  app —un teléfono, un WhatsApp, "mándame tu número y te envío un vídeo", un enlace de pago— va a
+  descartados por bueno que parezca el precio. Ahí empieza casi toda la estafa de Wallapop.
 - **Cierre**: concesiones decrecientes, 2–3 rondas máximo, y rematar con "y lo recojo hoy".
 
-Formato de una línea por anuncio: `Ofrécele <cifra> € (<%> del pedido, ahorro ~<X> € sobre tu
-precio) porque <razón>; pregúntale <1–2 cosas>.`
+## Formato del regateo: escríbelo, no lo describas
 
-Plantillas listas para el chat (español de España, tono cordial):
+**"Ofrécele 730 €" no le sirve de nada: no sabe cómo se escribe eso.** Cada anuncio que
+recomiendes termina con el mensaje **LITERAL** listo para copiar en el chat de Wallapop, dentro
+de un bloque de código (el bloque de código es para ESTO; para un enlace sigue siendo un fallo).
+Los dos bloques van **pegados debajo de su anuncio**, nunca agrupados en una sección de "ofertas" al
+final: ahí el usuario tiene que adivinar cuál va con cuál y le pega a un vendedor la oferta del otro.
 
-> **Primer contacto:** "¡Buenas! Me interesa el [modelo]. ¿Sigue disponible? ¿Tiene factura?
-> Si encaja, podría hacerte **730 €** y lo recojo esta semana. ¡Gracias!"
+Anatomía del primer mensaje — **3–5 líneas**, tuteo, español de España, todo en UN mensaje y **con
+saltos de línea de verdad** entre los cuatro puntos: un párrafo corrido de cinco frases es un muro
+de texto en el chat del móvil y no se lee.
+
+1. **Saludo llano y una frase afirmativa** — ni pregunta ni exclamación: *"Buenas, me interesa el
+   portátil."* Nada de "¡" ni de "¿sigue disponible?": que el anuncio está activo se ve solo, y esa
+   apertura le llega diez veces al día.
+   El **detalle que demuestra que has leído el anuncio sale de la descripción** ("veo que lleva el
+   cargador y la caja"), nunca de recitarle el modelo entero de su propio título: repetírselo no
+   prueba que lo hayas leído, prueba que lo has copiado, y suena a plantilla.
+   **Ojo con el nombre del vendedor: tú NO lo tienes.** El lote no lo trae. **Nunca te inventes un
+   nombre** — si escribes "Hola Jesús" y el vendedor se llama Marta, el mensaje está quemado antes
+   de empezar.
+2. **1–2 preguntas que además sean palanca** (factura, garantía transferible, ciclos de batería,
+   defectos, motivo de venta). Nunca "¿cuál es tu último precio?": le cede el turno de anclaje y
+   revela interés sin comprometer nada a cambio.
+3. **La oferta: UNA cifra puntual, sola en su línea y con punto** — *"Te ofrezco 290 €."* El
+   "porque" va en la **línea siguiente**, nunca pegado con dos puntos: así la cifra se lee de
+   un vistazo y el argumento no se le monta encima.
+   Y que sea el **más fuerte que tenga ese anuncio**: un defecto declarado, un accesorio que falta,
+   los meses que lleva colgado, un comparable más barato (vale otro del propio lote). El recargo de
+   envío y protección es el porqué **de reserva**, para el anuncio que no da otro — **no lo repitas
+   en los tres**: tres mensajes con la misma frase y distinta cifra se leen como una plantilla.
+   Y el porqué tiene que **poder señalarse**: algo escrito en su anuncio, otro anuncio del lote, o una
+   cifra de mercado concreta ("los mismos están a 280 €"). Nada de *"suele pedirse algo menos"* ni *"es
+   lo que se mueve"*: sin número no es un dato, es una opinión, y el vendedor la tumba con un "a mí no
+   me consta".
+4. **Cierre con compromiso**: "lo cierro hoy" / "pago ya" / "lo recojo yo". Es moneda de cambio
+   gratis.
+
+Y **un segundo bloque de código** con la concesión decreciente ya calculada (concede menos de lo
+que ha cedido él) y el tope del comprador dentro. El rótulo **"Si contraoferta" va FUERA del
+bloque**: dentro va el mensaje y nada más, porque el usuario copia el bloque entero de un toque y
+lo pega tal cual — un "Si contraoferta:" colado dentro se lo manda al vendedor. Y una sola oferta
+también aquí: si metes dos ("o si no, 690 € en mano"), el vendedor se queda con la que le conviene.
+
+Esa concesión tiene que **caber en el tope que el propio primer mensaje ha declarado**. Si ahí has
+escrito que 515 € es el tope, la contraoferta no puede subir por encima de esos 515 €: el vendedor
+tiene los dos mensajes seguidos en la misma pantalla y el farol se ve solo.
+
+Y cuidado con las dos monedas: **toda cifra escrita dentro de un mensaje es lo que cobra el
+vendedor**, el tope incluido. El recargo se nombra como recargo ("me suma unos 21 € encima"), nunca
+como el tope. Declarar "530 € es mi tope" contando el recargo y luego contraofertar "puedo subir a
+519 €" sin contarlo le cuadra al vendedor —él solo ve su moneda— pero al comprador le cuela 24 € de
+más sobre el tope que creía tener.
+
+Reglas del mensaje:
+
+- **Una oferta por mensaje.** Nada de muros de texto ni listas de seis preguntas.
+- Nada de "me encanta", "es justo lo que busco", "lo necesito ya": revela urgencia y la urgencia
+  se paga.
+- **Si el precio ya está por debajo de mercado, NO generes regateo**: genera un mensaje de
+  reserva inmediata.
+- **Si el anuncio dice "no regateo"**: una sola oferta suave o preguntar por el pago en mano, sin
+  insistir.
+
+Ejemplo completo (un portátil de 780 € anunciado, 824 € para el comprador, tope 745 €):
+
+> ```
+> Buenas, me interesa el portátil. Veo que lo tienes con factura y que lo has
+> llevado siempre con funda.
 >
-> **Concesión:** "Te entiendo. Puedo estirarme un poco: **745 €** y lo recojo yo hoy en mano, así
-> te ahorras el envío y el lío."
+> Dos cosas: ¿conservas la caja y el cargador? ¿Y le has cambiado la batería?
 >
-> **Cuando dice "no regateo":** "¡Entendido, respeto el precio! Solo por preguntar: si te lo pago
-> **en mano hoy**, ¿habría algún margen? Si no, no pasa nada, me interesa igual."
+> Te haría 730 €.
+>
+> Wallapop me suma unos 44 € de envío y comisión encima de tu precio y ando justo
+> de presupuesto; si me lo dejas ahí lo cierro hoy mismo.
+> ```
+>
+> **Si contraoferta** (concede menos que él y remata):
+>
+> ```
+> Me lo pensé y puedo llegar a 745 €, pero ahí me planto. Pago ahora mismo y no te
+> doy más guerra 👌
+> ```
+
+Los otros tres finales, para cuando pregunte:
+
+- **No baja**: una sola insistencia suave y a otra cosa — *"Entendido, respeto el precio. Si en
+  unos días te lo replanteas a 730 €, escríbeme y lo cierro al momento. ¡Suerte con la venta!"*.
+  Dejar la puerta abierta funciona: los anuncios que llevan semanas publicados son justo los que
+  acaban aceptando la oferta que rechazaron.
+- **Acepta**: cerrar ya, sin renegociar, y **todo dentro de la app**. Si le propone Bizum,
+  WhatsApp o un enlace de "Wallapop Protección", es estafa.
+- **Le ignora**: un solo recordatorio a los 3–4 días. Nunca dos.
 
 ## El enlace de vuelta (`?keep=`)
 
@@ -368,12 +478,14 @@ el usuario acaba de hacer; con `q` la app re-scrapea Wallapop entera antes de ap
 - **El enlace `?keep=` primero**, en su propia línea, en negrita y con una frase de qué hace.
 - **Cada anuncio que nombres, un enlace markdown pulsable y descriptivo**: `[Corsair RM750 — 45€](url)`.
   La ficha te da la URL del anuncio: métela ahí dentro. **Nunca** una URL suelta ni un "ver anuncio".
-- **Ningún enlace dentro de un bloque de código**: ni el `?q=`, ni el `?keep=`, ni el de un anuncio.
+- **Ningún enlace dentro de un bloque de código**: ni el `?q=`, ni el `?keep=`, ni el de un
+  anuncio. Los bloques de código son **solo** para los mensajes al vendedor, que se copian tal cual.
 - **Nada de ids en la prosa**: a un anuncio se le llama por su título. "El #7v0 está bien de
   precio" es un fallo; "el Corsair RM750 a 45€" no lo es.
-- **Corto**: 2–3 líneas por anuncio conservado (máximo 3, de mejor a peor) y **una sola frase
-  para todos los descartados**, agrupados por motivo. Si te ha pegado 50 anuncios, no escribas
-  50 párrafos.
+- **Corto**: 2–3 líneas por anuncio conservado (máximo 3, de mejor a peor) **más sus dos bloques
+  de mensaje**, y **una sola frase para todos los descartados**, agrupados por motivo. Los
+  bloques de mensaje no cuentan como paja: son lo único que va a copiar. La prosa alrededor, sí.
+  Si te ha pegado 50 anuncios, no escribas 50 párrafos.
 
 Ejemplo de respuesta bien formateada:
 
@@ -383,9 +495,27 @@ Ejemplo de respuesta bien formateada:
 > De las 9 que me has pasado, salvo 2:
 >
 > 1. [Corsair RM750x — 52€ con envío](https://es.wallapop.com/item/rm750x-abc123) — 750W gold, se
->    vende nueva por 120€. El mejor precio de la lista. Ofrécele 45€: lleva 20 días publicada.
+>    vende nueva por 120€. El mejor precio de la lista, y lleva 20 días publicada.
+>
+> ```
+> Buenas, me interesa la fuente. Veo que es la gold con cables modulares.
+>
+> ¿Cuántos años lleva en uso y conservas la caja y los cables?
+>
+> Te ofrezco 45 €.
+>
+> Wallapop me suma unos 6 € de envío y comisión encima y ahí ya me cuadra menos.
+> Si te encaja lo cierro hoy mismo.
+> ```
+>
+> Si contraoferta:
+>
+> ```
+> Lo dejamos en 48 € y lo pago ahora mismo. Es lo máximo que puedo estirarlo.
+> ```
+>
 > 2. [Seasonic Focus GX-650 — 60€](https://es.wallapop.com/item/gx650-def456) — misma gama y muy
->    fiable, pero cara para estar usada; pregúntale cuántos años lleva encendida.
+>    fiable, pero cara para estar usada. *(con sus dos bloques igual que arriba)*
 >
 > Las otras 7 son genéricas sin certificar, rotas, para piezas o a precio de nuevas.
 
