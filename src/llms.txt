@@ -12,7 +12,7 @@
 > filtrado, no darle deberes.
 >
 > **REGLA #3: cuando te pegue un lote de anuncios, críbalo tú y EMPIEZA la respuesta con
-> el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<ids que conservarías>`.**
+> el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<letras que conservarías>`.**
 > Ese enlace aplica tu criba entera de un toque. Una respuesta sin él no le sirve de nada.
 >
 > **REGLA #4: los enlaces, en formato markdown con texto descriptivo** —
@@ -154,7 +154,7 @@ Ejemplo de respuesta a "un buen sofá de 3 plazas barato":
 2. **Filtro automático**: tus `excl`/`maxp`/`maxd` y su filtro "lejos sin envío" dejan fuera
    la morralla sin que nadie la mire.
 3. **"COPIAR PARA IA"**: copia al portapapeles los anuncios **sin clasificar** que quedan (hasta
-   60; si hay más, van **60 al azar** y el texto lo dice) y los pega en el chat sin haber
+   50; si hay más, van **50 al azar** y el texto lo dice) y los pega en el chat sin haber
    mirado ninguno.
 4. **Tú los cribas** y **empiezas** tu respuesta con el enlace `?keep=`.
 5. **Un toque**: al abrirlo, los que conservas pasan a favoritos, el resto del lote se rechaza,
@@ -164,7 +164,7 @@ Ejemplo de respuesta a "un buen sofá de 3 plazas barato":
 
 ## Paso 6: afinar la búsqueda con lo que acabas de descartar
 
-Los 60 que te llegan son una **muestra al azar** del mazo, precisamente para que veas de qué
+Los 50 que te llegan son una **muestra al azar** del mazo, precisamente para que veas de qué
 está hecho el ruido y no solo lo más barato o lo más nuevo. Si al cribar descartas cosas de otra
 familia de producto (busca poleas de gimnasio y salen máquinas de coser, patinetes, bujías), el
 problema **no es ese lote: es la query**. Cribar a mano lo mismo cada semana es trabajo perdido.
@@ -197,16 +197,16 @@ que compares solo esos. Lo rechazado no vuelve a aparecer.
 Lo normal es que **no haya mirado ninguno**. Cada ficha viene así:
 
 ```
-7. [#9rzn8k3xw7v0] Roomba 981 con base de carga y 2 filtros — precio para mí: 214,7€ (con envío, aprox), precio anunciado: 195€
+g) Roomba 981 con base de carga y 2 filtros — precio para mí: 214,7€ (con envío, aprox), precio anunciado: 195€
    a 38 km · con envío · hace 12 d · https://es.wallapop.com/item/roomba-981-9rzn8k3xw7v0
    Funciona perfecto, poco uso, incluye dos filtros nuevos sin abrir.
 ```
 
-Cada ficha empieza con el **id de Wallapop** entre `[#…]`: es lo que vuelve en `?keep=`.
-El "precio para mí" es el coste final estimado al comprador (precio + comisión de Wallapop +
-porte); "aprox" significa que el porte es un cálculo, no el peso real. El "precio anunciado" es
-lo que pide el vendedor. **Compara siempre con el primero.** Un `RESERVADO` extra en la segunda
-línea significa que el anuncio puede caerse.
+Cada ficha empieza con una **letra** (`a`, `b`, `c`… y `aa`, `ab` si pasan de 52): es lo que
+vuelve en `?keep=`, y numera la lista. El "precio para mí" es el coste final estimado al comprador
+(precio + comisión de Wallapop + porte); "aprox" significa que el porte es un cálculo, no el peso
+real. El "precio anunciado" es lo que pide el vendedor. **Compara siempre con el primero.** Un
+`RESERVADO` extra en la segunda línea significa que el anuncio puede caerse.
 
 Para cribar bien:
 
@@ -225,30 +225,25 @@ foto** de cada anuncio: aprovéchalas para juzgar estado y modelo. Termina igual
 
 Tu criba se aplica con **un solo enlace**, y va **antes de cualquier análisis**:
 
-`https://rebusca.dibogomez.com/?keep=<id,id,…>`
+`https://rebusca.dibogomez.com/?keep=<letra,letra,…>`
 
-- Los ids que pongas pasan a **favoritos**.
+- Los anuncios cuyas letras pongas pasan a **favoritos**.
 - **El resto del lote que te pegó se rechaza automáticamente**: no hay segunda pasada, lo que
   no incluyas desaparece. Sé selectivo, pero no dejes fuera un buen chollo por acortar la lista.
 - Si no merece la pena ninguno, dilo y da igualmente el enlace `?keep=` vacío: así limpia el
   lote entero de un toque.
 - No hace falta que enumeres los descartados: van implícitos.
 
-Sobre los ids: son los identificadores **opacos** de Wallapop que abren cada ficha entre
-corchetes, `[#m8g0jr4zdxpv]`. No significan nada y no tienen patrón. **Cópialos literales**,
-enteros, respetando mayúsculas y **sin la almohadilla**: no los abrevies, no los "corrijas" y
-**no te inventes ninguno** (si un id no estaba en la lista pegada, no existe). Separados por
-comas, sin espacios.
+Sobre las letras: son las que abren cada ficha del lote pegado (`a)`, `b)`, `c)`…). Van separadas
+por comas y sin espacios, respetando mayúsculas y minúsculas (`a` y `A` son dos anuncios
+distintos). **No uses ninguna que no esté en el lote** y no te inventes ninguna. Valen solo para
+ese lote: no las cites en otra respuesta.
 
 **Para la vuelta NO metas `q`.** Sin `q` el enlace se aplica al instante sobre la búsqueda que
 el usuario acaba de hacer; con `q` la app re-scrapea Wallapop entera antes de aplicar nada.
 
-> Compatibilidad: `?fav=<ids>` y `?no=<ids>` siguen funcionando y se pueden combinar, pero
-> solo mueven los ids que nombras (no cierran el lote). Usa siempre `?keep=`.
-
-Si él quiere localizar un anuncio suelto dentro de la app, en el buscador de cualquier lista
-puede escribir `#<id>` (varios ids separados por comas también valen; cualquier otra cosa
-filtra por título).
+> Compatibilidad: `?fav=` y `?no=` siguen funcionando y se pueden combinar, pero solo mueven lo
+> que nombras (no cierran el lote). Usa siempre `?keep=`.
 
 ## Formato de respuesta (lo que peor se hace)
 
@@ -256,15 +251,15 @@ filtra por título).
 - **Cada anuncio que nombres, un enlace markdown pulsable y descriptivo**: `[Corsair RM750 — 45€](url)`.
   La ficha te da la URL del anuncio: métela ahí dentro. **Nunca** una URL suelta ni un "ver anuncio".
 - **Ningún enlace dentro de un bloque de código**: ni el `?q=`, ni el `?keep=`, ni el de un anuncio.
-- **Nada de ids en la prosa**: a un anuncio se le llama por su título. "El #m8g0… está bien de
+- **Nada de letras en la prosa**: a un anuncio se le llama por su título. "La g) está bien de
   precio" es un fallo; "el Corsair RM750 a 45€" no lo es.
 - **Corto**: 2–3 líneas por anuncio conservado (máximo 3, de mejor a peor) y **una sola frase
-  para todos los descartados**, agrupados por motivo. Si te ha pegado 60 anuncios, no escribas
-  60 párrafos.
+  para todos los descartados**, agrupados por motivo. Si te ha pegado 50 anuncios, no escribas
+  50 párrafos.
 
 Ejemplo de respuesta bien formateada:
 
-> **[Aplicar esta criba en Rebusca](https://rebusca.dibogomez.com/?keep=abc123,def456)** — te deja
+> **[Aplicar esta criba en Rebusca](https://rebusca.dibogomez.com/?keep=c,f)** — te deja
 > las 2 buenas en favoritos y descarta las otras 7.
 >
 > De las 9 que me has pasado, salvo 2:
@@ -304,6 +299,6 @@ frescura "último día" o "última semana".
 **Las reglas, otra vez:** te pide una búsqueda → **enlace pulsable**
 `https://rebusca.dibogomez.com/?q=…`, **acotado** (`excl` con el ruido previsible, `title=1` si
 el término es genérico, `since`/`maxp`/`maxd` si aplican) y en markdown descriptivo. Te pega un
-lote → críbalo y **empieza** por el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<ids>`
+lote → críbalo y **empieza** por el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<letras>`
 (sin `q`). Si acabas de escribir un enlace dentro de un bloque de código, conviértelo en enlace
 pulsable antes de responder.

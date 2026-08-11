@@ -2508,10 +2508,35 @@ $("#importState").onchange = (e) => {
 //            &maxp=<€>&maxd=<días>&keep=<ids>&fav=<ids>&no=<ids>
 // deja que una IA (o un enlace guardado) abra Rebusca con una búsqueda ya montada:
 // booleana (OR/grupos/comillas van tal cual en q) + exclusiones. Devuelve true si disparó.
-// ?keep=<ids> es el VEREDICTO de la IA sobre el último lote copiado (wp_aisent): esos ids quedan
-// como favoritos y el RESTO del lote se rechaza de una vez. ?fav=/?no= reparten ids sueltos en los
-// cubos (alias legado de ?keep: solo ascienden, no rechazan el resto del lote).
+// ?keep=<letras> es el VEREDICTO de la IA sobre el último lote copiado (wp_aisent): esos anuncios
+// quedan como favoritos y el RESTO del lote se rechaza de una vez. ?fav=/?no= reparten sueltos en
+// los cubos (alias legado de ?keep: solo ascienden, no rechazan el resto del lote). Las letras son
+// las de las fichas del lote; un id entero de Wallapop también vale (enlaces viejos).
 const TRIAGE = [["no", "rejected"], ["fav", "favorite"]]; // orden = prioridad ascendente
+// Las fichas que se le pegan a la IA no llevan el id de Wallapop, llevan una LETRA (a, b, … Z, aa):
+// un id opaco de 12 caracteres son ~6 tokens por anuncio y el lote no pasa de 50. La letra es la
+// POSICIÓN en el lote enviado (wp_aisent), así que solo se traduce con el lote delante; sin él, o
+// con un token que no sea una letra suelta, pasa tal cual (los ?fav=/?no= con ids reales siguen valiendo).
+// Un enlace viejo abierto tras copiar OTRO lote traduce contra el lote nuevo: sale la criba cambiada.
+// Es el mismo riesgo que ya tenía el ?keep= (rechazaba el resto del lote nuevo), y el flujo real es
+// copiar → pegar → pulsar.
+const A52 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const code = (i) => (i < 52 ? "" : A52[Math.floor(i / 52) - 1]) + A52[i % 52];
+const unCode = (t, lote) => {
+  if (!lote || !/^[a-zA-Z]{1,2}$/.test(t)) return t;
+  const i = t.length === 1 ? A52.indexOf(t) : (A52.indexOf(t[0]) + 1) * 52 + A52.indexOf(t[1]);
+  return lote.ids[i] || t;
+};
+console.assert(
+  (() => {
+    const ids = Array.from({ length: 104 }, (_, i) => "id" + i);
+    return code(0) === "a" && code(25) === "z" && code(51) === "Z" && code(52) === "aa" && code(103) === "aZ" &&
+      ids.every((id, i) => unCode(code(i), { ids }) === id) &&
+      unCode("m8g0jr4zdxpv", { ids }) === "m8g0jr4zdxpv" && // id real de Wallapop: intacto
+      unCode("a", null) === "a" && unCode("zz", { ids: ["x"] }) === "zz"; // sin lote / fuera de rango
+  })(),
+  "code/unCode roto",
+);
 const BUCKET_LABEL = { rejected: "rechazados", favorite: "favoritos" };
 // "3 a favoritos y 40 a rechazados" — resumen de lo que aplicó el enlace de la IA
 const triageMsg = (picks) => {
@@ -2525,7 +2550,9 @@ console.assert(
 );
 function fromURL() {
   const p = new URLSearchParams(location.search);
-  const idsOf = (k) => [...new Set((p.get(k) || "").split(",").map((s) => s.trim().replace(/^#/, "")).filter(Boolean))];
+  const lote = aisent(); // hace falta ANTES de leer los ids: traduce las letras de las fichas
+  const idsOf = (k) =>
+    [...new Set((p.get(k) || "").split(",").map((s) => unCode(s.trim().replace(/^#/, ""), lote)).filter(Boolean))];
   const isKeep = p.has("keep");
   const keepIds = uni(idsOf("keep"), idsOf("fav")); // ambos ascienden a favoritos; solo ?keep juzga el lote
   const picks = [["rejected", idsOf("no")], ["favorite", keepIds]].filter(([, ids]) => ids.length);
@@ -2537,7 +2564,7 @@ function fromURL() {
   const touched = new Set(); // cajones donde ha caído algo: el enlace puede repartir en varios
   const landed = { rejected: [], favorite: [] }; // lo que se clasificó DE VERDAD, para el mensaje
   if (nPicks || isKeep) {
-    const sent = isKeep ? aisent() : null; // ?keep = veredicto sobre el último lote enviado
+    const sent = isKeep ? lote : null; // ?keep = veredicto sobre el último lote enviado
     sentCsv = sent?.csv || ""; // se resuelve ANTES del bucle: es el mejor origen para un id del lote
     // cubos POR CAJÓN: cada id va al cajón de ?q= o, sin q, al de ORIGEN del propio anuncio
     // (rowCache._csv). OJO: al boot `curCsv` aún es null (fromURL corre ANTES de restoreLastCsv),
@@ -3089,8 +3116,8 @@ function pricePair(r) {
 }
 // frase que explica a la IA de dónde sale "precio para mí" (envío + comisión estimados)
 const PRICE_NOTE =
-  "En cada anuncio, el «precio para mí» estima el coste total que acabaría pagando " +
-  "(artículo + envío + comisión de protección de Wallapop) y el «precio anunciado» es el que pide el vendedor. ";
+  "El «precio para mí» estima lo que acabaría pagando (artículo + envío + comisión de Wallapop); " +
+  "el «precio anunciado» es lo que pide el vendedor. ";
 // quita emojis (y sus modificadores/uniones) del texto a copiar: fichas limpias para la IA y notas
 const EMOJI_RE =
   /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u200D\uFE0F\u20E3]/gu;
@@ -3106,24 +3133,20 @@ console.assert(
   "stripEmoji roto",
 );
 
-// Reglas del enlace de vuelta: lo único que la IA hace mal por defecto (ids inventados, cubos a
+// Reglas del enlace de vuelta: lo único que la IA hace mal por defecto (letras inventadas, cubos a
 // medias, enlace olvidado). Van inline en los dos prompts porque llms.txt puede no leerse.
 const LINK_RULES = (n) =>
-  "Cada anuncio que nombres va como enlace markdown pulsable a la URL de su ficha, con título y precio " +
-  "dentro del texto del enlace: [Roomba 981 — 195€ (215€ para mí)](https://es.wallapop.com/item/...). " +
-  "Nunca pegues una URL suelta, nunca escribas un id en el texto, y nunca metas un enlace dentro de un " +
-  "bloque de código: estoy en el móvil y ahí no se puede pulsar.\n\n" +
   "EMPIEZA la respuesta, antes de cualquier análisis, con esta línea y nada más:\n\n" +
-  "**[Aplicar tu criba en Rebusca](https://rebusca.dibogomez.com/?keep=<ids que conservarías>)** " +
+  "**[Aplicar tu criba en Rebusca](https://rebusca.dibogomez.com/?keep=<letras que conservarías>)** " +
   "— más una frase de qué hace al pulsarlo.\n\n" +
-  `Al abrirlo, esos anuncios se guardan como favoritos y el resto de los ${n} se descarta automáticamente, ` +
-  "así que sé selectivo: incluye solo los que de verdad recomendarías comprar. Los ids son los [#...] de las " +
-  "fichas de abajo, copiados enteros y literales: son códigos opacos, no los acortes, no cambies mayúsculas, " +
-  "no uses ninguno que no esté abajo y no te inventes ninguno. Van separados por comas, sin espacios y sin la " +
-  "almohadilla. A ESE enlace no le añadas ?q=: me obligaría a repetir la búsqueda entera (el enlace de " +
-  "la búsqueda afinada, si hace falta, es otro y va al final).";
+  "Las letras son las que abren cada ficha de abajo, separadas por comas y sin espacios. Solo letras de " +
+  `esa lista, ninguna inventada. Al abrirlo esos anuncios pasan a favoritos y el resto de los ${n} se ` +
+  "descarta, así que incluye solo los que de verdad recomendarías comprar. A ese enlace no le añadas ?q=.\n\n" +
+  "Cada anuncio que nombres va como enlace markdown pulsable a su URL, con título y precio dentro del texto: " +
+  "[Roomba 981 — 195€ (215€ para mí)](https://es.wallapop.com/item/...). Nunca una URL suelta, nunca una letra " +
+  "en la prosa, nunca un enlace dentro de un bloque de código: estoy en el móvil y ahí no se puede pulsar.";
 console.assert(
-  LINK_RULES(7).includes("?keep=<ids que conservarías>") && LINK_RULES(7).includes("resto de los 7"),
+  LINK_RULES(7).includes("?keep=<letras que conservarías>") && LINK_RULES(7).includes("resto de los 7"),
   "LINK_RULES roto",
 );
 // instrucción de cabecera para la IA (la misma para el texto de "copiar" y para el PDF dossier)
@@ -3147,18 +3170,15 @@ function queryURL() {
 // Segunda vuelta del bucle: la criba de arriba arregla ESTE lote, esto arregla la BÚSQUEDA. El
 // ruido que la IA acaba de descartar es justo la prueba de qué sobra en la query.
 const REFINE_RULES = (url, cats) =>
-  "\n\nY al final del todo, después del análisis, mira el ruido en conjunto: si lo que sobra se repite " +
-  "por un motivo (aparece otra familia de productos, accesorios, recambios, piezas), la búsqueda está mal " +
-  "y quiero arreglarla, no volver a cribarla a mano.\n\n" +
-  `Esta es la búsqueda que ha traído estos anuncios: ${url}\n` +
-  (cats.length ? `Además tengo vetadas estas categorías en la app: ${cats.join(", ")}.\n` : "") +
-  "Devuélvemela corregida como un segundo enlace markdown pulsable, **[Afinar la búsqueda](...)**, con la " +
-  "misma dirección y los mismos parámetros de arriba, cambiando lo que haga falta: `q` si faltan modelos o " +
-  "sinónimos, `title=1` si la palabra ensucia en las descripciones, `maxp`/`maxd` si procede, y sobre todo " +
-  "`excl` con la lista COMPLETA — repite las palabras que ya lleva y añade las nuevas, porque si cambias la " +
-  "`q` es una búsqueda nueva y no hereda nada. Una línea diciendo qué has quitado y por qué.\n\n" +
-  "Si con lo que ves la búsqueda ya está limpia y el ruido es solo cosa suelta, dime eso en una línea y no " +
-  "me des el enlace: repetirla no me aporta nada.";
+  "\n\nAl final del todo, mira el ruido en conjunto: si lo que sobra se repite por un motivo (otra familia " +
+  "de productos, accesorios, recambios), la búsqueda está mal y quiero arreglarla, no volver a cribarla a mano.\n\n" +
+  `Búsqueda que ha traído estos anuncios: ${url}\n` +
+  (cats.length ? `Categorías vetadas en la app: ${cats.join(", ")}.\n` : "") +
+  "Devuélvemela corregida como segundo enlace markdown pulsable, **[Afinar la búsqueda](...)**, misma dirección " +
+  "y mismos parámetros, cambiando lo que haga falta: `q` si faltan modelos o sinónimos, `title=1` si la palabra " +
+  "ensucia en las descripciones, `maxp`/`maxd` si procede, y `excl` con la lista COMPLETA (repite las palabras " +
+  "que ya lleva y añade las nuevas: al cambiar la `q` es otra búsqueda y no hereda nada). Una línea de qué has " +
+  "quitado y por qué. Si ya está limpia y el ruido es cosa suelta, dímelo en una línea y no me des enlace.";
 console.assert(
   REFINE_RULES("https://r/?q=a&excl=roto", []).includes("https://r/?q=a&excl=roto") &&
     !REFINE_RULES("https://r/?q=a", []).includes("categorías") &&
@@ -3172,23 +3192,24 @@ const promptIntro = (n, total) => {
     "búsqueda y formato de los enlaces con los que me contestas).\n\n" +
     (kw ? `He buscado "${kw}" en Wallapop con Rebusca (frescura: ${SINCE_LABEL[since] || "cualquiera"}). ` : "") +
     `Abajo van ${n} anuncios${total > n ? ` (muestra al azar de ${total} sin clasificar)` : ""}, ordenados por ${ordenLabel()}. ` +
-    "No sé de marcas, ni de modelos, ni de qué es un precio justo aquí: la criba la haces tú.\n\n" +
-    "Saca el modelo o versión exacta de cada uno por el título + la descripción, no opines solo por el título, " +
-    "y compáralo con su precio típico nuevo y de segunda mano. Compara siempre contra el «precio para mí». " +
+    "No sé de marcas, ni de modelos, ni de qué precio es justo aquí: la criba la haces tú.\n\n" +
+    "Saca el modelo o versión exacta de cada uno por título + descripción, no opines solo por el título, y " +
+    "compáralo con su precio típico nuevo y de segunda mano. Compara siempre contra el «precio para mí». " +
     PRICE_NOTE +
-    "\n\nDespués del enlace, razona tu criba:\n" +
-    "- De cada CONSERVADO: qué es exactamente (modelo y versión), por qué compensa a ese precio, qué riesgo " +
-    "tiene (reservado, anuncio viejo, sin envío y lejos), a qué precio regatear y qué preguntar al vendedor. " +
-    "Máximo 3, ordenados de mejor a peor (si no hay ninguno decente, ninguno y me lo dices).\n" +
-    "- De los DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno.\n\n" +
+    "\n\n" +
     LINK_RULES(n) +
+    "\n\nDespués del enlace, razona la criba:\n" +
+    "- CONSERVADOS (máximo 3, de mejor a peor): qué es exactamente (modelo y versión), por qué compensa a ese " +
+    "precio, qué riesgo tiene (reservado, anuncio viejo, sin envío y lejos), a qué precio regatear y qué " +
+    "preguntar al vendedor. Si no hay ninguno decente, dímelo y ya.\n" +
+    "- DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno." +
     (queryURL() ? REFINE_RULES(queryURL(), catExclTerms()) : "")
   );
 };
-// ficha de un anuncio para la IA: id + título + precios + señales de decisión + enlace + descripción.
-// El enlace es lo que la IA convierte en link pulsable para el usuario; el [#id] es solo de máquina
-// (vuelve en ?keep=). maxDesc recorta descripciones kilométricas cuando van muchas fichas.
-function ficha(r, i, maxDesc) {
+// ficha de un anuncio para la IA: letra + título + precios + señales de decisión + enlace + descripción.
+// El enlace es lo que la IA convierte en link pulsable para el usuario; la letra es solo de máquina
+// (vuelve en ?keep=) y hace de numeración, así que la lista no lleva número aparte.
+function ficha(r, i) {
   const km = col(r, "km"),
     dias = col(r, "dias");
   const meta = [];
@@ -3199,17 +3220,16 @@ function ficha(r, i, maxDesc) {
   const url = col(r, "url");
   if (url) meta.push(url);
   const lines = [
-    `${i + 1}. [#${col(r, "id")}] ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
+    `${code(i)}) ${stripEmoji(col(r, "titulo"))} — ${pricePair(r)}`,
     "   " + meta.join(" · "),
   ];
-  let desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
-  if (maxDesc && desc.length > maxDesc) desc = desc.slice(0, maxDesc).trimEnd() + "…";
+  const desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
   if (desc) lines.push("   " + desc);
   return lines.join("\n");
 }
-const fichas = (rows, maxDesc) => rows.map((r, i) => ficha(r, i, maxDesc)).join("\n\n");
-// mensaje listo para pegar en Claude/Gemini: cabecera + ficha numerada de cada anuncio (precio final estimado)
-const aiPrompt = (rows, total) => promptIntro(rows.length, total) + "\n\n" + fichas(rows, UNSEEN_DESC);
+const fichas = (rows) => rows.map(ficha).join("\n\n");
+// mensaje listo para pegar en Claude/Gemini: cabecera + ficha de cada anuncio (precio final estimado)
+const aiPrompt = (rows, total) => promptIntro(rows.length, total) + "\n\n" + fichas(rows);
 // Manda el texto adonde el usuario lo quiere. En el móvil, "copiado" obliga a cambiar de app a
 // mano y a buscar dónde pegar: si hay hoja de compartir, se usa. Si no la hay, o si el usuario la
 // cierra, el texto va al portapapeles igual. Resuelve con true cuando compartió, porque el aviso
@@ -3262,8 +3282,10 @@ console.assert(
   "sample roto",
 );
 function copyForAI(btn, all, vacio) {
-  if (!all.length) return snack(vacio, null);
-  const rows = sample(all, UNSEEN_CAP);
+  // sin id no hay letra que devolver: fuera antes de muestrear, o setAisent lo salta y las
+  // letras de las fichas dejan de casar con las posiciones del lote
+  const rows = sample(all.filter((r) => col(r, "id")), UNSEEN_CAP);
+  if (!rows.length) return snack(vacio, null);
   const prev = btn.textContent;
   const originCsv = curDrawer(); // el cajón de AHORA: la copia es asíncrona y curCsv puede cambiar
   btn.disabled = true;
@@ -3339,8 +3361,10 @@ $("#copyAskPrompt").onclick = (e) => {
 // Flujo principal para quien no conoce el mercado del producto: en vez de triar a ciegas,
 // le pasa a la IA todo lo que no ha clasificado y esta le devuelve la criba en un enlace.
 // ponytail: precios "aprox" (porte estimado a 5 kg); el peso real costaba 1 request por anuncio.
-const UNSEEN_CAP = 60; // más fichas no mejoran la criba y hacen la respuesta ilegible en móvil
-const UNSEEN_DESC = 200; // descripciones más largas hinchan el pegado sin aportar a la criba
+// 50 fichas con la descripción ENTERA: más anuncios no mejoran la criba (y la respuesta se hace
+// ilegible en móvil), y la descripción recortada a 200 se comía justo lo que decide el modelo
+// y el estado. Menos anuncios y mejor mirados antes que más a medias.
+const UNSEEN_CAP = 50;
 // orden activo del mazo, en cristiano: la IA se lo cita al usuario ("ordenados por …")
 function ordenLabel() {
   if (!sortKeys.length) return "el orden en que los devuelve Wallapop";
@@ -3365,7 +3389,7 @@ function dossierHTML(rows) {
         desc = stripEmoji((col(r, "descripcion") || "").replace(/\s*\n\s*/g, " "));
       const photos = imgs.map((u) => `<img src="${esc(u)}" alt="">`).join("");
       return `<div class="dsr-card"><div class="dsr-body">` +
-        `<div class="dsr-t">${i + 1}. [#${esc(col(r, "id"))}] ${esc(stripEmoji(col(r, "titulo")))}</div>` +
+        `<div class="dsr-t">${code(i)}) ${esc(stripEmoji(col(r, "titulo")))}</div>` +
         `<div class="dsr-p">${esc(pricePair(r))}</div>` +
         (desc ? `<div class="dsr-d">${esc(desc)}</div>` : "") +
         (url ? `<a class="dsr-u" href="${esc(url)}">${esc(url)}</a>` : "") +
@@ -3376,7 +3400,7 @@ function dossierHTML(rows) {
   return `<pre class="dsr-intro">${esc(promptIntro(rows.length))}</pre>${cards}`;
 }
 async function dossierFav(btn) {
-  const rows = bucketRows(favorite);
+  const rows = bucketRows(favorite).filter((r) => col(r, "id")); // igual que copyForAI: la letra es la posición en el lote
   if (!rows.length) return snack("No tienes favoritos", null);
   const prev = btn.textContent;
   const originCsv = curDrawer(); // igual que en copyForAI: se espera a las fotos antes de registrar
