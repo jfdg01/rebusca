@@ -55,11 +55,16 @@ Es la señal más fuerte que hoy no se ve. Un anuncio ya juzgado a 400 € que b
 vale más que cualquier anuncio nuevo, y ahora mismo pasa desapercibido porque cada
 búsqueda empieza de cero.
 
-**¿Lo da la API?** El scraper no lee ningún campo de precio anterior ni de descuento:
-solo `it.price.amount` (`scrape.js:137`). La app de Wallapop enseña un distintivo de
-"ha bajado de precio", así que puede que el campo exista y no lo estemos mirando —
-**primer paso: volcar una respuesta cruda de `/api/v3/search` y mirar el JSON entero.**
-Si está, sale gratis. Si no está, lo calculamos nosotros, que tampoco es caro.
+**¿Lo da la API? No.** Volcada y mirada entera el 2026-08-11: 200 anuncios de 5 queries,
+48 claves distintas por item, **ninguna de precio anterior ni de descuento**. `price` es
+`{amount, currency}` y se acabó. El distintivo de "ha bajado de precio" de la app sale de
+otro sitio, y pedir el detalle de cada anuncio es justo lo que este scraper no hace (ver
+`MEJORAS.md`). Así que el precio anterior lo ponemos nosotros. No es caro.
+
+De paso, del mismo volcado: `modified_at` (epoch ms) es la única clave viva que el scraper
+no lee, y viene en el 100 % de los anuncios. **No sirve de atajo:** sale distinta de
+`created_at` hasta en anuncios de 15 segundos, así que no marca "cambió el precio".
+Comparar el importe guardado es exacto y más barato.
 
 **Calculándolo nosotros:** un fichero JSON de la vigilancia (ver 4) con
 `id → {visto_primero, precios: [[fecha, importe]], veredicto, nota}`. Cada pasada
