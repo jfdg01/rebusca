@@ -3224,23 +3224,54 @@ function queryURL() {
   if (lim.dias) p.set("maxd", lim.dias);
   return location.origin + location.pathname + "?" + p;
 }
-// Segunda vuelta del bucle: la criba de arriba arregla ESTE lote, esto arregla la BÚSQUEDA. El
-// ruido que la IA acaba de descartar es justo la prueba de qué sobra en la query.
-const REFINE_RULES = (url, cats) =>
-  "\n\nAl final del todo, mira el ruido en conjunto: si lo que sobra se repite por un motivo (otra familia " +
-  "de productos, accesorios, recambios), la búsqueda está mal y quiero arreglarla, no volver a cribarla a mano.\n\n" +
+// La puerta que decide qué hace la IA con el lote, ANTES de mirar ni un precio. Cribar un lote que
+// no es del producto pedido es trabajo tirado: el mismo ruido vuelve a la semana siguiente. Lo que
+// hay que arreglar entonces es la query, y al usuario solo le cuesta pulsar otro enlace.
+// Aquí vive también CÓMO se construye la query corregida, que la coda de la rama B reaprovecha en
+// vez de repetir (las dos van juntas o no va ninguna: ambas cuelgan de que haya queryURL()).
+// Lo que no se puede caer es el `excl` COMPLETO: al cambiar la `q` es otra búsqueda y no hereda
+// nada, y un excl en delta perdía por el camino las palabras ya excluidas.
+const SUPERSET_RULES = (url, cats) =>
+  "ANTES DE NADA, y sin entrar todavía en precios, mira el lote en conjunto: ¿son la familia de producto " +
+  "que te he pedido, o son otra cosa (accesorios, recambios, piezas sueltas, coleccionismo, otro producto " +
+  "que se llama igual)? De eso depende lo que me contestas, y solo hay dos respuestas posibles.\n\n" +
+  "**A) Si la mayoría NO son de lo que busco**, tu búsqueda está mal y cribar este lote es trabajo tirado: " +
+  "el ruido volverá igual la próxima vez. Entonces tu respuesta entera es UNA cosa — un enlace markdown " +
+  "pulsable **[Buscar otra vez, mejor](...)** y una línea de qué has cambiado. Nada de criba, nada de lista " +
+  "de anuncios, y NUNCA un enlace ?keep=, ni siquiera vacío: rechazaría los anuncios de golpe, los buenos " +
+  "incluidos.\n\n" +
   `Búsqueda que ha traído estos anuncios: ${url}\n` +
   (cats.length ? `Categorías vetadas en la app: ${cats.join(", ")}.\n` : "") +
-  "Devuélvemela corregida como segundo enlace markdown pulsable, **[Afinar la búsqueda](...)**, misma dirección " +
-  "y mismos parámetros, cambiando lo que haga falta: `q` si faltan modelos o sinónimos, `title=1` si la palabra " +
-  "ensucia en las descripciones, `maxp`/`maxd` si procede, y `excl` con la lista COMPLETA (repite las palabras " +
-  "que ya lleva y añade las nuevas: al cambiar la `q` es otra búsqueda y no hereda nada). Una línea de qué has " +
-  "quitado y por qué. Si ya está limpia y el ruido es cosa suelta, dímelo en una línea y no me des enlace.";
+  "Devuélvemela corregida, misma dirección y mismos parámetros, cambiando lo que haga falta: `q` si faltan " +
+  "modelos o sinónimos o si una palabra atrae otra familia entera, `title=1` si la palabra ensucia en las " +
+  "descripciones, `maxp`/`maxd` si procede, y `excl` con la lista COMPLETA (repite las palabras que ya " +
+  "lleva y añade las nuevas: al cambiar la `q` es otra búsqueda y no hereda nada).\n" +
+  "No me mandes dos veces la misma búsqueda. Y si ya la has corregido por este motivo y el lote vuelve " +
+  "parecido, deja de afinar y críbame lo que haya: es lo que hay en Wallapop.\n\n" +
+  "**B) Si la mayoría SÍ son de lo que busco**, entonces cribas, y todo lo que viene abajo es para esta " +
+  "rama. Ojo: que casi todos estén caros, viejos o no merezcan la pena NO es un problema de la búsqueda. " +
+  "Eso es un lote bueno y tirarlos es justo tu trabajo. La rama A es solo cuando lo que sale no es la cosa " +
+  "que te pedí.";
+// Coda de la rama B: la criba arregla ESTE lote, esto arregla la BÚSQUEDA. El ruido que la IA acaba
+// de descartar es justo la prueba de qué sobra en la query. Cómo montar el enlace no se repite:
+// es el mismo de la rama A, que va siempre unas líneas más arriba en el mismo pegado.
+const REFINE_TAIL =
+  "\n\nY al final del todo, mira el ruido en conjunto: si lo que sobra se repite por un motivo (una marca, " +
+  "un accesorio que se cuela), la búsqueda se puede afinar y quiero arreglarla, no volver a cribarla a " +
+  "mano. Ciérrame entonces con un segundo enlace markdown pulsable, **[Afinar la búsqueda](...)**, después " +
+  "del análisis, montado igual que el de la rama A (misma dirección, mismos parámetros, `excl` completo) y " +
+  "con una línea de qué has quitado y por qué. Si ya está limpia y el ruido es cosa suelta, dímelo en una " +
+  "línea y no me des enlace.";
 console.assert(
-  REFINE_RULES("https://r/?q=a&excl=roto", []).includes("https://r/?q=a&excl=roto") &&
-    !REFINE_RULES("https://r/?q=a", []).includes("categorías") &&
-    REFINE_RULES("https://r/?q=a", ["Coches", "Motos"]).includes("Coches, Motos"),
-  "REFINE_RULES roto",
+  SUPERSET_RULES("https://r/?q=a&excl=roto", []).includes("https://r/?q=a&excl=roto") &&
+    !SUPERSET_RULES("https://r/?q=a", []).includes("Categorías") &&
+    SUPERSET_RULES("https://r/?q=a", ["Coches", "Motos"]).includes("Coches, Motos") &&
+    // la rama A no puede resolver el lote con un ?keep=, y la B no puede confundir "caro" con "roto"
+    SUPERSET_RULES("https://r/?q=a", []).includes("NUNCA un enlace ?keep=") &&
+    SUPERSET_RULES("https://r/?q=a", []).includes("NO es un problema de la búsqueda") &&
+    // la coda se apoya en la rama A: sin ella no dice cómo se monta el enlace
+    REFINE_TAIL.includes("rama A"),
+  "SUPERSET_RULES roto",
 );
 // Regateo con cifra en vez de "intenta negociar". Va inline en los dos prompts (llms.txt puede
 // no leerse) porque sin la escala la IA suelta rangos que suben por encima del tope del comprador.
@@ -3261,12 +3292,17 @@ const HAGGLE_RULES =
   "El pago, dentro de la app o en mano; nunca por Bizum, enlaces ni WhatsApp.";
 const promptIntro = (n, total) => {
   const { kw, since } = queryParts(loadedCsv || "");
+  // Sin URL de la búsqueda no hay query que corregir (CSV cargado a mano, sin `kw`): la puerta no
+  // tiene rama A posible, así que se cae entera y el lote va derecho a la criba de siempre.
+  const url = queryURL(),
+    cats = catExclTerms();
   return (
     "Lee https://rebusca.dibogomez.com/llms.txt antes de responder: es la guía de Rebusca (gramática de " +
     "búsqueda y formato de los enlaces con los que me contestas).\n\n" +
     (kw ? `He buscado "${kw}" en Wallapop con Rebusca (frescura: ${SINCE_LABEL[since] || "cualquiera"}). ` : "") +
     `Abajo van ${n} anuncios${total > n ? ` (muestra al azar de ${total} sin clasificar)` : ""}, ordenados por ${ordenLabel()}. ` +
     "No sé de marcas, ni de modelos, ni de qué precio es justo aquí: la criba la haces tú.\n\n" +
+    (url ? SUPERSET_RULES(url, cats) + "\n\nVamos con la rama B, la criba. " : "") +
     "Saca el modelo o versión exacta de cada uno por título + descripción, no opines solo por el título, y " +
     "compáralo con su precio típico nuevo y de segunda mano. Compara siempre contra el «precio para mí». " +
     PRICE_NOTE +
@@ -3279,7 +3315,7 @@ const promptIntro = (n, total) => {
     "dímelo y ya.\n" +
     "- DESCARTADOS: el motivo, en una línea o agrupados por motivo. No los listes uno a uno." +
     HAGGLE_RULES +
-    (queryURL() ? REFINE_RULES(queryURL(), catExclTerms()) : "")
+    (url ? REFINE_TAIL : "")
   );
 };
 // ficha de un anuncio para la IA: id corto + título + precios + señales de decisión + enlace + descripción.
@@ -3388,6 +3424,12 @@ $("#exportFav").onclick = (e) => copyForAI(e.currentTarget, bucketRows(favorite)
 // ── prompt de entrada: que la IA monte la QUERY ─────────────────────────────────
 // Primer paso del flujo y el que más valor aporta: quien no conoce el producto no sabe qué
 // marcas/modelos meter, y lo que no entre en la `q` no lo verá nunca.
+// Es el ÚNICO botón que se pulsa en toda la sesión: a partir de aquí el usuario solo abre enlaces
+// de la IA y le pega lotes. Por eso esto no pide una respuesta, pide que la IA PILOTE: primero
+// decide si sabe bastante (y si no, pregunta), luego UNA query, y con el primer lote en la mano
+// puede tirar su propia query y mandar otra hasta que traiga lo que toca.
+// Antes se le pedía el enlace de una y variantes: un enlace prematuro sale caro (el usuario no
+// sabe si la búsqueda es mala, solo ve morralla) y de las variantes solo se pulsa una.
 // La intención del usuario va SIEMPRE al final, tras una línea en blanco: pega y sigue escribiendo
 // ahí mismo sin tener que colarse en medio del texto.
 const askPrompt = (intent) =>
@@ -3397,24 +3439,35 @@ const askPrompt = (intent) =>
   "Quiero comprar algo de segunda mano y te lo describo al final. No sé qué marcas ni qué modelos son " +
   "buenos, ni qué precio es normal aquí: eso lo pones tú. Piensa los modelos de referencia, sus variantes " +
   "de nombre y los sinónimos, y métemelos en la búsqueda con OR. Esa query es lo más importante de todo el " +
-  "proceso: lo que no entre en ella no lo veré.\n\n" +
-  "Contéstame así:\n" +
-  "1. Un enlace pulsable https://rebusca.dibogomez.com/?q=... con tu mejor búsqueda: OR para modelos y " +
+  "proceso: lo que no entre en ella no lo veré. A partir de aquí llevas tú el proceso: yo ya no toco más " +
+  "botones, solo pulso tus enlaces y te pego lo que salga.\n\n" +
+  "PRIMERO, antes de escribir ninguna búsqueda, mira si con lo que te he dicho puedes montar una buena. " +
+  "El criterio es uno solo: pregúntame ÚNICAMENTE lo que cambiaría la query que ibas a escribir. Si con lo " +
+  "que tienes ya te sale, no me preguntes nada y dame el enlace directamente. Si algo que de verdad la " +
+  "cambia está en el aire (para qué lo quiero, presupuesto, tamaño, gama, si me vale roto o " +
+  "reacondicionado), pregúntamelo TODO de golpe, pocas preguntas y cerradas, y espera mi respuesta antes " +
+  "de darme ningún enlace. Vuelve a preguntar solo si lo que te conteste abre una duda nueva de verdad. No " +
+  "hay número de rondas ni mínimo: pueden ser cero, y un cuestionario largo me cansa más de lo que ayuda.\n\n" +
+  "CUANDO YA SEPAS BASTANTE, contéstame así:\n" +
+  "1. UN enlace pulsable https://rebusca.dibogomez.com/?q=... con tu mejor búsqueda: OR para modelos y " +
   "sinónimos, ( ) para agrupar, excl con el ruido típico (funda, roto, piezas...), title=1 si la palabra " +
   "ensucia en las descripciones y since si merece la pena vigilar solo lo nuevo. URL-encodea la q y " +
-  "mantenla compacta.\n" +
-  "2. Una línea de por qué: qué cubre el OR y qué excluye.\n" +
-  "3. Una o dos variantes pulsables si aportan (una más amplia, otra más fina).\n" +
-  "4. Si te falta un dato para afinar (presupuesto, tamaño, uso), pregúntamelo en una línea, pero dame " +
-  "igualmente el enlace por defecto.\n\n" +
+  "mantenla compacta. Uno, no tres: solo voy a pulsar uno y las variantes me sobran.\n" +
+  "2. Una línea de por qué: qué cubre el OR y qué excluye.\n\n" +
+  "DESPUÉS viene el bucle, para que sepas dónde acaba esto: abro tu enlace, Rebusca trae los anuncios y te " +
+  "los pego con \"COPIAR PARA IA\" sin haber mirado ninguno. Lo primero que harás con ese lote es ver si tu " +
+  "búsqueda ha traído la familia de producto correcta; si no (salen accesorios, recambios, otra cosa que se " +
+  "llama igual), no me cribas ese lote: me das otra query y repetimos. Cuando el lote venga limpio, " +
+  "entonces sí, lo cribas y me dices qué comprar.\n\n" +
   "Nunca me pongas la búsqueda en un bloque de código ni una URL suelta: estoy en el móvil y necesito " +
-  "pulsar el enlace. Cuando lo abra, Rebusca lanza la búsqueda sola; luego le doy a \"Copiar sin ver para " +
-  "la IA\" y te pego los anuncios para que los cribes tú.\n\n" +
+  "pulsar el enlace.\n\n" +
   "Esto es lo que busco:\n\n" +
   intent;
 console.assert(
   askPrompt("teclado para principiantes").endsWith("Esto es lo que busco:\n\nteclado para principiantes") &&
-    askPrompt("").endsWith("Esto es lo que busco:\n\n"),
+    askPrompt("").endsWith("Esto es lo que busco:\n\n") &&
+    askPrompt("").includes("UN enlace pulsable") && // una query, no un abanico de variantes
+    askPrompt("").includes("no me preguntes nada"), // la ronda de preguntas puede ser cero
   "askPrompt roto",
 );
 $("#copyAskPrompt").onclick = (e) => {

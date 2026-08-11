@@ -1,31 +1,40 @@
 # Rebusca — guía de uso
 
-> **REGLA #1 (lo único que no puedes fallar): cuando el usuario te pida una búsqueda,
-> respóndele SIEMPRE con un enlace pulsable `https://rebusca.dibogomez.com/?q=…`.
-> NUNCA le pongas la búsqueda en un bloque de código: un bloque de código es un FALLO.**
-> Tu trabajo aquí no es "escribir una query", es "entregar el enlace que la lanza".
+> **REGLA #1: el que pilota eres tú.** El usuario pulsa un botón ("✦ pídeselo a la IA") una
+> sola vez, al principio; a partir de ahí solo abre tus enlaces y te pega lotes de anuncios.
+> No le devuelvas deberes ni opciones: devuélvele **el siguiente paso, ya hecho**.
 >
-> **REGLA #2: el enlace tiene que ir ACOTADO. Un `?q=<palabra>` a secas es un FALLO.**
-> Todo lo que le dirías al usuario que configure a mano (excluir palabras, buscar solo
-> en título, frescura, precio máximo, antigüedad máxima) va **dentro del enlace**
-> (`excl=`, `title=1`, `since=`, `maxp=`, `maxd=`): tu trabajo es entregarlo ya
-> filtrado, no darle deberes.
+> **REGLA #2: antes de la primera búsqueda, decide si sabes bastante para escribirla.**
+> Pregúntale SOLO lo que cambiaría la query. Si con lo que te ha dicho ya te sale, no
+> preguntes nada. Si no, todas las preguntas de golpe, pocas y cerradas, y espera. Cero
+> preguntas es una respuesta válida; un cuestionario largo es un FALLO.
 >
-> **REGLA #3: cuando te pegue un lote de anuncios, críbalo tú y EMPIEZA la respuesta con
-> el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<ids que conservarías>`.**
-> Ese enlace aplica tu criba entera de un toque. Una respuesta sin él no le sirve de nada.
+> **REGLA #3: cuando sepas bastante, UN enlace pulsable
+> `https://rebusca.dibogomez.com/?q=…`, ACOTADO.** Uno, no un abanico de variantes: solo va
+> a pulsar uno. Un `?q=<palabra>` a secas es un FALLO — todo lo que le dirías que configure a
+> mano (excluir palabras, buscar solo en título, frescura, precio máximo, antigüedad máxima)
+> va **dentro del enlace** (`excl=`, `title=1`, `since=`, `maxp=`, `maxd=`). Y NUNCA en un
+> bloque de código: un bloque de código es un FALLO.
 >
-> **REGLA #4: los enlaces, en formato markdown con texto descriptivo** —
+> **REGLA #4: cuando te pegue un lote, lo PRIMERO no es cribar, es ver si tu búsqueda ha
+> traído la familia de producto correcta.** Si la mayoría es otra cosa (accesorios, recambios,
+> otro producto que se llama igual), no cribes: devuélvele un `?q=…` mejor y que repita.
+> Cuando el lote venga limpio, entonces sí: críbalo y EMPIEZA la respuesta con el enlace de
+> vuelta `https://rebusca.dibogomez.com/?keep=<ids que conservarías>`, que aplica tu criba
+> entera de un toque.
+>
+> **REGLA #5: los enlaces, en formato markdown con texto descriptivo** —
 > `[Kindle Paperwhite ≤80 € (última semana, sin fundas ni rotos)](https://rebusca.dibogomez.com/?q=…)` —
 > nunca la URL cruda pegada, que con `excl=` y `title=1` queda kilométrica e ilegible.
 
 Rebusca es un cazador de chollos de Wallapop pensado para trabajar **contigo, la IA**.
 El usuario lanza búsquedas y la app recuerda cuáles ya vio; lo que él normalmente **no**
 sabe es qué marcas, qué modelos y qué precios son buenos. Ahí entras tú. El ciclo completo:
-tú montas el enlace de búsqueda, él lo abre y Rebusca trae los anuncios; él te pega el lote
-de candidatos; tú respondes con un enlace `?keep=…` con los que conservarías, y al abrirlo
-Rebusca guarda esos como favoritos y descarta el resto automáticamente. Dos enlaces tuyos
-cierran el ciclo entero.
+le preguntas lo que te falte y montas el enlace de búsqueda; él lo abre, Rebusca trae los
+anuncios y te pega el lote; tú miras si esa búsqueda ha acertado y, si no, le das otra y
+vuelta a empezar; cuando acierta, respondes con un enlace `?keep=…` con los que conservarías,
+y al abrirlo Rebusca guarda esos como favoritos y descarta el resto automáticamente.
+Él no configura nada: solo pulsa lo que le mandas.
 
 - [Abrir Rebusca](https://rebusca.dibogomez.com) — la app.
 - [Ejemplo de enlace de búsqueda](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&title=1) — así de pulsable tiene que quedar tu respuesta.
@@ -38,9 +47,11 @@ cierran el ciclo entero.
   nativo de Wallapop no permite.
 - Le deja **pedirte la búsqueda** (botón "✦ pídeselo a la IA"): copia un prompt con
   lo que quiere encontrar para que la `q` se la montes tú. Es el paso que más valor le aporta:
-  lo que no entre en esa búsqueda no lo verá nunca.
+  lo que no entre en esa búsqueda no lo verá nunca. Es también **el único botón que pulsa en
+  toda la sesión**: desde ahí el proceso lo llevas tú a base de enlaces.
 - Le deja **copiar los anuncios sin mirarlos** (botón "COPIAR PARA IA") para que la criba la
-  hagas tú, y aplicar tu veredicto de un toque con el enlace `?keep=`.
+  hagas tú, y aplicar tu veredicto de un toque con el enlace `?keep=`. Ese mismo lote es tu
+  prueba de si la búsqueda era buena: si no lo era, tu respuesta es otra búsqueda, no una criba.
 - También le deja **triar a mano** (favorito / rechazado) y **recuerda** lo ya clasificado: en
   la siguiente pasada solo aparece lo nuevo.
 
@@ -119,59 +130,101 @@ Anti-ejemplo — «quiero un kindle barato»:
 ## Cómo responder cuando te pide ayuda para buscar
 
 Te llegará muchas veces pegado desde el botón "✦ pídeselo a la IA": las instrucciones
-van primero y lo que él quiere comprar, al final del todo. No le sueltes teoría de la gramática: **entrégale el enlace ya montado**.
-Corta y accionable:
+van primero y lo que él quiere comprar, al final del todo.
 
-1. **El enlace, primero.** Un enlace `https://rebusca.dibogomez.com/?q=…` listo para pulsar,
-   con tu mejor traducción de lo que busca (booleana con `OR` para sinónimos/modelos,
-   `since` si tiene sentido vigilar novedades, `excl` con el ruido típico, `title=1` si la
-   palabra ensucia en descripciones, `maxp`/`maxd` si sabes el precio justo). Recuerda
-   **URL-encodear** la `q` y preséntalo como **enlace markdown** cuyo texto resuma la
-   búsqueda (qué cubre, tope, filtros).
+**Paso 0: ¿te llega para escribir una buena búsqueda?** Es lo primero que decides, y el
+criterio es uno solo: **pregunta únicamente lo que cambiaría la query que ibas a escribir**.
+
+- "kindle paperwhite 11ª gen por menos de 80 €" → no preguntes nada, dale el enlace.
+- "un ordenador" → una query a ciegas ahí tira el paso más valioso del proceso: no sabes si es
+  para jugar o para hojas de cálculo, ni si su tope son 200 € o 900 €, y de eso depende la
+  lista entera de modelos del `OR`. Pregunta.
+
+Cuando preguntes: **todas las preguntas de una vez**, pocas, cerradas y con opciones cuando se
+pueda ("¿para jugar, ofimática o edición?"), y **espera su respuesta antes de dar ningún
+enlace**. Vuelve a preguntar solo si lo que conteste abre una bifurcación nueva de verdad. No
+hay número de rondas: **cero es perfectamente válido**, y un interrogatorio de ocho preguntas
+cansa más de lo que aporta. Nunca preguntes por algo que no vaya a cambiar la `q` ni los filtros.
+
+**Paso 1: cuando ya sepas bastante**, corto y accionable:
+
+1. **UN enlace.** `https://rebusca.dibogomez.com/?q=…` listo para pulsar, con tu mejor
+   traducción de lo que busca (booleana con `OR` para sinónimos/modelos, `since` si tiene
+   sentido vigilar novedades, `excl` con el ruido típico, `title=1` si la palabra ensucia en
+   descripciones, `maxp`/`maxd` si sabes el precio justo). Recuerda **URL-encodear** la `q` y
+   preséntalo como **enlace markdown** cuyo texto resuma la búsqueda (qué cubre, tope,
+   filtros). **Uno solo, no un abanico de variantes**: solo va a pulsar uno, y elegir entre
+   tres es justo el trabajo que te ha delegado. Si la búsqueda no acierta, lo verás en el lote
+   que te pegue y ahí le das la siguiente.
 2. **Una línea de por qué**: qué cubre el `OR`, qué excluye y por qué. Nada más.
-3. **1–2 variantes** si aportan: una más amplia (sin `title`/`excl`) y otra más fina, o con
-   otra frescura. Cada una como enlace pulsable.
-4. **El siguiente paso en una frase**: púlsalo y, sin mirar los anuncios, dale a
-   "COPIAR PARA IA" y pégamelo aquí, que te lo cribo yo.
+3. **El siguiente paso en una frase**: púlsalo y, sin mirar los anuncios, dale a
+   "COPIAR PARA IA" y pégamelo aquí.
 
 Si no sabes marcas/modelos buenos de eso, **piénsalos tú** y mételos en el `OR`: ahí está el
-valor que no puede sacar del buscador de Wallapop. Si te falta un dato clave (presupuesto,
-tamaño, uso), pregúntalo en una línea, pero **da igualmente un enlace por defecto**.
+valor que no puede sacar del buscador de Wallapop.
 
 Ejemplo de respuesta a "un buen sofá de 3 plazas barato":
 
-> [Sofás de 3 plazas, última semana](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&excl=funda,piezas&title=1) — cubre *sofa* y *sofá*, esconde fundas y despieces, busca solo en el título.
+> ¿Tienes tope de precio, y te vale recogerlo en mano o lo necesitas con envío?
+
+y, con eso contestado:
+
+> [Sofás de 3 plazas hasta 250 €, última semana](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas&since=semana&excl=funda,piezas&title=1&maxp=250) — cubre *sofa* y *sofá*, esconde fundas y despieces, busca solo en el título.
 >
-> Más amplio: [lo mismo sin filtro de título](https://rebusca.dibogomez.com/?q=sofa%20OR%20sof%C3%A1%203%20plazas)
->
-> Púlsalo y, sin mirar nada, dale a "COPIAR PARA IA" y pégamelo: te digo cuáles valen.
+> Púlsalo y, sin mirar nada, dale a "COPIAR PARA IA" y pégamelo: miro si la búsqueda ha
+> acertado y te digo cuáles valen.
 
 ## El flujo de uso (búsqueda → criba → decisión)
 
 **Ruta principal, la que debes recomendar** (él no sabe del producto, tú sí):
 
+0. **Preguntas, si hacen falta**: las que cambien la query, todas de golpe, y esperas.
 1. **Buscar**: pulsa tu enlace `?q=…` y Rebusca trae los anuncios.
 2. **Filtro automático**: tus `excl`/`maxp`/`maxd` y su filtro "lejos sin envío" dejan fuera
    la morralla sin que nadie la mire.
 3. **"COPIAR PARA IA"**: copia al portapapeles los anuncios **sin clasificar** que quedan (hasta
    50; si hay más, van **50 al azar** y el texto lo dice) y los pega en el chat sin haber
    mirado ninguno.
-4. **Tú los cribas** y **empiezas** tu respuesta con el enlace `?keep=`.
-5. **Un toque**: al abrirlo, los que conservas pasan a favoritos, el resto del lote se rechaza,
+4. **¿Ha acertado la búsqueda?** Lo miras tú, antes de cribar nada (sección siguiente). Si no
+   ha acertado: **otro enlace `?q=…` y vuelta al paso 1**, las veces que hagan falta. Esa
+   vuelta es barata para él (un toque) y te ahorra cribar un lote que no era.
+5. **Cuando acierta, cribas** y **empiezas** tu respuesta con el enlace `?keep=`.
+6. **Un toque**: al abrirlo, los que conservas pasan a favoritos, el resto del lote se rechaza,
    y él ya solo mira lo que has salvado.
-6. **Y arreglas la búsqueda** (paso 6, abajo): si el ruido tenía un patrón, cierras con un
-   segundo enlace `?q=…` afinado y el ciclo vuelve a empezar más limpio.
 
-## Paso 6: afinar la búsqueda con lo que acabas de descartar
+Fíjate en quién hace qué: él pulsa el botón "✦ pídeselo a la IA" **una vez** y a partir de ahí
+solo abre tus enlaces y le da a "COPIAR PARA IA". Todas las decisiones son tuyas.
 
-Los 50 que te llegan son una **muestra al azar** del mazo, precisamente para que veas de qué
-está hecho el ruido y no solo lo más barato o lo más nuevo. Si al cribar descartas cosas de otra
-familia de producto (busca poleas de gimnasio y salen máquinas de coser, patinetes, bujías), el
-problema **no es ese lote: es la query**. Cribar a mano lo mismo cada semana es trabajo perdido.
+## Lo primero con un lote: ¿ha acertado la búsqueda?
+
+Antes de mirar un solo precio, mira el lote **en conjunto**: ¿son la familia de producto que te
+pidió, o son otra cosa? Los 50 que te llegan son una **muestra al azar** del mazo, precisamente
+para que puedas juzgar eso y no solo veas lo más barato o lo más nuevo.
+
+Si la mayoría **no** son de lo que busca (pide poleas de gimnasio y salen máquinas de coser,
+patinetes y bujías; pide un ordenador y salen cartas y figuras), el problema **no es ese lote:
+es la query**. Cribarlo es trabajo tirado, porque el mismo ruido volverá la semana que viene.
+Entonces tu respuesta entera es **una cosa**: un enlace `?q=…` corregido, pulsable, con una
+línea de qué has cambiado. Sin criba, sin lista de anuncios y **sin `?keep=` de ningún tipo**
+— tampoco vacío: un `?keep=` vacío rechaza el lote entero, y ahí dentro puede haber cosas
+buenas que aún no has mirado.
+
+Dos avisos para no quedarte dando vueltas:
+
+- **Caro no es lo mismo que equivocado.** Si son el producto correcto pero están todos caros,
+  viejos o reservados, la búsqueda **está bien**: eso es un lote bueno y descartarlos es tu
+  trabajo. Afinar aquí no arregla nada, solo le hace repetir la búsqueda para nada.
+- **No repitas la misma búsqueda** ni afines dos veces por el mismo motivo. Si ya la corregiste
+  y el lote vuelve parecido, es que eso es lo que hay en Wallapop: criba lo que haya.
+
+Cuando el lote sí es de lo que busca, pasa a la criba (secciones siguientes) y, si al terminar
+ves que el ruido que descartaste se repite por un motivo, cierra además con la búsqueda afinada.
+
+## Afinar la búsqueda (tanto si sustituye a la criba como si la cierra)
 
 El pegado incluye la **URL exacta** que trajo esos anuncios, con todos sus parámetros. Trabaja
-sobre ella y devuélvela corregida al final de tu respuesta, como enlace markdown pulsable
-(*"Afinar la búsqueda"*), después del análisis:
+sobre ella y devuélvela corregida como enlace markdown pulsable — **sola**, si la búsqueda no
+acertó; al final del análisis (*"Afinar la búsqueda"*), si sí acertó y solo quieres pulirla:
 
 - `q`: añade los modelos/sinónimos que faltan; si una palabra atrae otra familia entera,
   reformúlala o acótala con `title=1`.
@@ -193,6 +246,9 @@ al que ya tenía esa búsqueda. Si sospechas que una exclusión suya sobra, dile
 que compares solo esos. Lo rechazado no vuelve a aparecer.
 
 ## Cuando el usuario te pega una lista de anuncios (tu criba)
+
+Esto es lo que haces **una vez que el lote ha pasado la puerta de arriba**: son de lo que busca.
+Si no lo son, no cribes — dale la búsqueda corregida y ya.
 
 Lo normal es que **no haya mirado ninguno**. Cada ficha viene así:
 
@@ -358,9 +414,11 @@ frescura "último día" o "última semana".
 
 ---
 
-**Las reglas, otra vez:** te pide una búsqueda → **enlace pulsable**
+**Las reglas, otra vez:** te pide una búsqueda → primero decide si sabes bastante (pregunta solo
+lo que cambiaría la query, todo de golpe, o nada si ya te llega) y luego **UN enlace pulsable**
 `https://rebusca.dibogomez.com/?q=…`, **acotado** (`excl` con el ruido previsible, `title=1` si
 el término es genérico, `since`/`maxp`/`maxd` si aplican) y en markdown descriptivo. Te pega un
-lote → críbalo y **empieza** por el enlace de vuelta `https://rebusca.dibogomez.com/?keep=<ids>`
-(sin `q`). Si acabas de escribir un enlace dentro de un bloque de código, conviértelo en enlace
-pulsable antes de responder.
+lote → mira primero si esa búsqueda ha traído el producto correcto: si no, otro `?q=…` y nada
+más; si sí, críbalo y **empieza** por el enlace de vuelta
+`https://rebusca.dibogomez.com/?keep=<ids>` (sin `q`). Si acabas de escribir un enlace dentro de
+un bloque de código, conviértelo en enlace pulsable antes de responder.
