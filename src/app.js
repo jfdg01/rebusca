@@ -2593,7 +2593,23 @@ console.assert(
     triageMsg([["favorite", ["b"]]]) === "1 a favoritos",
   "triageMsg roto",
 );
+// ── el enlace se QUEDA en la barra; lo que no se repite es su efecto ──
+// Antes se borraba la query con `history.replaceState(location.pathname)` para que refrescar no
+// re-disparara el enlace. Eso rompía el único camino que deja el navegador integrado de otra app
+// (el de Claude, el de WhatsApp): ahí "abrir en el navegador" reenvía la URL ACTUAL, así que a
+// Brave llegaba la portada pelada y el veredicto de la IA se quedaba en un navegador que no es el
+// tuyo, con sus favoritos y sus búsquedas vacíos.
+// `sessionStorage` y no `localStorage`: la marca muere con la pestaña, así que NO viaja al otro
+// navegador cuando reenvías la URL, y el mismo enlace abierto a propósito mañana vuelve a valer.
+// El try/catch no es decorativo: un navegador integrado con el almacén capado tira SecurityError
+// al tocar `sessionStorage`, y sin guarda el arranque entero se cae justo donde más duele.
+const URL_HECHA = "wp_urlhecha";
+const urlYaAplicada = () => { try { return sessionStorage.getItem(URL_HECHA) === location.search; } catch { return false; } };
+const marcaURL = () => { try { sessionStorage.setItem(URL_HECHA, location.search); } catch {} };
 function fromURL() {
+  // Ya se aplicó en ESTA pestaña: es un refresco, no un enlace nuevo. Devolver false deja que
+  // `restoreLastCsv()` abra la última vista, exactamente como cuando la query se borraba.
+  if (urlYaAplicada()) return false;
   const p = new URLSearchParams(location.search);
   const lote = aisent(); // hace falta ANTES de leer los ids: resuelve los recortes de las fichas
   const idsOf = (k) =>
@@ -2652,7 +2668,7 @@ function fromURL() {
   if (!q) {
     if (nPicks || isKeep) {
       const dest = [...touched].at(-1) || sentCsv || curCsv || ""; // cajón que se abre al terminar
-      history.replaceState(null, "", location.pathname); // enlace de un solo uso
+      marcaURL(); // enlace de un solo uso POR PESTAÑA; la query se queda para reenviarla
       // muestra el cubo más alto que haya tocado: se pinta desde el cache, sin re-scrapear
       view = picks.length && picks.at(-1)[0] !== "rejected" ? picks.at(-1)[0] : "";
       if (dest) {
@@ -2692,7 +2708,7 @@ function fromURL() {
   $("#kw").value = q;
   $("#since").value = since;
   $("#titleOnly").checked = p.get("title") === "1";
-  history.replaceState(null, "", location.pathname); // enlace de un solo uso: refrescar no re-dispara
+  marcaURL(); // enlace de un solo uso POR PESTAÑA: refrescar no re-dispara la búsqueda
   $("#scrape").click();
   if (nPicks || outN) snack(msg(), null); // con ?q= la criba se aplica igual, pero se re-scrapea
   return true;

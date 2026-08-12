@@ -471,9 +471,23 @@ function makeContext(store, opts = {}) {
   const fireWin = fire(winListeners);
   // lo que el test observa "desde fuera": qué se copió al portapapeles, qué se abrió/imprimió
   const spy = { copied: [], opened: [], printed: 0, alerts: [], warns: [], blobs: [], reloads: 0 };
+  // `location` fuera del sandbox: `history.replaceState` tiene que poder reescribirlo como en un
+  // navegador de verdad. Con un `replaceState` que ignoraba la URL, ningún test veía que la app
+  // borraba la query, y ese borrado es justo lo que dejaba tirado al navegador integrado de otra app.
+  const location = { reload: () => spy.reloads++, href: "", origin: "https://rebusca.dibogomez.com",
+    search: opts.search || "", pathname: "/", assign: noop };
+  // `opts.sesion`: un objeto propio del test, para arrancar DOS veces en la MISMA pestaña
+  // (refrescar) y ver que el enlace no se re-aplica. Sin él, cada arranque es una pestaña nueva.
+  const sesion = opts.sesion || {};
+  const sessionStorage = {
+    getItem: (k) => (k in sesion ? sesion[k] : null),
+    setItem: (k, v) => (sesion[k] = String(v)),
+    removeItem: (k) => delete sesion[k],
+  };
   const sandbox = {
     document,
     localStorage,
+    sessionStorage,
     // `opts.idbMem`: un Map propio del test, para arrancar DOS veces sobre el mismo almacén y ver
     // qué se lleva una sesión a la siguiente (una restauración marca trabajo para el arranque).
     indexedDB: makeIndexedDB(opts, opts.idbMem || new Map()),
@@ -537,13 +551,20 @@ function makeContext(store, opts = {}) {
       },
     },
     // origin: un navegador siempre lo tiene, y el enlace de una búsqueda se construye con él
-    location: { reload: () => spy.reloads++, href: "", origin: "https://rebusca.dibogomez.com",
-      search: opts.search || "", pathname: "/", assign: noop },
+    location,
     // historial de verdad: `back()` dispara popstate como el navegador. Con un noop, el
     // botón atrás del móvil (la única "capa" sin botón propio en pantalla) no lo probaba nadie.
+    // La URL del tercer argumento se aplica a `location`, que es como se nota un enlace mutilado.
     history: {
       pushState: (s) => hist.push(s),
-      replaceState: (s) => (hist.length ? (hist[hist.length - 1] = s) : hist.push(s)),
+      replaceState: (s, _t, url) => {
+        if (url != null) {
+          const [ruta, q] = String(url).split("?");
+          location.pathname = ruta;
+          location.search = q ? "?" + q : "";
+        }
+        return hist.length ? (hist[hist.length - 1] = s) : hist.push(s);
+      },
       back: () => {
         hist.pop();
         fireWin("popstate", { state: hist[hist.length - 1] ?? null });
@@ -1012,6 +1033,50 @@ async function main() {
   if (bk.q("table").hidden) fail("?keep con cache: la lista de favoritos salió oculta (la bienvenida otra vez)");
   if (bk.q("#listTitle").textContent !== "Favoritos")
     fail("?keep con cache: no abrió en favoritos, el título dice " + bk.q("#listTitle").textContent);
+
+  // 9d. el enlace SOBREVIVE en la barra de direcciones. Dentro del navegador integrado de otra app
+  //     (el de Claude) la única salida es "abrir en el navegador", y eso reenvía la URL ACTUAL: con
+  //     la query borrada a Brave llegaba la portada pelada, y el veredicto de la IA se quedaba
+  //     aplicado en un navegador ajeno, sin las búsquedas ni los favoritos del usuario.
+  const sv = { wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }) };
+  const ses = {}; // misma pestaña para los dos arranques de abajo
+  const bs = await boot(sv, { search: "?keep=a1", sesion: ses });
+  if (bs.errs.length) fail("?keep con sesión lanzó: " + (bs.errs[0].message || bs.errs[0]));
+  if (bs.sandbox.location.search !== "?keep=a1")
+    fail("?keep: la app se comió la query, quedó " + JSON.stringify(bs.sandbox.location.search));
+  if (sv.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep con sesión: no se aplicó, salió " + sv.wp_favorite);
+
+  // 9e. …y refrescar esa MISMA pestaña no lo vuelve a aplicar. El usuario retira el favorito
+  //     después; sin la marca de sesión, cada refresco lo resucitaba.
+  sv.wp_favorite = "{}";
+  sv.wp_rejected = '{"ps4.csv":["a1","a2"]}';
+  const br = await boot(sv, { search: "?keep=a1", sesion: ses });
+  if (br.errs.length) fail("refresco del ?keep lanzó: " + (br.errs[0].message || br.errs[0]));
+  if (sv.wp_favorite !== "{}")
+    fail("refresco del ?keep: resucitó el favorito retirado, salió " + sv.wp_favorite);
+
+  // 9f. el MISMO enlace en otra pestaña (o en el navegador al que lo reenvías) sí se aplica: la
+  //     marca vive en la sesión, no en la URL. Es el caso que arregla todo esto.
+  const otro = { wp_aisent: JSON.stringify({ csv: "ps4.csv", ids: ["a1", "a2"] }) };
+  const bo = await boot(otro, { search: "?keep=a1" });
+  if (bo.errs.length) fail("?keep en otra pestaña lanzó: " + (bo.errs[0].message || bo.errs[0]));
+  if (otro.wp_favorite !== '{"ps4.csv":["a1"]}')
+    fail("?keep reenviado a otro navegador: no se aplicó, salió " + otro.wp_favorite);
+
+  // 9g. lo mismo con ?q=: la búsqueda se dispara una vez por pestaña, y el enlace se queda entero
+  //     para poder reenviarlo. Antes el refresco no re-scrapeaba porque la query desaparecía.
+  const sq = {}, sesq = {};
+  let scrapes = 0;
+  const contar = async () => (scrapes++, "id,titulo,precio\nk1,Kindle,50");
+  const bq1 = await boot(sq, { search: "?q=kindle", sesion: sesq, scrape: contar });
+  if (bq1.errs.length) fail("?q= con sesión lanzó: " + (bq1.errs[0].message || bq1.errs[0]));
+  if (bq1.sandbox.location.search !== "?q=kindle")
+    fail("?q=: la app se comió la query, quedó " + JSON.stringify(bq1.sandbox.location.search));
+  if (bq1.q("#kw").value !== "kindle") fail("?q=: no rellenó el buscador");
+  if (scrapes !== 1) fail("?q=: disparó " + scrapes + " búsquedas, se esperaba 1");
+  await boot(sq, { search: "?q=kindle", sesion: sesq, scrape: contar });
+  if (scrapes !== 1) fail("refresco del ?q=: volvió a disparar la búsqueda (" + scrapes + " en total)");
 
   // 9c. id irresoluble (sin ?q=, sin origen, sin última búsqueda): NO se archiva bajo "" y se avisa
   const hu = {};
