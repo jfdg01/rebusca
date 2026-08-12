@@ -37,7 +37,8 @@ def merge(reg, q, rows, now, completa=True):
     Media pasada haría desaparecer medio catálogo de golpe, y eso ensucia el historial de
     ventas para siempre.
     """
-    inf = {"q": q, "vistos": len(rows), "nuevos": [], "bajaron": [], "fin": [], "parcial": not completa}
+    inf = {"q": q, "vistos": len(rows), "nuevos": [], "bajaron": [], "vuelven": [], "fin": [],
+           "parcial": not completa}
     for r in rows:
         e = reg.get(r["id"])
         if e is None:
@@ -46,7 +47,12 @@ def merge(reg, q, rows, now, completa=True):
             inf["nuevos"].append(r["id"])
         e["ultimo"] = now
         e["qs"][q] = now
-        e.pop("fin", None)     # lo dimos por desaparecido y ha vuelto: republicado, no vendido
+        # Lo dimos por desaparecido y ha vuelto: republicado, no vendido. El registro se cura
+        # solo (el `fin` se borra), y por eso el informe es el ÚNICO sitio donde queda la huella:
+        # sin esta línea la resurrección no se ve en ninguna parte. Son 3 de cada 22 (medido).
+        muerto = e.pop("fin", None)
+        if muerto:
+            inf["vuelven"].append([r["id"], muerto])
         p = r["precio"]
         # `precio` viene "" cuando la API omite `price` (wallapop.row tolera el hueco). Un "" en
         # la serie rompe la comparación de la pasada siguiente, así que ni entra.
@@ -73,6 +79,8 @@ def render(inf, reg):
     tit = lambda i: reg[i]["titulo"][:60]
     out = [f"[{inf['q']}] {inf['vistos']} anuncios" + (" — PARCIAL, sin desapariciones" if inf["parcial"] else "")]
     out += [f"  NUEVO  {reg[i]['precios'][-1][1] if reg[i]['precios'] else '?':>8} €  {tit(i)}" for i in inf["nuevos"]]
+    out += [f"  VUELVE {reg[i]['precios'][-1][1] if reg[i]['precios'] else '?':>8} €  {tit(i)}"
+            f"  (lo dimos por ido el {f})" for i, f in inf["vuelven"]]
     out += [f"  BAJA   {ant:>8} -> {p} € ({(p - ant) / ant * 100:+.0f} %)  {tit(i)}" for i, ant, p in inf["bajaron"]]
     out += [f"  FIN    {p:>8} €  {tit(i)}" for i, p in inf["fin"]]
     return "\n".join(out)
@@ -153,9 +161,13 @@ def demo():
     # y no se vuelve a contar en la pasada siguiente
     assert merge(reg, "q1", [fila("a", 80)], "d5")["fin"] == [], "una desaparición se cuenta una vez"
 
-    # republicado: vuelve a aparecer y se le quita el fin
-    merge(reg, "q1", [fila("a", 80), fila("b", 55)], "d6")
+    # republicado: vuelve a aparecer, se le quita el fin, y el informe lo canta (el registro
+    # ya no guarda rastro de que estuvo muerto, así que la línea es la única prueba)
+    inf = merge(reg, "q1", [fila("a", 80), fila("b", 55)], "d6")
     assert "fin" not in reg["b"] and reg["b"]["precios"][-1] == ["d6", 55], reg["b"]
+    assert inf["vuelven"] == [["b", "d4"]], inf
+    assert "VUELVE" in render(inf, reg) and "d4" in render(inf, reg), render(inf, reg)
+    assert merge(reg, "q1", [fila("a", 80), fila("b", 55)], "d6b")["vuelven"] == [], "vuelve una vez"
 
     # pasada parcial (403 a mitad): no inventa desapariciones
     inf = merge(reg, "q1", [fila("a", 80)], "d7", completa=False)
@@ -180,6 +192,33 @@ def demo():
 
     txt = render(merge(reg, "q1", [fila("z", 20, "Sofá")], "d13"), reg)
     assert "NUEVO" in txt and "Sofá" in txt and "[q1]" in txt, txt
+
+    # El 403 de verdad, la cadena entera y sin red: get() revienta a media paginación, search()
+    # lo apunta en `incidencias`, scrape() lo devuelve, y main() llama a merge con completa=False.
+    # Ese es el único camino que envenena el historial de ventas para siempre, y en once pasadas
+    # contra la API de verdad no se dio ni una vez: aquí es donde se prueba, no en producción.
+    pag = {"data": {"section": {"payload": {"items": [
+               {"id": "a", "title": "cosa", "price": {"amount": 100}, "web_slug": "u"}]}}},
+           "meta": {"next_page": "cursor"}}   # queda otra página, y esa es la que se lleva el 403
+    veces = []
+    def get_403(params, retries=5):
+        veces.append(params)
+        if len(veces) > 1:
+            raise w.Blocked("403: bloqueo (DataDome/CloudFront). Cambia IP o baja el ritmo.")
+        return pag
+    real_get, real_warn = w.get, w._warn
+    w.get, w._warn = get_403, lambda *a, **k: None   # el aviso a stderr sobra en un self-check
+    try:
+        rows, inc = scrape("q1", 0.0, 0.0)
+    finally:
+        w.get, w._warn = real_get, real_warn
+    assert len(rows) == 1 and len(inc) == 1 and "403" in inc[0], (rows, inc)
+
+    reg3 = {}
+    merge(reg3, "q1", [fila("a", 100), fila("b", 50)], "e1")
+    inf = merge(reg3, "q1", rows, "e2", completa=not inc)     # lo mismo que hace main()
+    assert inf["parcial"] and inf["fin"] == [], inf
+    assert "fin" not in reg3["b"] and reg3["b"]["qs"] == {"q1": "e1"}, reg3["b"]
     print("ok")
 
 

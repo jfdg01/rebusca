@@ -96,10 +96,20 @@ Cuidado con un falso positivo: desaparecer del lote también puede ser que la b�
 cambió o que el anuncio se cayó de las 1500 filas del tope. Solo contar como
 desaparición si la misma query lo trajo ayer y hoy no. Eso ya lo hace `merge()`: la fecha
 de "visto" se guarda **por query** (`qs`), y una pasada cortada por un 403 no cuenta ninguna
-desaparición, que si no media pasada hace desaparecer medio catálogo. Queda un falso positivo
-vivo: el orden de la API baila y un anuncio se cae de una pasada y vuelve en la siguiente. Se
-ve solo (el `fin` se borra al volver), pero si ensucia, el arreglo es exigirle dos pasadas
-seguidas sin aparecer.
+desaparición, que si no media pasada hace desaparecer medio catálogo.
+
+**Medido (vigilia del 11→12/08/2026: once pasadas horarias, 5463 anuncios, cero anomalías).**
+El otro falso positivo existe y ya tiene número: el orden de la API baila, un anuncio se cae de
+una pasada y vuelve en la siguiente, y eso fue **3 de 22 desapariciones (14 %)**. Uno de ellos
+(«Stream Cleaner TR7», 245 €) se fue y volvió dos veces en cuatro horas. El registro se cura
+solo — `merge()` borra el `fin` en cuanto el id vuelve — y desde el 12/08 el informe lo canta
+con una línea `VUELVE`, que es la única huella que queda de la resurrección.
+
+**La regla de «dos pasadas seguidas sin aparecer» no se va a construir.** Habría evitado 2 de
+esos 3, no los 3, y a cambio pide un campo nuevo y retrasa **toda** venta de verdad una pasada.
+Sale más barato leer la lista de ventas del **estado** del registro y no del log: vendidos = los
+que tienen `fin` y llevan N días sin volver. Eso funciona hoy, sin tocar una línea, justo porque
+el `fin` se borra al volver.
 
 ---
 
@@ -113,6 +123,14 @@ el riesgo de ban compartido para todos los que usan el dominio. Un `systemd` tim
 **Dos pasadas al día** (mañana y tarde) parecen suficientes para pillar el chollo
 relámpago sin que la cosa se vuelva un scraper agresivo: son dos búsquedas al día, menos
 tráfico que abrir la web un rato.
+
+**Medido en la vigilia (11→12/08/2026, once pasadas horarias).** Una pasada entera cuesta
+~188 s de red y trae 1,7 anuncios nuevos y 0,7 bajadas de precio. El coste no se reparte:
+`thinkpad e14` son 275 anuncios (~10 s) y `deshumidificador` se lleva el 95 % restante con
+~5170. La cadencia va **por query** y no en un timer global: la búsqueda estrecha puede correr
+cada hora sin que se note, la ancha no. Y la hora manda: las ocho pasadas de 01:00 a 08:00
+costaron 25 minutos de red para 4 bajadas y 11 anuncios nuevos, y la sola pasada de las 09:00
+dio 3 bajadas y 3 nuevos en 3 minutos. La mañana rinde seis veces más por pasada.
 
 **La forma: cribar poco y que juzgue la IA.**
 
