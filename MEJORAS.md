@@ -48,10 +48,9 @@ for (const k of nuevas) localStorage.setItem(k, datos[k]);
 for (const k of backupKeys()) if (!nuevas.includes(k)) localStorage.removeItem(k);
 ```
 
-> Este arreglo se quedó corto y las iteraciones 1 y 2 lo profundizaron: el bucle no era
-> atómico y la escritura de IndexedDB caía fuera. El código de hoy envuelve las tres
-> operaciones y las deshace. Ver `iteraciones/01-robustez.md` (hallazgo 1) y
-> `iteraciones/02-import-atomico.md` (hallazgos 1 y 2).
+> Este arreglo se quedó corto y la tanda de robustez del 10/08/2026 lo profundizó: el bucle
+> no era atómico y la escritura de IndexedDB caía fuera. El código de hoy envuelve las tres
+> operaciones y las deshace.
 
 ## 2. El tope de 1500 filas deja ramas del `OR` sin pedir
 
