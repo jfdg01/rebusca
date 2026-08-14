@@ -63,7 +63,7 @@ búsqueda empieza de cero.
 48 claves distintas por item, **ninguna de precio anterior ni de descuento**. `price` es
 `{amount, currency}` y se acabó. El distintivo de "ha bajado de precio" de la app sale de
 otro sitio, y pedir el detalle de cada anuncio es justo lo que este scraper no hace (ver
-`MEJORAS.md`). Así que el precio anterior lo ponemos nosotros. No es caro.
+la restricción de `CLAUDE.md`). Así que el precio anterior lo ponemos nosotros. No es caro.
 
 De paso, del mismo volcado: `modified_at` (epoch ms) es la única clave viva que el scraper
 no lee, y viene en el 100 % de los anuncios. **No sirve de atajo:** sale distinta de
@@ -136,7 +136,7 @@ dio 3 bajadas y 3 nuevos en 3 minutos. La mañana rinde seis veces más por pasa
 
 1. ~~**Poda determinista, gratis.**~~ **Descartada el 11/08/2026, por decisión del dueño:
    la criba la hace la IA.** El motivo aguanta solo: esas reglas (accesorios, recambios,
-   piezas sueltas) ya están escritas en la prompt de la app (`app.js:3236`), y ponerlas otra
+   piezas sueltas) ya están escritas en la prompt de la app (`aiPrompt` en `app.js`), y ponerlas otra
    vez en una expresión regular de Python es una segunda copia que se desincroniza. El ahorro
    era ~18 % de tokens; el precio, dos sitios donde arreglar cada falso descarte.
 2. **A la IA van solo dos cosas:** ids nunca vistos, e ids cuyo precio bajó. El resto
@@ -153,7 +153,7 @@ poder leerse.
 tiene API de escritura, que es el enlace `?fav=id1,id2,…`. El trabajo diario termina en
 una URL que se pulsa en el móvil y los anuncios aparecen en favoritos. Ojo: `?fav=` y no
 `?keep=`, porque `keep` además **rechaza** el resto del lote que cree que se le mandó, y
-un proceso de fondo no ha mandado ningún lote (`app.js:2602`).
+un proceso de fondo no ha mandado ningún lote (`fromURL`, la rama `isKeep` de `app.js`).
 
 **Memoria: un JSON del script, no la memoria del agente.** Son miles de filas
 estructuradas; la memoria del agente es para hechos sueltos en prosa.
@@ -165,3 +165,38 @@ Sirve solo, sin ningún modelo de por medio, y es la mitad del valor.
 unos días, sobre las queries de verdad, y mirar si el informe dice algo que sirva. Un timer
 sobre un informe que no se lee es un cron que nadie mira. El punto 1 (el harness a ciegas) y
 el resto de este punto 4 esperan a esa prueba.
+
+---
+
+## 5. Revisar el bucle de afinar la búsqueda
+
+Añadido el 11/08/2026, con la feature recién puesta. La IA recibe una muestra al azar del
+mazo y la URL entera de la búsqueda, y devuelve un segundo enlace `?q=…` con la query
+corregida. Está probado con los checks, no con uso real. Lo que hay que mirar cuando lleve
+unas cuantas vueltas:
+
+- **Copiar dos veces manda dos lotes DISTINTOS.** `wp_aisent` guarda solo el último, así
+  que pegar la respuesta del primero rechaza anuncios que esa respuesta nunca vio. Antes no
+  pasaba: los dos lotes eran los mismos 60 primeros. Es el riesgo real que introdujo el
+  muestreo. Arreglo probable: no re-muestrear si el mazo no ha cambiado desde la última
+  copia, o avisar al copiar por segunda vez.
+- **Quitar una exclusión no se puede por enlace**: el `excl` de un deep-link se suma al del
+  cajón (`fromURL` en `app.js`). Si la IA se pasa de celosa, el usuario tiene que borrar el
+  chip a mano. Documentado en `llms.txt`, sin arreglar.
+- El bloque de afinar se cuela también en «copiar favoritos» y en el PDF dossier, donde no
+  aporta. Se dejó así por no meter un flag en tres llamadas; si molesta, es trivial.
+- `URLSearchParams` encodea las comas (`excl=roto%2Cpiezas`). Funciona, se lee peor.
+- Sin medir: si la IA de verdad devuelve el enlace afinado y si converge en 2-3 vueltas o
+  se queda dando tumbos. Eso solo lo dice el uso.
+
+---
+
+## Cerrado (para que nadie lo vuelva a levantar)
+
+La auditoría del 09/08/2026 encontró 6 defectos y los 6 están arreglados, cada uno con su
+check. El registro entero vivía en `MEJORAS.md`, borrado el 14/08/2026: git lo guarda, y un
+fichero de defectos cerrados solo daba trabajo de mantener. Para leerlo:
+
+```bash
+git show 89db422:MEJORAS.md
+```

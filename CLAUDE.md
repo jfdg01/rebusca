@@ -27,8 +27,12 @@ Piezas:
   la app). Se sirve, y `stamp_versions` la versiona aparte porque el fetcher de la IA la cachea.
 - `src/deny.html` — página de denegación de Cloudflare Access. Se sirve porque `.html` es
   público, pero quien apunta a ella está en Cloudflare, no en el repo. No la borres a ciegas.
-- `GUIA-REGATEO.md` — la escala de la que sale el regateo que redacta la IA (ver `app.js`).
 - `deploy.sh` — rsync a `oracle` + reinicia el servicio.
+
+Documentación (`docs/`):
+- `docs/GUIA-REGATEO.md` — la escala de la que sale el regateo que redacta la IA (ver `app.js`).
+- `docs/REGLAS-TESTS.md` — cómo se escribe un check aquí. **Léelo antes de escribir uno.**
+- `docs/TODO.md` — lo pensado y no hecho, con su porqué.
 
 ## Comandos
 
@@ -52,7 +56,8 @@ python3 src/historial.py demo                 # self-check del histórico (sin r
 **Todos los checks de una, antes de cerrar sobre `main`.** Ninguno pide red. Que el
 comando calle es la señal de que van bien: solo habla cuando algo sale con código != 0.
 `test_scrape.js` y `test_servidor.py` se quedaron fuera de esta lista y estuvieron rotos
-27 commits sin que nadie lo notara (ver `MEJORAS.md`, defecto 6).
+27 commits sin que nadie lo notara. Por eso existe `check.sh`, y por eso la lista no lleva
+un total escrito a mano.
 
 ```bash
 ./check.sh    # todos, ~5s. Silencio = verde. Sale 1 si alguno falla.
@@ -93,7 +98,11 @@ o `node <fichero>.js demo`).
 `api.wallapop.com/api/v3/search` devuelve `Access-Control-Allow-Origin: *` y permite el header
 `X-DeviceOS` en preflight → cada browser scrapea directo sobre su IP (no hay ban compartido de
 la IP del VPS, no hay cuentas, no hay endpoints de escritura). Es el ÚNICO endpoint que se pide:
-no se vuelve a pedir el detalle de cada anuncio (ver `MEJORAS.md`).
+no se vuelve a pedir el detalle de cada anuncio.
+
+> **Restricción vigente:** **NO** vuelvas a pedir la ficha de cada anuncio para sacar la
+> reputación del vendedor o el estado del artículo. La API de búsqueda no los trae, y ese
+> patrón es justo el que se quitó en `d506eb2`.
 
 - **Scrape:** botón Buscar → `window.Rebusca.scrape({keywords, since, titleOnly, lat, lon,
   onProgress, signal})` (`scrape.js`) → texto CSV → `loadCSV(text, name)` (`app.js`) lo pinta.

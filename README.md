@@ -28,7 +28,7 @@ flowchart LR
     A["🔎 Búsqueda<br/>(keywords + frescura)"] --> B["🌐 app.js<br/>window.Rebusca.scrape()"]
     B --> C["🕷️ scrape.js<br/>fetch a api.wallapop.com<br/>v3/search · order_by=newest"]
     C -->|"texto CSV"| D["📱 app.js<br/>loadCSV() lo pinta"]
-    D -->|"marcar visto / fav / descartar"| E[("💾 localStorage<br/>seen · trash · fav · bloqueos")]
+    D -->|"marcar favorito / descartar"| E[("💾 localStorage<br/>rejected · favorite · bloqueos")]
     E --> D
     D -->|"resalta lo nuevo,<br/>oculta lo descartado"| G["✨ Solo los chollos<br/>que importan"]
 ```
@@ -38,7 +38,7 @@ flowchart LR
 - **El browser scrapea directo, no el servidor.** `api.wallapop.com` responde con `Access-Control-Allow-Origin: *` y permite el header `X-DeviceOS` en el preflight CORS, así que cada navegador llama a la API de Wallapop desde su propia IP. Ventaja: no hay una IP de servidor compartida que Wallapop pueda banear para todos, y el server se reduce a servir ficheros.
 - **Scraping por la API interna `v3/search`** (`src/scrape.js`), con `order_by=newest` + `time_filter` (`today`/`lastWeek`/`lastMonth`) para que sea el propio servidor de Wallapop quien filtre por antigüedad, en vez de paginar todo el catálogo.
 - **Búsqueda booleana propia**: `corsair OR seasonic`, `(corsair OR seasonic) gold`, frases entre comillas… Wallapop no sabe hacer `OR`, así que cada rama se lanza como una búsqueda aparte y se unen los resultados (dedup por `id`).
-- **Estado por navegador** (`localStorage`): un blob `wp_estado` con `{trash, fav, star, blockSel, excl, catExcl, catMode, alias, stamp}` + las búsquedas guardadas (`wp_searches`). Un usuario por navegador, sin perfiles ni cuentas. Las filas cacheadas van aparte, en IndexedDB. La copia de seguridad a JSON se lleva las dos cosas: las claves `wp_*` y las filas cacheadas de lo que tengas clasificado, para que un favorito ya retirado de Wallapop no se restaure como un id sin título ni foto.
+- **Estado por navegador** (`localStorage`): un blob `wp_estado` con `{rejected, favorite, blockSel, excl, catExcl, catMode, lim, alias, stamp}` + las búsquedas guardadas (`wp_searches`). Un usuario por navegador, sin perfiles ni cuentas. Las filas cacheadas van aparte, en IndexedDB. La copia de seguridad a JSON se lleva las dos cosas: las claves `wp_*` y las filas cacheadas de lo que tengas clasificado, para que un favorito ya retirado de Wallapop no se restaure como un id sin título ni foto.
 - **Se instala en la pantalla de inicio**: `manifest.webmanifest` + `apple-touch-icon.png`. Sin service worker: la app necesita red para scrapear, así que un modo sin conexión mentiría. El **modo oscuro** sigue a `prefers-color-scheme` con dos `<meta name="theme-color">`; el `theme_color` del manifest se queda en el claro, porque el formato no admite media queries.
 - **Enlace de una búsqueda**: el botón "Enlace" genera una URL con `?q=`, `&since=`, `&excl=` y los topes. Al abrirla, la app aplica el filtro y busca sola, y luego limpia la URL para que un refresco no la repita.
 - **Tolerante a bloqueos**: si Wallapop suelta un `403` (DataDome), el scraper corta esa rama y devuelve lo ya recogido en lugar de fallar. `AbortController` permite parar a mitad y quedarte con el CSV parcial.
@@ -71,16 +71,8 @@ Todo se ejecuta **desde la raíz del repo**. El servidor solo sirve estáticos d
 # 1) Levantar la app (sirve estáticos) -> http://0.0.0.0:8000  (override con PORT)
 python3 src/servidor.py
 
-# 2) Self-checks sin red (ninguno toca la red)
-./check.sh                            # todos de una, ~5s. Silencio = verde.
-python3 src/servidor.py demo          # servidor
-python3 src/test_servidor.py          # suite del servidor: rutas, MIME, anti-traversal
-python3 src/wallapop.py demo          # scraper Python (referencia)
-python3 src/historial.py demo         # histórico de precios
-node src/scrape.js demo               # scraper del browser
-node src/test_scrape.js               # suite del scraper: paginación, OR, reintentos, abortar
-node src/test_app.js                  # app.js: evalúa el módulo + boot, sin navegador
-node src/test_buttons.js              # cada botón hace lo suyo (DOM falso sobre el boot de test_app.js)
+# 2) Self-checks (~5s, ninguno toca la red). Silencio = verde.
+./check.sh                            # todos de una; la lista suelta está en CLAUDE.md
 
 # 3) Scrapear desde la CLI (referencia local) -> <query>.csv (Jaén por defecto)
 python3 src/wallapop.py "deshumidificador"
@@ -90,10 +82,17 @@ python3 src/historial.py "thinkpad e14"
 python3 src/wallapop.py "cosa" --since dia --max-km 50 -n 100 -o out.csv
 ```
 
-**Despliegue a producción** (`deploy.sh`): rsync del código y `wallapop.service` al VPS, reinstala el unit de systemd y reinicia el servicio.
+**Despliegue a producción** (`deploy.sh`): rsync del código y `rebusca.service` al VPS, reinstala el unit de systemd y reinicia el servicio.
 
 ```bash
 ./deploy.sh                           # rsync a oracle + systemctl restart rebusca
 ```
+
+## Documentación
+
+- [`CLAUDE.md`](CLAUDE.md) — arquitectura, comandos y flujo de trabajo del repo.
+- [`docs/REGLAS-TESTS.md`](docs/REGLAS-TESTS.md) — cómo se escribe un check aquí, y por qué un verde puede no medir nada.
+- [`docs/TODO.md`](docs/TODO.md) — lo pensado y no hecho, con su porqué.
+- [`docs/GUIA-REGATEO.md`](docs/GUIA-REGATEO.md) — la escala de la que sale el regateo que redacta la IA.
 
 El servicio corre bajo systemd (`ExecStart=/usr/bin/python3 src/servidor.py`, `PORT=8000`, `Restart=on-failure`) y se publica en internet a través de **Cloudflare Tunnel**, en [rebusca.dibogomez.com](https://rebusca.dibogomez.com).

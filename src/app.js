@@ -3348,7 +3348,7 @@ const MSG_RULES =
   "escribas un regateo: escríbeme el mensaje para reservarlo ya.";
 // Regateo con cifra en vez de "intenta negociar". Va inline en los dos prompts (llms.txt puede
 // no leerse) porque sin la escala la IA suelta rangos que suben por encima del tope del comprador.
-// Los porcentajes salen de GUIA-REGATEO.md (óptimo empírico ~80 % del pedido; <70 % rompe la venta).
+// Los porcentajes salen de docs/GUIA-REGATEO.md (óptimo empírico ~80 % del pedido; <70 % rompe la venta).
 const HAGGLE_RULES =
   "\n\nEl regateo, con cifra. La oferta se hace sobre el PRECIO ANUNCIADO (Wallapop suma comisión y envío " +
   "aparte), pero el ahorro razónalo sobre el «precio para mí».\n" +
