@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Despliega el código actual (main) al VPS y reinicia el servicio.
-# Ejecutar desde la raíz del repo. Los datos del VPS (estados/, csv/) no se tocan.
+# Ejecutar desde la raíz del repo. El VPS no guarda datos: el server solo sirve estáticos.
 set -e
 rsync -az src rebusca.service oracle:~/rebusca/
 # el unit instalado vive en /etc/systemd/system: reinstálalo por si cambió ExecStart

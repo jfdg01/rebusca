@@ -1,6 +1,4 @@
 *.csv
-csv/
-estados/
 historial.json
 historial.json.tmp
 __pycache__/
