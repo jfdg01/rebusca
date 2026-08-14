@@ -191,6 +191,51 @@ unas cuantas vueltas:
 
 ---
 
+## 6. El regateo, en dos mensajes
+
+**Decidido el 15/08/2026 por el dueño.** Preguntar y ofertar dejan de ir juntos. El flujo pasa a
+ser dos mensajes seguidos, y no uno con cuatro puntos dentro:
+
+1. **Primero, si las fotos son recientes.** Solo eso.
+2. **Después, literal:**
+
+```
+quizas podrías bajas de x a y? te lo compro ahora mismo
+```
+
+`x` es el precio anunciado e `y` la oferta; la escala del % la sigue poniendo `HAGGLE_RULES`.
+El texto es una cita, no una plantilla que la IA reescribe.
+
+**Ojo con la frase.** Está copiada tal cual la dictó el dueño, con «podrías bajas» y «quizas» sin
+tilde. Si es un lapsus hay que arreglarlo ANTES de meterla en `MSG_RULES`: ahí dentro la IA la
+copia literal en cada mensaje, y un fallo de concordancia en el primer contacto se lee como bot.
+Preguntar antes de tocar el código.
+
+**El porqué no está escrito.** Este fichero pide el motivo de cada punto y aquí no lo hay: es una
+decisión del dueño, no una medición. Anotarlo cuando se sepa, porque es lo que decide si el
+segundo mensaje puede llevar argumento o tiene que ir pelado.
+
+**Lo que rompe.** El contrato de «dos bloques de código (el de abrir y el de "Si contraoferta")»
+está escrito en cuatro sitios de `app.js` (3309, 3332, 3428, 3732) y en seis de `llms.txt` (28,
+361, 395, 485, 511, 518). Cambiar el flujo sin tocarlos deja la prompt contradiciéndose sola.
+
+Y dentro de `MSG_RULES` (`app.js:3304`) chocan cuatro reglas:
+
+- **«todo en UN mensaje»** y sus cuatro puntos (saludo, preguntas, oferta, cierre) se caen: ahora
+  son dos mensajes y el primero es una sola pregunta.
+- **El punto 3** (la cifra sola en su línea, el porqué en la de abajo) no cabe en la frase fija:
+  «de x a y» no deja sitio para el argumento. La regla del último dígito sí sigue viva, y ahora
+  manda sobre la `y`.
+- **La pregunta-palanca** (factura, garantía, batería, motivo de venta) desaparece si en el primer
+  mensaje solo van las fotos. Decidir si se pierde o si se cuela en el segundo.
+- **El bloque «Si contraoferta»**: ¿sigue existiendo como tercer mensaje, o el flujo se queda en
+  dos? Sin decidir.
+
+**Los checks.** El `console.assert` de `HAGGLE_RULES` (`app.js:3403`) mira cadenas de la versión
+de un mensaje. Se revisa con el cambio, no después.
+
+---
+
 ## Cerrado (para que nadie lo vuelva a levantar)
 
 La auditoría del 09/08/2026 encontró 6 defectos y los 6 están arreglados, cada uno con su
