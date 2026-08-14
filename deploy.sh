@@ -2,7 +2,10 @@
 # Despliega el código actual (main) al VPS y reinicia el servicio.
 # Ejecutar desde la raíz del repo. El VPS no guarda datos: el server solo sirve estáticos.
 set -e
-rsync -az src rebusca.service oracle:~/rebusca/
+# `--delete` borra del VPS lo que ya no está en el repo. Sin él, `rsync` solo añade: un
+# fichero borrado aquí seguía sirviéndose allí (pasó con `deny.html`). Solo poda `~/rebusca/src/`,
+# que es el directorio que copia — `csv/` y `estados/` cuelgan por encima y no los toca.
+rsync -az --delete --exclude=__pycache__ src rebusca.service oracle:~/rebusca/
 # el unit instalado vive en /etc/systemd/system: reinstálalo por si cambió ExecStart
 ssh oracle 'sudo cp ~/rebusca/rebusca.service /etc/systemd/system/rebusca.service \
   && sudo systemctl daemon-reload && sudo systemctl restart rebusca && systemctl is-active rebusca'
