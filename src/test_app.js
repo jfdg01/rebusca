@@ -1479,7 +1479,7 @@ async function main() {
   //      escrita no rompe nada visible, así que aquí se comprueba que cada fichero existe.
   {
     if (!/<link rel="manifest" href="manifest\.webmanifest"/.test(HTML)) fail("index.html no enlaza el manifest");
-    if (!/<link rel="apple-touch-icon" href="apple-touch-icon\.png"/.test(HTML)) fail("index.html no da icono a iOS");
+    if (!/<link rel="apple-touch-icon" href="icon\.png"/.test(HTML)) fail("index.html no da icono a iOS");
     const man = JSON.parse(fs.readFileSync(path.join(__dirname, "manifest.webmanifest"), "utf8"));
     if (man.display !== "standalone" || !man.start_url) fail("el manifest no declara una app instalable");
     for (const ic of man.icons)

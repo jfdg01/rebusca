@@ -11,6 +11,6 @@
   "theme_color": "#E1E4DD",
   "icons": [
     { "src": "/wallapop-logo.webp", "sizes": "690x690", "type": "image/webp", "purpose": "any" },
-    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+    { "src": "/icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
   ]
 }
