@@ -23,6 +23,11 @@ Piezas:
 - `src/historial.py` — histórico de precios **en tu máquina**, no en el VPS ni en el browser.
   Una pasada por query sobre `wallapop.py` → `historial.json` con lo que cambió (nuevos,
   bajadas, desapariciones). No se sirve, no toca la app: su salida es texto en la terminal.
+- `src/llms.txt` — guía para las IAs que leen el sitio (gramática de búsqueda, qué pedirle a
+  la app). Se sirve, y `stamp_versions` la versiona aparte porque el fetcher de la IA la cachea.
+- `src/deny.html` — página de denegación de Cloudflare Access. Se sirve porque `.html` es
+  público, pero quien apunta a ella está en Cloudflare, no en el repo. No la borres a ciegas.
+- `GUIA-REGATEO.md` — la escala de la que sale el regateo que redacta la IA (ver `app.js`).
 - `deploy.sh` — rsync a `oracle` + reinicia el servicio.
 
 ## Comandos
@@ -95,10 +100,12 @@ no se vuelve a pedir el detalle de cada anuncio (ver `MEJORAS.md`).
   `AbortController` para el botón parar; `onProgress` para el contador. Ubicación por defecto Jaén;
   `getLoc()` lee `wp_loc`, y el botón de ubicación lo escribe con la del navegador y re-scrapea.
 - **Cache de resultados:** el texto CSV de cada búsqueda va a IndexedDB (`csv:<nombre>`), y el
-  índice `{csv:{ts, ids}}` a `csvIndex`. Abrir una búsqueda guardada **sirve el cache**, no
-  re-scrapea; «Repetir» es lo que refresca. El cache **no caduca**. Un resultado `parcial` —403,
-  rama caída, botón parar, tope— no se cachea, y uno vacío tampoco. Un corte por no avanzar sí:
-  es determinista (iteración 12).
+  índice `{csv:{ts, ids, parcial?}}` a `csvIndex`. Abrir una búsqueda guardada **sirve el cache**,
+  no re-scrapea; «Repetir» es lo que refresca. El cache **no caduca**. Un resultado `parcial`
+  —403, rama caída, botón parar, tope— **sí se cachea, marcado** con la frase de lo que pasó
+  (`app.js:1864`): no guardarlo le quitaba al usuario los anuncios que sí se habían recogido.
+  Quien ignora un parcial es `unseenCount`, que devuelve `null` en vez de contar contra un
+  denominador recortado. Un CSV vacío no se cachea.
 - **Búsquedas guardadas:** `localStorage["wp_searches"]` = `[{csv, rows, mtime}]`
   (definiciones, no resultados). Sin cache, abrir una guardada re-scrapea con su `kw`/`since`.
 - **Estado (un usuario/navegador, sin perfiles):** `localStorage["wp_estado"]` guarda el blob
