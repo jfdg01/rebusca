@@ -139,7 +139,7 @@ def main():
         # ── 3. mime + charset de cada estático que sirve la app ──
         for path, ct in (("/app.js", "javascript"), ("/scrape.js", "javascript"),
                          ("/app.css", "text/css"), ("/llms.txt", "text/plain"),
-                         ("/wallapop-logo.webp", "image/webp")):
+                         ("/icon.png", "image/png")):
             st, hh, _ = req(port, path)
             assert st == 200, (path, st)
             got = hh["Content-Type"]

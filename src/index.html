@@ -30,11 +30,12 @@
   }
 }
 </script>
-<link rel="icon" href="wallapop-logo.webp" type="image/webp" />
+<link rel="icon" href="icon.png" type="image/png" />
 <!-- instalable en la pantalla de inicio: es una app que se abre a diario desde el móvil, y una
      app instalada además conserva mejor su almacenamiento (el estado vive en localStorage y el
      cache de resultados en IndexedDB; si el browser los desaloja, se pierden las búsquedas).
-     iOS no lee el manifest: el icono se lo da apple-touch-icon, y por eso es PNG y no webp. -->
+     iOS no lee el manifest: el icono se lo da apple-touch-icon, y Safari no acepta webp ahí.
+     Por eso icon.png es el único icono: favicon, logo del header, manifest y iOS, los cuatro. -->
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="icon.png" />
 <meta name="theme-color" content="#E1E4DD" media="(prefers-color-scheme: light)" />
@@ -105,7 +106,7 @@
             <h1>Rebusca</h1>
             <img
                 class="logo"
-                src="wallapop-logo.webp"
+                src="icon.png"
                 alt="Wallapop"
                 width="40"
                 height="40"
