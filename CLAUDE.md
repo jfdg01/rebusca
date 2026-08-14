@@ -25,8 +25,6 @@ Piezas:
   bajadas, desapariciones). No se sirve, no toca la app: su salida es texto en la terminal.
 - `src/llms.txt` — guía para las IAs que leen el sitio (gramática de búsqueda, qué pedirle a
   la app). Se sirve, y `stamp_versions` la versiona aparte porque el fetcher de la IA la cachea.
-- `src/deny.html` — página de denegación de Cloudflare Access. Se sirve porque `.html` es
-  público, pero quien apunta a ella está en Cloudflare, no en el repo. No la borres a ciegas.
 - `deploy.sh` — rsync a `oracle` + reinicia el servicio.
 
 Documentación (`docs/`):
