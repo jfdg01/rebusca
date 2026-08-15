@@ -6,3 +6,7 @@ __pycache__/
 .wrangler/
 .claude/settings.local.json
 .claude/worktrees/
+# claves: el dominio es público y el repo también. Nada con secreto entra aquí.
+.deepseek-api
+secretos.json
+.env

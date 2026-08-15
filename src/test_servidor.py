@@ -7,13 +7,34 @@ Arranca además un proceso con el locale en C, que es como lo lanza systemd.
 
     python3 src/test_servidor.py
 """
-import contextlib, http.client, io, os, socket, subprocess, sys, threading, time
-from http.server import ThreadingHTTPServer
+import contextlib, http.client, io, json, os, socket, subprocess, sys, tempfile, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import servidor
 
 HERE = Path(__file__).resolve().parent
+
+
+class Falso(BaseHTTPRequestHandler):
+    """DeepSeek de mentira. Guarda lo que le llegó y lo devuelve, que es la única forma de
+    comprobar QUÉ reenvía el puente: la clave puesta, la contraseña no, el cuerpo intacto."""
+    ultimo = {}
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        Falso.ultimo = {"cabeceras": {k.lower(): v for k, v in self.headers.items()},
+                        "cuerpo": self.rfile.read(n)}
+        salida = json.dumps({"eco": Falso.ultimo["cuerpo"].decode()}).encode()
+        # 402 = "sin saldo", el error que de verdad se va a encontrar el usuario
+        self.send_response(402 if b"sinsaldo" in Falso.ultimo["cuerpo"] else 200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(salida)))
+        self.end_headers()
+        self.wfile.write(salida)
+
+    def log_message(self, *a):
+        pass
 
 # Arranca el server en un proceso con el locale en C y la coerción a C.UTF-8 apagada.
 # Es el escenario de systemd sin LANG: si algo lee un fichero con el encoding del locale,
@@ -28,11 +49,11 @@ print(urllib.request.urlopen("http://127.0.0.1:%d/" % s.server_address[1]).statu
 """
 
 
-def req(port, path, method="GET", headers=None):
+def req(port, path, method="GET", headers=None, body=None):
     """Pide `path` TAL CUAL. http.client no normaliza la ruta: así se puede probar '/../x',
     que es justo lo que urllib arreglaría por su cuenta antes de salir a la red."""
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    c.request(method, path, headers=headers or {})
+    c.request(method, path, body=body, headers=headers or {})
     r = c.getresponse()
     body = r.read()
     c.close()
@@ -284,6 +305,129 @@ def main():
         r = subprocess.run([sys.executable, str(HERE / "servidor.py"), "demo"], cwd=HERE,
                            capture_output=True, text=True, timeout=30)
         assert r.returncode == 0 and r.stdout.strip() == "ok", (r.returncode, r.stdout, r.stderr[-300:])
+
+        # ── 11. el puente con DeepSeek: la clave vive aquí y la contraseña es la puerta ──
+        #        Es lo único del server que gasta dinero de verdad, así que se prueba entero
+        #        por HTTP y contra un DeepSeek de mentira. Sin red: `Falso` es local.
+        falso = ThreadingHTTPServer(("127.0.0.1", 0), Falso)
+        threading.Thread(target=falso.serve_forever, daemon=True).start()
+        real_up, real_sec = servidor.UPSTREAM, servidor.SECRETOS
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            servidor.UPSTREAM = "http://127.0.0.1:%d/chat" % falso.server_address[1]
+            servidor.SECRETOS = Path(tmp.name) / "secretos.json"   # nunca el del VPS
+            servidor.FALLOS.clear()
+            cuerpo = json.dumps({"model": "loquesea", "messages": [{"role": "user", "content": "hola"}]})
+            pide = lambda p: req(port, "/ia", "POST", {"X-Pass": p, "Content-Length": str(len(cuerpo))}, cuerpo)
+
+            # 11a. sin secretos en el VPS no entra NADIE. El fallo caro es que "no hay
+            #      contraseña guardada" se lea como "cualquiera vale".
+            assert pide("")[0] == 401 and pide("loquesea")[0] == 401, "sin fichero se cuela alguien"
+            assert req(port, "/ia", "POST", {"Content-Length": "0"}, "")[0] == 401, "sin X-Pass pasa"
+
+            # 11b. con contraseña puesta: la buena entra, la parecida no
+            servidor.guarda({"pass": servidor.sha("abre")})
+            servidor.FALLOS.clear()
+            assert pide("abr")[0] == 401 and pide("Abre")[0] == 401, "abre una contraseña que no es"
+            # contraseña buena y todavía sin clave -> 503, no 500 ni un 200 vacío
+            servidor.FALLOS.clear()
+            assert pide("abre")[0] == 503, "sin clave de DeepSeek no avisa"
+
+            # 11c. con clave: reenvía el cuerpo TAL CUAL, pone la clave y NO filtra la contraseña
+            servidor.guarda({"pass": servidor.sha("abre"), "api": "sk-secreta"})
+            st, hh, body = pide("abre")
+            assert st == 200, (st, body[:200])
+            assert Falso.ultimo["cuerpo"].decode() == cuerpo, Falso.ultimo["cuerpo"][:200]
+            assert Falso.ultimo["cabeceras"]["authorization"] == "Bearer sk-secreta", "no puso la clave"
+            # la contraseña es de la casa: mandarla a DeepSeek la regala a un tercero
+            assert "x-pass" not in Falso.ultimo["cabeceras"], Falso.ultimo["cabeceras"]
+            assert json.loads(body)["eco"] == cuerpo, body[:200]
+
+            # 11d. el error de DeepSeek llega entero: sin saldo, la app tiene que poder decirlo
+            sin = json.dumps({"messages": "sinsaldo"})
+            st, _, body = req(port, "/ia", "POST",
+                              {"X-Pass": "abre", "Content-Length": str(len(sin))}, sin)
+            assert st == 402 and b"sinsaldo" in body, (st, body[:200])
+
+            # 11e. el freno: la contraseña es lo único que separa internet del saldo
+            servidor.FALLOS.clear()
+            codigos = [pide("no")[0] for _ in range(servidor.FALLOS_MAX + 5)]
+            assert codigos[0] == 401 and codigos[-1] == 429, codigos
+            assert codigos.count(429) == 5, codigos
+            # y frena al que falla, no al que acierta desde otra parte
+            servidor.FALLOS.clear()
+            servidor.TODOS.clear()
+
+            # 11e bis. ESTE es el ataque que encontró la auditoría: el cubo por IP se indexa
+            #          por una cabecera que escribe quien llama, y estrenar IP en cada intento
+            #          sale gratis con un /64 de IPv6. Con un solo cubo salían 40 de 40 en 401
+            #          y ni un 429: contraseñas a velocidad de red contra una que teclea un
+            #          humano. El cubo global es lo que lo corta.
+            codigos = [req(port, "/ia", "POST",
+                           {"X-Pass": "no", "CF-Connecting-IP": "2001:db8::%x" % i,
+                            "Content-Length": str(len(cuerpo))}, cuerpo)[0]
+                       for i in range(servidor.TODOS_MAX + 5)]
+            assert codigos[-1] == 429, "rotando la IP se prueban contraseñas sin freno"
+            assert codigos.count(429) == 5, codigos
+            # y la cabecera solo se cree si quien llama es de casa: desde fuera, quien la manda
+            # se estaría eligiendo su propio cubo, que es lo mismo que no tener freno
+            h = servidor.H.__new__(servidor.H)
+            h.headers = {"CF-Connecting-IP": "9.9.9.9"}
+            h.client_address = ("127.0.0.1", 1)
+            assert h.de_quien() == "9.9.9.9", "por el túnel no se lee la IP real del cliente"
+            # una IP pública de verdad, no una de las de documentación: ipaddress marca
+            # 203.0.113.0/24 y 192.0.2.0/24 como privadas, y con una de esas esto pasa sin probar nada
+            h.client_address = ("8.8.8.8", 1)
+            assert h.de_quien() == "8.8.8.8", "un desconocido se elige su propio cubo"
+            servidor.FALLOS.clear()
+            servidor.TODOS.clear()
+
+            # 11f. /clave: el formulario sale sin contraseña, pero guardar exige acertarla
+            st, _, body = req(port, "/clave")
+            assert st == 200 and b"<form" in body, (st, body[:200])
+            malo = "pass=noesesa&api=sk-intrusa"
+            st, _, _ = req(port, "/clave", "POST",
+                           {"Content-Type": "application/x-www-form-urlencoded",
+                            "Content-Length": str(len(malo))}, malo)
+            assert st == 401, st
+            assert servidor.secretos()["api"] == "sk-secreta", "una contraseña mala cambió la clave"
+            servidor.FALLOS.clear()
+            bueno = "pass=abre&api=sk-nueva"
+            st, _, _ = req(port, "/clave", "POST",
+                           {"Content-Type": "application/x-www-form-urlencoded",
+                            "Content-Length": str(len(bueno))}, bueno)
+            assert st == 200, st
+            d = servidor.secretos()
+            # cambiar la clave no puede borrar la contraseña: eso deja el VPS sin puerta
+            assert d["api"] == "sk-nueva" and d["pass"] == servidor.sha("abre"), d
+            assert servidor.SECRETOS.stat().st_mode & 0o777 == 0o600, "la clave queda legible"
+
+            # 11g. el fichero de secretos NO sale por la red, ni por su nombre ni por escape
+            (Path(tmp.name) / "cebo.json").write_text("SECRETO")
+            for path in ("/secretos.json", "/../secretos.json", "/%2e%2e/secretos.json",
+                         "/ia", "/clave.json"):
+                st, _, b = req(port, path)
+                assert st != 200 or b"SECRETO" not in b, (path, st, b[:80])
+            # y con otro método tampoco: GET /ia no es un puente abierto
+            assert req(port, "/ia")[0] == 404, "GET /ia no debería servir nada"
+            assert req(port, "/clave", method="HEAD")[2] == b"", "el HEAD de /clave manda cuerpo"
+
+            # 11h. /test: la página que prueba el puente a mano. Sale por su ruta corta y se
+            #      trae su script, que es lo único que la hace servir para algo. El guion bajo
+            #      de la lista blanca (`test_`) tira los tests de verdad y estos dos no.
+            st, h, body = req(port, "/test")
+            assert st == 200 and b'id="pass"' in body, (st, body[:200])
+            assert h["Content-Type"] == "text/html; charset=utf-8", h["Content-Type"]
+            st, h, body = req(port, "/test.js")
+            assert st == 200 and b'"/ia"' in body, (st, body[:200])
+            assert h["Content-Type"] == "text/javascript; charset=utf-8", h["Content-Type"]
+            assert req(port, "/test_servidor.py")[0] == 404, "el fuente de los tests sí sale"
+        finally:
+            servidor.UPSTREAM, servidor.SECRETOS = real_up, real_sec
+            servidor.FALLOS.clear()
+            servidor.TODOS.clear()
+            falso.shutdown()
+            tmp.cleanup()
 
         print("ok")
     finally:

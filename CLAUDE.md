@@ -10,6 +10,10 @@ en https://rebusca.dibogomez.com (VPS `oracle` vía Cloudflare Tunnel). Solo **s
 Python — sin dependencias, sin uv/pip en el VPS. Sin backend de datos: **un usuario por
 navegador** (sin perfiles); estado y búsquedas viven en `localStorage`.
 
+**La única excepción es la IA.** La clave de DeepSeek no puede vivir en el browser (la app es
+pública: lo que toca el browser lo ve cualquiera), así que vive en el VPS y el server hace de
+puente. Ni datos ni cuentas: una contraseña compartida, y el cuerpo pasa tal cual.
+
 Estructura: todo el código vive en `src/`.
 
 Piezas:
@@ -17,9 +21,13 @@ Piezas:
   Reproduce `wallapop.py` byte-a-byte. Es lo que se usa en prod.
 - `src/wallapop.py` — mismo scraper en Python; ya **no se usa en prod**, se mantiene como
   CLI/referencia local (no se sirve, cero superficie).
-- `src/servidor.py` — servidor stdlib **solo-estáticos**: sirve `index.html` (con `stamp_versions`)
-  + `app.css`/`app.js`/`scrape.js`/imágenes, header `no-cache`. No escribe nada.
+- `src/servidor.py` — servidor stdlib: sirve `index.html` (con `stamp_versions`)
+  + `app.css`/`app.js`/`scrape.js`/imágenes, header `no-cache`. Y guarda la clave de DeepSeek:
+  `POST /ia` es el puente (contraseña → clave → DeepSeek), `GET /clave` el formulario que la
+  cambia. Lo único que escribe es `secretos.json`.
 - `src/index.html` + `src/app.css` + `src/app.js` — frontend (markup / estilos / lógica; sin build).
+- `src/test.html` + `src/test.js` — `/test`: contraseña, mensaje, respuesta. Prueba el puente
+  desde el navegador por el mismo camino que usará la app. Sin estilos: es un diagnóstico.
 - `src/historial.py` — histórico de precios **en tu máquina**, no en el VPS ni en el browser.
   Una pasada por query sobre `wallapop.py` → `historial.json` con lo que cambió (nuevos,
   bajadas, desapariciones). No se sirve, no toca la app: su salida es texto en la terminal.
@@ -39,6 +47,7 @@ Ejecutar desde la raíz del repo.
 ```bash
 python3 src/servidor.py                       # levanta el server estático -> http://0.0.0.0:8000 (PORT env override)
 python3 src/servidor.py demo                  # self-check del server (sin red)
+python3 src/servidor.py clave                 # guarda contraseña + clave de DeepSeek (primera vez, por ssh)
 node src/scrape.js demo                       # self-check del scraper del browser (sin red)
 node src/test_app.js                          # smoke test de app.js (evalúa el módulo + boot, sin navegador)
 node src/test_buttons.js                      # suite de botones: cada botón hace lo suyo (DOM falso sobre el boot de test_app.js)
@@ -123,6 +132,16 @@ no se vuelve a pedir el detalle de cada anuncio.
   del tramo de 5 kg. El peso real pedía una petición por anuncio y salía mal a menudo.
 - **Cache del móvil:** el HTML se sirve `no-cache`; `stamp_versions()` añade `?v=<mtime>` a
   `app.css`/`app.js`/`scrape.js` para bustear la cache de 4h de Cloudflare en cada deploy.
+- **Puente con la IA:** `POST /ia` con la cabecera `X-Pass` → el server compara el sha256 con el
+  guardado (`hmac.compare_digest`), pone `Authorization: Bearer` y **reenvía el cuerpo tal cual**
+  a `api.deepseek.com`. Modelo, mensajes y tope los elige la app; el server no mira dentro. La
+  respuesta de DeepSeek sale entera, errores incluidos (402 sin saldo). 10 fallos por IP en 5 min
+  → 429: la contraseña es lo único entre internet y el saldo.
+- **Dónde vive la clave:** `~/rebusca/secretos.json` (0600) = `{"pass": <sha256>, "api": <clave>}`,
+  **fuera de `src/`** porque `deploy.sh` hace `rsync --delete` sobre `src/` y la borraría en cada
+  deploy. Se pone por ssh con `python3 src/servidor.py clave`; después `/clave` la cambia desde el
+  móvil. La contraseña **no** se fija por web a propósito: un formulario público que la fije se lo
+  queda el primero que lo encuentre.
 
 ## Flujo de trabajo (obligatorio)
 
