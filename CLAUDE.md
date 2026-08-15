@@ -135,8 +135,8 @@ Ciclo obligatorio para **cualquier** cambio (feature/fix/lo que sea):
    al usuario** — no se toca nada. Si está limpio: `git checkout main && git pull`.
 2. **Rama propia:** `git checkout -b feat/<lo-que-sea>`. Nunca se trabaja sobre `main`.
 3. **Cambios + commits iterativos** en la rama (los que hagan falta, o ninguno si no aplica).
-4. **Puerta de revisión:** push de la rama + enlace de compare, y **parar**. Ver paso 4 del
-   `CLAUDE.md` global — es el mismo, aquí no se redefine.
+4. **Puerta de revisión:** push + enlace **del commit nuevo**, y **parar**. Se aprueba por
+   commit, no por rama. Ver paso 4 del `CLAUDE.md` global — es el mismo, aquí no se redefine.
 5. **Cerrar sobre `main`:**
    - 1 commit → merge fast-forward.
    - varios commits → squash a uno solo.
