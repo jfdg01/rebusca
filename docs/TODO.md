@@ -194,30 +194,42 @@ unas cuantas vueltas:
 ## 6. El regateo, en dos mensajes
 
 **Decidido el 15/08/2026 por el dueño.** Preguntar y ofertar dejan de ir juntos. El flujo pasa a
-ser dos mensajes seguidos, y no uno con cuatro puntos dentro:
+ser dos mensajes seguidos, y no uno con cuatro puntos dentro.
 
-1. **Primero, si las fotos son recientes.** Solo eso.
-2. **Después, literal:**
+Y la IA no entrega nada más que eso: **exactamente dos mensajes, cada uno en su propio bloque de
+código**, para copiar y pegar uno detrás del otro. Dos bloques, ni uno más. El razonamiento de la
+criba va fuera de los bloques; dentro solo va lo que se pega en Wallapop tal cual.
+
+1. **Primero, las fotos. Solo eso.** Una sola pregunta, y la escribe la IA (es lo único de los dos
+   mensajes que se adapta al artículo).
+2. **Después, la oferta, literal:**
 
 ```
-quizas podrías bajas de x a y? te lo compro ahora mismo
+quizas podrías bajar de x a y? te lo compro ahora mismo
 ```
 
 `x` es el precio anunciado e `y` la oferta; la escala del % la sigue poniendo `HAGGLE_RULES`.
 El texto es una cita, no una plantilla que la IA reescribe.
 
-**Ojo con la frase.** Está copiada tal cual la dictó el dueño, con «podrías bajas» y «quizas» sin
-tilde. Si es un lapsus hay que arreglarlo ANTES de meterla en `MSG_RULES`: ahí dentro la IA la
-copia literal en cada mensaje, y un fallo de concordancia en el primer contacto se lee como bot.
-Preguntar antes de tocar el código.
+**Sin decidir:** si el primer mensaje se congela también como cita literal. Hoy el dueño solo ha
+dictado el segundo, así que el primero se queda como pregunta que la IA redacta.
+
+**La frase, resuelta el 15/08/2026 por el dueño.** «podrías bajas» era un lapsus y ya está
+corregido a «podrías bajar». «quizas» se queda sin tilde: el dueño corrigió solo la concordancia,
+y la frase tiene que sonar a persona escribiendo desde el móvil, no a plantilla. Sigue siendo una
+cita literal, así que la IA la copia tal cual y no la «arregla» al meterla en `MSG_RULES`.
 
 **El porqué no está escrito.** Este fichero pide el motivo de cada punto y aquí no lo hay: es una
-decisión del dueño, no una medición. Anotarlo cuando se sepa, porque es lo que decide si el
-segundo mensaje puede llevar argumento o tiene que ir pelado.
+decisión del dueño, no una medición. Anotarlo cuando se sepa. Lo que sí está decidido es la
+consecuencia: el segundo mensaje va **pelado**, sin argumento, porque la cita no deja sitio.
 
 **Lo que rompe.** El contrato de «dos bloques de código (el de abrir y el de "Si contraoferta")»
 está escrito en cuatro sitios de `app.js` (3309, 3332, 3428, 3732) y en seis de `llms.txt` (28,
 361, 395, 485, 511, 518). Cambiar el flujo sin tocarlos deja la prompt contradiciéndose sola.
+
+Ojo con el detalle que engaña: **el número no cambia, siguen siendo dos bloques.** Lo que cambia
+es el segundo, que pasa de «Si contraoferta» a la oferta literal. Buscar y reemplazar por el «dos»
+no sirve: hay que leer los diez sitios y mirar qué dicen que va DENTRO de cada bloque.
 
 Y dentro de `MSG_RULES` (`app.js:3304`) chocan cuatro reglas:
 
@@ -226,10 +238,12 @@ Y dentro de `MSG_RULES` (`app.js:3304`) chocan cuatro reglas:
 - **El punto 3** (la cifra sola en su línea, el porqué en la de abajo) no cabe en la frase fija:
   «de x a y» no deja sitio para el argumento. La regla del último dígito sí sigue viva, y ahora
   manda sobre la `y`.
-- **La pregunta-palanca** (factura, garantía, batería, motivo de venta) desaparece si en el primer
-  mensaje solo van las fotos. Decidir si se pierde o si se cuela en el segundo.
-- **El bloque «Si contraoferta»**: ¿sigue existiendo como tercer mensaje, o el flujo se queda en
-  dos? Sin decidir.
+- **La pregunta-palanca** (factura, garantía, batería, motivo de venta) **se pierde**, y es la
+  consecuencia cara de «solo dos mensajes»: el primero es solo las fotos y en el segundo no cabe
+  («de x a y» no deja sitio). Se acepta a sabiendas. Si el regateo empieza a fallar por falta de
+  información, es lo primero que hay que volver a mirar.
+- **El bloque «Si contraoferta»**: decidido el 15/08/2026 por el dueño. Desaparece — la
+  contraoferta la lleva él a mano, y la IA no la escribe.
 
 **Los checks.** El `console.assert` de `HAGGLE_RULES` (`app.js:3403`) mira cadenas de la versión
 de un mensaje. Se revisa con el cambio, no después.
